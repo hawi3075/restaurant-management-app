@@ -22,6 +22,8 @@ import UserManagementScreen from './src/screens/manager/UserManagementScreen';
 import StaffManagementScreen from './src/screens/manager/StaffManagementScreen';
 import MenuManagementScreen from './src/screens/manager/MenuManagementScreen';
 import InventoryManagementScreen from './src/screens/manager/InventoryManagementScreen';
+import SupportMessageScreen from './src/screens/manager/SupportMessageScreen';
+import ReviewManagementScreen from './src/screens/manager/ReviewManagementScreen';
 import WaiterDashboardScreen from './src/screens/waiter/WaiterDashboardScreen';
 import KitchenDashboardScreen from './src/screens/kitchen/KitchenDashboardScreen';
 import DriverDashboardScreen from './src/screens/driver/DriverDashboardScreen';
@@ -55,6 +57,8 @@ function AppNavigator() {
         <Stack.Screen name="StaffManagementScreen" component={StaffManagementScreen} />
         <Stack.Screen name="MenuManagementScreen" component={MenuManagementScreen} />
         <Stack.Screen name="InventoryManagementScreen" component={InventoryManagementScreen} />
+        <Stack.Screen name="SupportMessageScreen" component={SupportMessageScreen} />
+        <Stack.Screen name="ReviewManagementScreen" component={ReviewManagementScreen} />
         <Stack.Screen name="WaiterDashboard" component={WaiterDashboardScreen} />
         <Stack.Screen name="KitchenDashboard" component={KitchenDashboardScreen} />
         <Stack.Screen name="DriverDashboard" component={DriverDashboardScreen} />
