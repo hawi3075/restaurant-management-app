@@ -17,6 +17,7 @@ import CheckoutScreen from './src/screens/customer/CheckoutScreen';
 
 // Import Manager, Waiter, Kitchen & Driver Screens
 import ManagerDashboardScreen from './src/screens/manager/ManagerDashboardScreen';
+import ManagerProfileScreen from './src/screens/manager/ManagerProfileScreen';
 import UserManagementScreen from './src/screens/manager/UserManagementScreen';
 import StaffManagementScreen from './src/screens/manager/StaffManagementScreen';
 import MenuManagementScreen from './src/screens/manager/MenuManagementScreen';
@@ -47,8 +48,9 @@ function AppNavigator() {
         <Stack.Screen name="CartScreen" component={CartScreen} />
         <Stack.Screen name="CheckoutScreen" component={CheckoutScreen} />
 
-        {/* Role-Based Dashboards */}
+        {/* Role-Based Dashboards & Profiles */}
         <Stack.Screen name="ManagerDashboard" component={ManagerDashboardScreen} />
+        <Stack.Screen name="ManagerProfileScreen" component={ManagerProfileScreen} />
         <Stack.Screen name="UserManagementScreen" component={UserManagementScreen} />
         <Stack.Screen name="StaffManagementScreen" component={StaffManagementScreen} />
         <Stack.Screen name="MenuManagementScreen" component={MenuManagementScreen} />
