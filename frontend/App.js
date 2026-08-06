@@ -28,8 +28,8 @@ import DriverDashboardScreen from './src/screens/driver/DriverDashboardScreen';
 const Stack = createNativeStackNavigator();
 
 export default function App() {
-  // Toggle userRole to 'driver', 'kitchen', 'waiter', 'manager', or 'customer' to preview different roles instantly
-  const [userRole, setUserRole] = useState('driver'); // Options: 'driver' | 'kitchen' | 'waiter' | 'manager' | 'customer'
+  // Set userRole to 'customer' to preview the customer app flow
+  const [userRole, setUserRole] = useState('customer'); // Options: 'customer' | 'driver' | 'kitchen' | 'waiter' | 'manager'
 
   return (
     <AuthProvider>

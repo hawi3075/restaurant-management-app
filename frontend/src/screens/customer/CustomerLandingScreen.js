@@ -44,48 +44,64 @@ export default function CustomerLandingScreen({ route, navigation }) {
         <ScrollView showsVerticalScrollIndicator={false} className="flex-1 pb-24">
           {/* Top Hero Banner */}
           <ImageBackground 
-            source={{ uri: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=800&q=80' }}
+            source={{ uri: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?auto=format&fit=crop&w=900&q=80' }}
             className="pt-12 pb-6 px-5 justify-end"
-            style={{ height: 380 }}
+            style={{ height: 410 }}
           >
-            <View className="absolute inset-0 bg-black/60" />
+            {/* Rich gradient overlay for premium depth */}
+            <View className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/20" />
 
-            {/* Clean Header with Sign Up / Profile Header Button */}
-            <View className="absolute top-10 left-5 right-5 flex-row justify-end items-center z-10">
+            {/* Floating Glassmorphism Header Bar with Premium Pill Button */}
+            <View className="absolute top-10 left-5 right-5 flex-row justify-between items-center z-10">
+              <View className="flex-row items-center bg-black/40 px-3 py-1.5 rounded-full border border-white/10 backdrop-blur-md">
+                <Ionicons name="location" size={13} color="#FF9F43" style={{ marginRight: 4 }} />
+                <Text className="text-white font-bold text-[10px]">Downtown Gourmet</Text>
+              </View>
+
               <TouchableOpacity 
                 onPress={() => navigation.navigate(isLoggedIn ? 'CustomerProfileScreen' : 'Signup')} 
-                className="bg-[#B8520B] px-4 py-1.5 rounded-full shadow-md border border-white/20 active:opacity-80"
+                className="bg-gradient-to-r from-[#B8520B] to-[#D35400] px-4 py-2 rounded-full shadow-lg border border-white/20 flex-row items-center active:opacity-90"
               >
-                <Text className="text-white font-bold text-[10px]">{isLoggedIn ? 'Profile' : 'Sign Up'}</Text>
+                <Ionicons name={isLoggedIn ? "person" : "sparkles"} size={11} color="white" style={{ marginRight: 4 }} />
+                <Text className="text-white font-black text-[10px] tracking-wide">{isLoggedIn ? 'My Profile' : 'Sign Up'}</Text>
               </TouchableOpacity>
             </View>
 
             {/* Hero Content */}
             <View className="z-10 mb-2">
-              <Text className="text-2xl font-black text-white leading-tight mb-1">
-                Craving Something <Text className="text-[#E67E22]">Extraordinary?</Text>
+              <View className="bg-[#B8520B]/90 self-start px-2.5 py-0.5 rounded-full mb-2 border border-white/20">
+                <Text className="text-white font-black text-[9px] uppercase tracking-widest">✨ Chef's Special Choice</Text>
+              </View>
+
+              <Text className="text-2xl font-black text-white leading-tight mb-1 shadow-sm">
+                Craving Something <Text className="text-[#FF9F43]">Extraordinary?</Text>
               </Text>
-              <Text className="text-[11px] text-gray-200 mb-4 leading-relaxed">
+              <Text className="text-[11px] text-gray-200 mb-4 leading-relaxed font-medium">
                 Experience culinary perfection delivered straight to your table or door.
               </Text>
 
               <TouchableOpacity 
                 onPress={() => navigation.navigate('MenuScreen')}
-                className="bg-[#B8520B] py-3 rounded-2xl items-center shadow-md mb-3 active:opacity-90"
+                className="bg-[#B8520B] py-3.5 rounded-2xl items-center shadow-lg shadow-[#B8520B]/40 mb-3.5 active:opacity-95 border border-white/10"
               >
-                <Text className="text-white font-black text-xs tracking-wide">Order Now</Text>
+                <Text className="text-white font-black text-xs tracking-wider uppercase">Order Now</Text>
               </TouchableOpacity>
 
-              {/* Search Bar */}
-              <View className="bg-white rounded-2xl px-3 py-2.5 flex-row items-center shadow-sm">
-                <Ionicons name="search-outline" size={16} color="#757575" style={{ marginRight: 8 }} />
+              {/* Redesigned Sleek Pill Search Bar */}
+              <View className="bg-white/95 backdrop-blur-lg rounded-2xl px-4 py-3 flex-row items-center shadow-xl border border-white/40">
+                <Ionicons name="search" size={16} color="#B8520B" style={{ marginRight: 10 }} />
                 <TextInput 
-                  placeholder="Search dishes..."
-                  placeholderTextColor="#9E9E9E"
+                  placeholder="Search burgers, pizza, sushi, drinks..."
+                  placeholderTextColor="#888888"
                   value={searchQuery}
                   onChangeText={setSearchQuery}
-                  className="flex-1 text-xs text-[#1F130D]"
+                  className="flex-1 text-xs text-[#1F130D] font-semibold"
                 />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearchQuery('')}>
+                    <Ionicons name="close-circle" size={16} color="#B8520B" />
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
           </ImageBackground>
