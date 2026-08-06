@@ -1,14 +1,17 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Image, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 
 export default function MenuManagementScreen({ navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedStyle, setSelectedStyle] = useState('Modern');
   const [addModalVisible, setAddModalVisible] = useState(false);
+  const [detailModalVisible, setDetailModalVisible] = useState(false);
+  const [selectedDish, setSelectedDish] = useState(null);
 
-  const categories = ['All', 'Breakfast', 'Lunch', 'Dinner', 'Drinks', 'Desserts'];
+  const categories = ['All', 'Breakfast', 'Lunch', 'Dinner', 'Drinks', 'Desserts', 'Fast Food'];
 
   const [menuItems, setMenuItems] = useState([
     { 
@@ -35,12 +38,38 @@ export default function MenuManagementScreen({ navigation }) {
     },
   ]);
 
-  // Form states for adding a dish
+  // Form states
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [newPrice, setNewPrice] = useState('');
+  const [newRating, setNewRating] = useState('4.9');
+  const [imageSourceType, setImageSourceType] = useState('url'); // 'url' or 'device'
+  const [newImage, setNewImage] = useState('');
   const [newCategory, setNewCategory] = useState('Lunch');
   const [newStyle, setNewStyle] = useState('Modern');
+
+  const pickImageFromDevice = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permissionResult.granted) {
+        alert('Permission to access camera roll is required!');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setNewImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.log('Error picking image: ', error);
+    }
+  };
 
   const toggleStockStatus = (id) => {
     setMenuItems(menuItems.map(item => 
@@ -57,14 +86,17 @@ export default function MenuManagementScreen({ navigation }) {
       price: parseFloat(newPrice) || 15.00,
       category: newCategory,
       style: newStyle,
-      rating: '5.0',
+      rating: newRating || '5.0',
       status: 'In Stock',
-      image: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=400&q=80'
+      image: newImage.trim() !== '' ? newImage : 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=400&q=80'
     };
     setMenuItems([...menuItems, newItem]);
     setNewName('');
     setNewDesc('');
     setNewPrice('');
+    setNewRating('4.9');
+    setNewImage('');
+    setImageSourceType('url');
     setAddModalVisible(false);
   };
 
@@ -150,7 +182,7 @@ export default function MenuManagementScreen({ navigation }) {
             })}
           </ScrollView>
 
-          {/* Menu Items List with Detail Icon & Manager Actions */}
+          {/* Menu Items List */}
           <View className="mb-10">
             <Text className="text-xs font-bold text-gray-400 mb-2">{selectedCategory} • {selectedStyle} Selection ({filteredItems.length})</Text>
             {filteredItems.map((item) => (
@@ -183,10 +215,13 @@ export default function MenuManagementScreen({ navigation }) {
                   </View>
                 </View>
 
-                {/* Bottom Action Buttons Row with Detail Icon */}
+                {/* Bottom Action Buttons */}
                 <View className="flex-row space-x-2 pt-2 border-t border-gray-100">
                   <TouchableOpacity 
-                    onPress={() => alert(`Dish Details:\nName: ${item.name}\nCategory: ${item.category}\nStyle: ${item.style}\nPrice: $${item.price.toFixed(2)}\nStatus: ${item.status}`)} 
+                    onPress={() => {
+                      setSelectedDish(item);
+                      setDetailModalVisible(true);
+                    }} 
                     className="flex-1 bg-gray-100 py-2 rounded-xl items-center flex-row justify-center active:scale-95"
                   >
                     <Ionicons name="information-circle-outline" size={12} color="#1F130D" style={{ marginRight: 3 }} />
@@ -206,7 +241,54 @@ export default function MenuManagementScreen({ navigation }) {
           </View>
         </ScrollView>
 
-        {/* Add Dish Modal */}
+        {/* Dish Detail Modal */}
+        <Modal animationType="fade" transparent={true} visible={detailModalVisible} onRequestClose={() => setDetailModalVisible(false)}>
+          <View className="flex-1 bg-black/60 justify-center items-center px-5">
+            <View className="bg-white w-full max-w-[380px] rounded-3xl p-6 shadow-2xl border border-gray-100">
+              {selectedDish && (
+                <View>
+                  <View className="items-center mb-4">
+                    <Image source={{ uri: selectedDish.image }} className="w-28 h-28 rounded-2xl mb-3 shadow-md" />
+                    <View className="flex-row items-center bg-[#FEF7F3] px-3 py-1 rounded-full border border-[#B8520B]/30 mb-2">
+                      <Ionicons name="star" size={12} color="#B8520B" />
+                      <Text className="text-xs font-bold text-[#B8520B] ml-1">{selectedDish.rating} Rating</Text>
+                    </View>
+                    <Text className="text-xl font-black text-[#1F130D] text-center">{selectedDish.name}</Text>
+                    <Text className="text-xs text-gray-500 text-center mt-1 px-2">{selectedDish.desc}</Text>
+                  </View>
+
+                  <View className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-2 mb-5">
+                    <View className="flex-row justify-between">
+                      <Text className="text-xs text-gray-500">Category:</Text>
+                      <Text className="text-xs font-bold text-[#1F130D]">{selectedDish.category}</Text>
+                    </View>
+                    <View className="flex-row justify-between">
+                      <Text className="text-xs text-gray-500">Style:</Text>
+                      <Text className="text-xs font-bold text-[#1F130D]">{selectedDish.style}</Text>
+                    </View>
+                    <View className="flex-row justify-between">
+                      <Text className="text-xs text-gray-500">Price:</Text>
+                      <Text className="text-xs font-black text-[#B8520B]">${selectedDish.price.toFixed(2)}</Text>
+                    </View>
+                    <View className="flex-row justify-between">
+                      <Text className="text-xs text-gray-500">Stock Status:</Text>
+                      <Text className={`text-xs font-bold ${selectedDish.status === 'In Stock' ? 'text-emerald-600' : 'text-rose-600'}`}>{selectedDish.status}</Text>
+                    </View>
+                  </View>
+
+                  <TouchableOpacity 
+                    onPress={() => setDetailModalVisible(false)} 
+                    className="w-full bg-[#B8520B] py-3.5 rounded-2xl items-center shadow-md shadow-[#B8520B]/30"
+                  >
+                    <Text className="font-bold text-white text-sm">Close Details</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          </View>
+        </Modal>
+
+        {/* Add Dish Modal with Dual Image Option (URL or Device) */}
         <Modal animationType="fade" transparent={true} visible={addModalVisible} onRequestClose={() => setAddModalVisible(false)}>
           <View className="flex-1 bg-black/50 justify-center items-center px-5">
             <View className="bg-white w-full max-w-[380px] rounded-3xl p-6 shadow-2xl border border-gray-100 max-h-[90%]">
@@ -242,9 +324,64 @@ export default function MenuManagementScreen({ navigation }) {
                   className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D] mb-3"
                 />
 
+                <Text className="text-xs font-bold text-gray-700 mb-1">Rating Score</Text>
+                <TextInput 
+                  placeholder="e.g. 4.8"
+                  placeholderTextColor="#9CA3AF"
+                  value={newRating}
+                  onChangeText={setNewRating}
+                  className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D] mb-3"
+                />
+
+                {/* Image Selection Option Switch */}
+                <Text className="text-xs font-bold text-gray-700 mb-1">Dish Image Source</Text>
+                <View className="flex-row space-x-2 mb-3">
+                  <TouchableOpacity 
+                    onPress={() => setImageSourceType('url')}
+                    className={`flex-1 py-2 rounded-xl border items-center flex-row justify-center ${imageSourceType === 'url' ? 'bg-[#B8520B] border-[#B8520B]' : 'bg-gray-50 border-gray-200'}`}
+                  >
+                    <Ionicons name="link-outline" size={14} color={imageSourceType === 'url' ? 'white' : '#757575'} style={{ marginRight: 4 }} />
+                    <Text className={`text-xs font-bold ${imageSourceType === 'url' ? 'text-white' : 'text-gray-700'}`}>URL Link</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    onPress={() => setImageSourceType('device')}
+                    className={`flex-1 py-2 rounded-xl border items-center flex-row justify-center ${imageSourceType === 'device' ? 'bg-[#B8520B] border-[#B8520B]' : 'bg-gray-50 border-gray-200'}`}
+                  >
+                    <Ionicons name="phone-portrait-outline" size={14} color={imageSourceType === 'device' ? 'white' : '#757575'} style={{ marginRight: 4 }} />
+                    <Text className={`text-xs font-bold ${imageSourceType === 'device' ? 'text-white' : 'text-gray-700'}`}>Device Gallery</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {imageSourceType === 'url' ? (
+                  <TextInput 
+                    placeholder="https://images.unsplash.com/..."
+                    placeholderTextColor="#9CA3AF"
+                    value={newImage}
+                    onChangeText={setNewImage}
+                    autoCapitalize="none"
+                    className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D] mb-3"
+                  />
+                ) : (
+                  <View className="mb-3 items-center">
+                    <TouchableOpacity 
+                      onPress={pickImageFromDevice}
+                      className="w-full bg-gray-50 border border-dashed border-gray-300 rounded-2xl py-4 items-center justify-center flex-row"
+                    >
+                      <Ionicons name="cloud-upload-outline" size={18} color="#B8520B" style={{ marginRight: 6 }} />
+                      <Text className="text-xs font-bold text-[#B8520B]">
+                        {newImage ? 'Change Image from Device' : 'Pick Image from Device'}
+                      </Text>
+                    </TouchableOpacity>
+                    {newImage ? (
+                      <Text className="text-[10px] text-emerald-600 font-bold mt-1" numberOfLines={1}>Selected: {newImage}</Text>
+                    ) : null}
+                  </View>
+                )}
+
                 <Text className="text-xs font-bold text-gray-700 mb-1">Category</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-3">
-                  {['Breakfast', 'Lunch', 'Dinner', 'Drinks', 'Desserts'].map((cat) => (
+                  {['Breakfast', 'Lunch', 'Dinner', 'Drinks', 'Desserts', 'Fast Food'].map((cat) => (
                     <TouchableOpacity
                       key={cat}
                       onPress={() => setNewCategory(cat)}

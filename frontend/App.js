@@ -15,26 +15,32 @@ import CustomerProfileScreen from './src/screens/customer/CustomerProfileScreen'
 import CartScreen from './src/screens/customer/CartScreen';
 import CheckoutScreen from './src/screens/customer/CheckoutScreen';
 
-// Import Manager Screens
+// Import Manager & Waiter Screens
 import ManagerDashboardScreen from './src/screens/manager/ManagerDashboardScreen';
 import UserManagementScreen from './src/screens/manager/UserManagementScreen';
 import StaffManagementScreen from './src/screens/manager/StaffManagementScreen';
 import MenuManagementScreen from './src/screens/manager/MenuManagementScreen';
 import InventoryManagementScreen from './src/screens/manager/InventoryManagementScreen';
+import WaiterDashboardScreen from './src/screens/waiter/WaiterDashboardScreen';
 
 const Stack = createNativeStackNavigator();
 
 export default function App() {
-  // Toggle this to 'manager' or 'customer' to preview different roles instantly, 
-  // or hook this up to your AuthContext user state later.
-  const [userRole, setUserRole] = useState('manager'); // Options: 'manager' | 'customer'
+  // Toggle userRole to 'waiter', 'manager', or 'customer' to preview different roles instantly
+  const [userRole, setUserRole] = useState('waiter'); // Options: 'waiter' | 'manager' | 'customer'
 
   return (
     <AuthProvider>
       <NavigationContainer>
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           
-          {userRole === 'manager' ? (
+          {userRole === 'waiter' ? (
+            // --- WAITER STACK ---
+            <>
+              <Stack.Screen name="WaiterDashboard" component={WaiterDashboardScreen} />
+              <Stack.Screen name="ManagerDashboard" component={ManagerDashboardScreen} />
+            </>
+          ) : userRole === 'manager' ? (
             // --- MANAGER STACK ---
             <>
               <Stack.Screen name="ManagerDashboard" component={ManagerDashboardScreen} />
@@ -42,6 +48,7 @@ export default function App() {
               <Stack.Screen name="StaffManagementScreen" component={StaffManagementScreen} />
               <Stack.Screen name="MenuManagementScreen" component={MenuManagementScreen} />
               <Stack.Screen name="InventoryManagementScreen" component={InventoryManagementScreen} />
+              <Stack.Screen name="WaiterDashboard" component={WaiterDashboardScreen} /> 
             </>
           ) : (
             // --- CUSTOMER STACK ---
