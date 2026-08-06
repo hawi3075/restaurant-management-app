@@ -15,29 +15,49 @@ import CustomerProfileScreen from './src/screens/customer/CustomerProfileScreen'
 import CartScreen from './src/screens/customer/CartScreen';
 import CheckoutScreen from './src/screens/customer/CheckoutScreen';
 
-// Import Manager & Waiter Screens
+// Import Manager, Waiter, Kitchen & Driver Screens
 import ManagerDashboardScreen from './src/screens/manager/ManagerDashboardScreen';
 import UserManagementScreen from './src/screens/manager/UserManagementScreen';
 import StaffManagementScreen from './src/screens/manager/StaffManagementScreen';
 import MenuManagementScreen from './src/screens/manager/MenuManagementScreen';
 import InventoryManagementScreen from './src/screens/manager/InventoryManagementScreen';
 import WaiterDashboardScreen from './src/screens/waiter/WaiterDashboardScreen';
+import KitchenDashboardScreen from './src/screens/kitchen/KitchenDashboardScreen';
+import DriverDashboardScreen from './src/screens/driver/DriverDashboardScreen';
 
 const Stack = createNativeStackNavigator();
 
 export default function App() {
-  // Toggle userRole to 'waiter', 'manager', or 'customer' to preview different roles instantly
-  const [userRole, setUserRole] = useState('waiter'); // Options: 'waiter' | 'manager' | 'customer'
+  // Toggle userRole to 'driver', 'kitchen', 'waiter', 'manager', or 'customer' to preview different roles instantly
+  const [userRole, setUserRole] = useState('driver'); // Options: 'driver' | 'kitchen' | 'waiter' | 'manager' | 'customer'
 
   return (
     <AuthProvider>
       <NavigationContainer>
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           
-          {userRole === 'waiter' ? (
+          {userRole === 'driver' ? (
+            // --- DRIVER STACK ---
+            <>
+              <Stack.Screen name="DriverDashboard" component={DriverDashboardScreen} />
+              <Stack.Screen name="KitchenDashboard" component={KitchenDashboardScreen} />
+              <Stack.Screen name="WaiterDashboard" component={WaiterDashboardScreen} />
+              <Stack.Screen name="ManagerDashboard" component={ManagerDashboardScreen} />
+            </>
+          ) : userRole === 'kitchen' ? (
+            // --- KITCHEN STACK ---
+            <>
+              <Stack.Screen name="KitchenDashboard" component={KitchenDashboardScreen} />
+              <Stack.Screen name="DriverDashboard" component={DriverDashboardScreen} />
+              <Stack.Screen name="WaiterDashboard" component={WaiterDashboardScreen} />
+              <Stack.Screen name="ManagerDashboard" component={ManagerDashboardScreen} />
+            </>
+          ) : userRole === 'waiter' ? (
             // --- WAITER STACK ---
             <>
               <Stack.Screen name="WaiterDashboard" component={WaiterDashboardScreen} />
+              <Stack.Screen name="KitchenDashboard" component={KitchenDashboardScreen} />
+              <Stack.Screen name="DriverDashboard" component={DriverDashboardScreen} />
               <Stack.Screen name="ManagerDashboard" component={ManagerDashboardScreen} />
             </>
           ) : userRole === 'manager' ? (
@@ -49,6 +69,8 @@ export default function App() {
               <Stack.Screen name="MenuManagementScreen" component={MenuManagementScreen} />
               <Stack.Screen name="InventoryManagementScreen" component={InventoryManagementScreen} />
               <Stack.Screen name="WaiterDashboard" component={WaiterDashboardScreen} /> 
+              <Stack.Screen name="KitchenDashboard" component={KitchenDashboardScreen} />
+              <Stack.Screen name="DriverDashboard" component={DriverDashboardScreen} />
             </>
           ) : (
             // --- CUSTOMER STACK ---
