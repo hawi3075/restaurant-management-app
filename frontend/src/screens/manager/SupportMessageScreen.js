@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, FlatList } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Modal, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function SupportMessageScreen({ navigation }) {
@@ -7,8 +7,28 @@ export default function SupportMessageScreen({ navigation }) {
     { id: '1', user: 'Abebe Kebede', message: 'Hello, when will my delivery arrive?', time: '10:42 AM', status: 'Pending' },
     { id: '2', user: 'Sara Tadesse', message: 'Can I change my order item after checkout?', time: '09:15 AM', status: 'Resolved' },
   ]);
-  const [replyText, setReplyText] = useState('');
+  
   const [selectedChat, setSelectedChat] = useState(null);
+  const [replyText, setReplyText] = useState('');
+  const [isModalVisible, setIsModalVisible] = useState(false);
+
+  const handleOpenReply = (item) => {
+    setSelectedChat(item);
+    setReplyText('');
+    setIsModalVisible(true);
+  };
+
+  const handleSendReply = () => {
+    if (!replyText.trim()) {
+      Alert.alert('Error', 'Please enter a reply message.');
+      return;
+    }
+
+    // Update message status to resolved and close modal
+    setMessages(messages.map(m => m.id === selectedChat.id ? { ...m, status: 'Resolved' } : m));
+    setIsModalVisible(false);
+    Alert.alert('Success', 'Reply sent successfully!');
+  };
 
   return (
     <View className="flex-1 bg-[#F8FAFC] items-center justify-center">
@@ -46,8 +66,8 @@ export default function SupportMessageScreen({ navigation }) {
                     {item.status}
                   </Text>
                   <TouchableOpacity 
-                    onPress={() => setSelectedChat(item.id)}
-                    className="px-4 py-2 bg-slate-900 rounded-xl shadow-sm"
+                    onPress={() => handleOpenReply(item)}
+                    className="px-4 py-2 bg-slate-900 rounded-xl shadow-sm active:scale-95"
                   >
                     <Text className="text-xs font-black text-white">Reply</Text>
                   </TouchableOpacity>
@@ -57,6 +77,54 @@ export default function SupportMessageScreen({ navigation }) {
           </View>
 
         </ScrollView>
+
+        {/* Reply Modal */}
+        <Modal
+          visible={isModalVisible}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setIsModalVisible(false)}
+        >
+          <View className="flex-1 bg-black/50 justify-end items-center">
+            <View className="w-full max-w-[440px] bg-white rounded-t-[32px] p-6 border-t-2 border-slate-200 shadow-2xl">
+              
+              <View className="flex-row justify-between items-center mb-4">
+                <Text className="text-base font-black text-slate-900">
+                  Reply to {selectedChat?.user}
+                </Text>
+                <TouchableOpacity 
+                  onPress={() => setIsModalVisible(false)}
+                  className="w-8 h-8 rounded-full bg-slate-100 items-center justify-center"
+                >
+                  <Ionicons name="close" size={18} color="#0F172A" />
+                </TouchableOpacity>
+              </View>
+
+              <Text className="text-xs font-medium text-slate-500 mb-4 bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                "{selectedChat?.message}"
+              </Text>
+
+              <Text className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Your Response</Text>
+              <TextInput
+                className="w-full bg-slate-50 p-4 rounded-2xl border-2 border-slate-200 text-slate-900 font-medium text-sm mb-4 h-28 text-top"
+                placeholder="Type your message here..."
+                placeholderTextColor="#94A3B8"
+                multiline={true}
+                value={replyText}
+                onChangeText={setReplyText}
+              />
+
+              <TouchableOpacity
+                onPress={handleSendReply}
+                className="w-full bg-orange-500 py-4 rounded-2xl items-center shadow-lg active:scale-95"
+              >
+                <Text className="text-sm font-black text-white uppercase tracking-wider">Send Reply</Text>
+              </TouchableOpacity>
+
+            </View>
+          </View>
+        </Modal>
+
       </View>
     </View>
   );
