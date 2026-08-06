@@ -52,12 +52,7 @@ export default function CustomerLandingScreen({ route, navigation }) {
             <View className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/20" />
 
             {/* Floating Glassmorphism Header Bar with Premium Pill Button */}
-            <View className="absolute top-10 left-5 right-5 flex-row justify-between items-center z-10">
-              <View className="flex-row items-center bg-black/40 px-3 py-1.5 rounded-full border border-white/10 backdrop-blur-md">
-                <Ionicons name="location" size={13} color="#FF9F43" style={{ marginRight: 4 }} />
-                <Text className="text-white font-bold text-[10px]">Downtown Gourmet</Text>
-              </View>
-
+            <View className="absolute top-10 left-5 right-5 flex-row justify-end items-center z-10">
               <TouchableOpacity 
                 onPress={() => navigation.navigate(isLoggedIn ? 'CustomerProfileScreen' : 'Signup')} 
                 className="bg-gradient-to-r from-[#B8520B] to-[#D35400] px-4 py-2 rounded-full shadow-lg border border-white/20 flex-row items-center active:opacity-90"
@@ -69,15 +64,11 @@ export default function CustomerLandingScreen({ route, navigation }) {
 
             {/* Hero Content */}
             <View className="z-10 mb-2">
-              <View className="bg-[#B8520B]/90 self-start px-2.5 py-0.5 rounded-full mb-2 border border-white/20">
-                <Text className="text-white font-black text-[9px] uppercase tracking-widest">✨ Chef's Special Choice</Text>
-              </View>
-
               <Text className="text-2xl font-black text-white leading-tight mb-1 shadow-sm">
-                Craving Something <Text className="text-[#FF9F43]">Extraordinary?</Text>
+                Taste the <Text className="text-[#FF9F43]">Masterpiece</Text> in Every Bite
               </Text>
               <Text className="text-[11px] text-gray-200 mb-4 leading-relaxed font-medium">
-                Experience culinary perfection delivered straight to your table or door.
+                Freshly prepared, mouth-watering dishes crafted by expert chefs to satisfy your deepest cravings.
               </Text>
 
               <TouchableOpacity 
@@ -134,7 +125,7 @@ export default function CustomerLandingScreen({ route, navigation }) {
             </View>
           </View>
 
-          {/* Special Promotional Promo Banner */}
+          {/* Special Promotional Promo Banner - Sunday 10% Discount Offer */}
           <View className="px-5 mt-2">
             <TouchableOpacity 
               onPress={() => navigation.navigate('MenuScreen')}
@@ -142,10 +133,10 @@ export default function CustomerLandingScreen({ route, navigation }) {
             >
               <View className="flex-1 pr-2">
                 <View className="bg-[#B8520B] self-start px-2 py-0.5 rounded-md mb-1">
-                  <Text className="text-[9px] font-bold text-white uppercase tracking-wider">Special Offer</Text>
+                  <Text className="text-[9px] font-bold text-white uppercase tracking-wider">Weekly Special Offer</Text>
                 </View>
-                <Text className="text-white font-black text-sm mb-0.5">Weekend Mega Bundle 20% Off</Text>
-                <Text className="text-gray-300 text-[10px]">Use code <Text className="text-[#E67E22] font-bold">TASTE20</Text> at checkout.</Text>
+                <Text className="text-white font-black text-sm mb-0.5">Every Sunday 10% Discount</Text>
+                <Text className="text-gray-300 text-[10px]">Enjoy your family favorites with special weekend savings!</Text>
               </View>
               <Ionicons name="gift-outline" size={32} color="#E67E22" />
             </TouchableOpacity>
