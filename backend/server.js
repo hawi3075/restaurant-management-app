@@ -20,17 +20,19 @@ const io = new Server(server, {
 // Middleware
 app.use(express.json());
 app.use(cors());
-// Add these lines below your middleware configuration in server.js
+
+// Import Routes
 const authRoutes = require('./routes/authRoutes');
 const menuRoutes = require('./routes/menuRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 
+// Mount Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/menu', menuRoutes);
 app.use('/api/orders', orderRoutes);
 
 // Database Connection
-mongoose.connect(process.env.MONGODB_URI)
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/restaurant_db')
   .then(() => console.log('MongoDB Connected Successfully'))
   .catch((err) => console.error('MongoDB connection error:', err));
 

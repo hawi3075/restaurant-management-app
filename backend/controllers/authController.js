@@ -1,16 +1,9 @@
-const express = require('express');
-const router = express.Router();
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
-router.post('/login', async (req, res) => {
-  const { username, password } = req.body;
-  const email = username; // handles mapping if frontend sends username field
-
-  if (!email || !password) {
-    return res.status(400).json({ message: 'Please provide both email and password' });
-  }
+exports.loginUser = async (req, res) => {
+  const { email, password } = req.body;
 
   try {
     const user = await User.findOne({ email });
@@ -23,7 +16,7 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ message: 'Invalid email or password' });
     }
 
-    // Role-based route mapping for frontend navigation
+    // Role-based route mapping
     const redirectRoutes = {
       manager: 'ManagerDashboard',
       kitchen: 'KitchenDashboard',
@@ -52,6 +45,4 @@ router.post('/login', async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: 'Server error during login', error: error.message });
   }
-});
-
-module.exports = router;
+};

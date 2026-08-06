@@ -1,10 +1,57 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
+// Set to localhost for your local web test
+const BACKEND_URL = 'http://localhost:5000'; 
+
 export default function LoginScreen({ navigation }) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('manager@restaurant.com'); // Pre-filled for testing
+  const [password, setPassword] = useState('Manager123!'); // Pre-filled for testing
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleLogin = async () => {
+    // Basic validation
+    if (!email || !password) {
+      Alert.alert('Error', 'Please enter both email and password.');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username: email, password }),
+      });
+
+      const data = await response.json();
+      setIsLoading(false);
+
+      if (!response.ok) {
+        Alert.alert('Login Failed', data.message || 'Invalid credentials.');
+        return;
+      }
+
+      // --- LOGIN SUCCESS ---
+      const targetScreen = data.navigateTo || 'CustomerLanding'; 
+      
+      console.log(`Login successful. Redirecting to: ${targetScreen}`);
+
+      navigation.reset({
+        index: 0,
+        routes: [{ name: targetScreen, params: { user: data.user, token: data.token } }],
+      });
+
+    } catch (error) {
+      setIsLoading(false);
+      console.error('Login Error:', error);
+      Alert.alert('Connection Error', 'Unable to connect to the server. Please check your network and backend URL.');
+    }
+  };
 
   return (
     <View className="flex-1 bg-[#F8F9FC] items-center">
@@ -18,7 +65,7 @@ export default function LoginScreen({ navigation }) {
               <Ionicons name="restaurant" size={24} color="#B8520B" />
             </View>
             <Text className="text-3xl font-black text-[#1F130D] mb-1">Welcome Back</Text>
-            <Text className="text-xs text-gray-500">Sign in to manage your kitchen operations & orders</Text>
+            <Text className="text-xs text-gray-500">Sign in to manage staff, kitchen & deliveries</Text>
           </View>
 
           {/* Form Container */}
@@ -27,13 +74,14 @@ export default function LoginScreen({ navigation }) {
             <View className="mb-4">
               <Text className="text-xs font-bold text-[#1F130D] mb-1.5">Email Address</Text>
               <TextInput 
-                placeholder="name@company.com"
+                placeholder="manager@restaurant.com"
                 placeholderTextColor="#9E9E9E"
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 className="bg-[#F8F9FC] border border-[#EAE3DE] rounded-2xl px-4 py-3 text-xs text-[#1F130D]"
+                editable={!isLoading}
               />
             </View>
 
@@ -47,6 +95,7 @@ export default function LoginScreen({ navigation }) {
                 onChangeText={setPassword}
                 secureTextEntry
                 className="bg-[#F8F9FC] border border-[#EAE3DE] rounded-2xl px-4 py-3 text-xs text-[#1F130D]"
+                editable={!isLoading}
               />
             </View>
 
@@ -57,10 +106,15 @@ export default function LoginScreen({ navigation }) {
 
             {/* Sign In Button */}
             <TouchableOpacity 
-              onPress={() => navigation.navigate('CustomerLanding')}
-              className="bg-[#B8520B] py-3.5 rounded-2xl items-center shadow-md active:opacity-90 mb-4"
+              onPress={handleLogin}
+              className={`bg-[#B8520B] py-3.5 rounded-2xl items-center shadow-md mb-4 ${isLoading ? 'opacity-60' : 'active:opacity-90'}`}
+              disabled={isLoading}
             >
-              <Text className="text-white font-black text-xs">Sign In</Text>
+              {isLoading ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <Text className="text-white font-black text-xs">Sign In</Text>
+              )}
             </TouchableOpacity>
 
             {/* Divider */}
@@ -85,34 +139,28 @@ export default function LoginScreen({ navigation }) {
 
           {/* Switch to Signup */}
           <View className="flex-row justify-center items-center">
-            <Text className="text-xs text-gray-500">Don't have an account? </Text>
-            <TouchableOpacity onPress={() => navigation.navigate('SignupScreen')}>
+            <Text className="text-xs text-gray-500">Need to create an account? </Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
               <Text className="text-xs font-bold text-[#B8520B]">Sign Up</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
 
-        {/* Bottom Mobile Navigation Bar */}
-        <View className="absolute bottom-0 left-0 right-0 bg-white border-t border-[#EAE3DE] px-6 py-2.5 flex-row justify-between items-center shadow-lg">
+        {/* Bottom Navigation */}
+        <View className="absolute bottom-0 left-0 right-0 bg-white border-t border-[#EAE3DE] px-6 py-2.5 flex-row justify-around items-center shadow-lg">
           <TouchableOpacity onPress={() => navigation.navigate('CustomerLanding')} className="items-center">
             <Ionicons name="home-outline" size={18} color="#757575" />
             <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Home</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('OrderHistoryScreen')} className="items-center">
-            <Ionicons name="receipt-outline" size={18} color="#757575" />
-            <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Orders</Text>
-          </TouchableOpacity>
+          
           <TouchableOpacity onPress={() => navigation.navigate('MenuScreen')} className="items-center">
             <Ionicons name="restaurant-outline" size={18} color="#757575" />
             <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Menu</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('CartScreen')} className="items-center">
-            <Ionicons name="notifications-outline" size={18} color="#757575" />
-            <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Alerts</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('CustomerProfileScreen')} className="items-center">
+
+          <TouchableOpacity onPress={() => navigation.navigate('Login')} className="items-center">
             <Ionicons name="person" size={18} color="#B8520B" />
-            <Text className="text-[9px] font-bold text-[#B8520B] mt-0.5">Profile</Text>
+            <Text className="text-[9px] font-bold text-[#B8520B] mt-0.5">Staff Login</Text>
           </TouchableOpacity>
         </View>
       </View>
