@@ -1,8 +1,8 @@
 import './src/global.css';
-import React, { useState } from 'react';
+import React, { useContext } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { AuthProvider } from './src/context/AuthContext';
+import { AuthProvider, AuthContext } from './src/context/AuthContext';
 
 // Import Customer Screens
 import CustomerLandingScreen from './src/screens/customer/CustomerLandingScreen';
@@ -27,69 +27,44 @@ import DriverDashboardScreen from './src/screens/driver/DriverDashboardScreen';
 
 const Stack = createNativeStackNavigator();
 
-export default function App() {
-  // Set userRole to 'customer' to preview the customer app flow
-  const [userRole, setUserRole] = useState('customer'); // Options: 'customer' | 'driver' | 'kitchen' | 'waiter' | 'manager'
+function AppNavigator() {
+  const { user } = useContext(AuthContext); // Get authenticated user state
 
   return (
-    <AuthProvider>
-      <NavigationContainer>
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
-          
-          {userRole === 'driver' ? (
-            // --- DRIVER STACK ---
-            <>
-              <Stack.Screen name="DriverDashboard" component={DriverDashboardScreen} />
-              <Stack.Screen name="KitchenDashboard" component={KitchenDashboardScreen} />
-              <Stack.Screen name="WaiterDashboard" component={WaiterDashboardScreen} />
-              <Stack.Screen name="ManagerDashboard" component={ManagerDashboardScreen} />
-            </>
-          ) : userRole === 'kitchen' ? (
-            // --- KITCHEN STACK ---
-            <>
-              <Stack.Screen name="KitchenDashboard" component={KitchenDashboardScreen} />
-              <Stack.Screen name="DriverDashboard" component={DriverDashboardScreen} />
-              <Stack.Screen name="WaiterDashboard" component={WaiterDashboardScreen} />
-              <Stack.Screen name="ManagerDashboard" component={ManagerDashboardScreen} />
-            </>
-          ) : userRole === 'waiter' ? (
-            // --- WAITER STACK ---
-            <>
-              <Stack.Screen name="WaiterDashboard" component={WaiterDashboardScreen} />
-              <Stack.Screen name="KitchenDashboard" component={KitchenDashboardScreen} />
-              <Stack.Screen name="DriverDashboard" component={DriverDashboardScreen} />
-              <Stack.Screen name="ManagerDashboard" component={ManagerDashboardScreen} />
-            </>
-          ) : userRole === 'manager' ? (
-            // --- MANAGER STACK ---
-            <>
-              <Stack.Screen name="ManagerDashboard" component={ManagerDashboardScreen} />
-              <Stack.Screen name="UserManagementScreen" component={UserManagementScreen} />
-              <Stack.Screen name="StaffManagementScreen" component={StaffManagementScreen} />
-              <Stack.Screen name="MenuManagementScreen" component={MenuManagementScreen} />
-              <Stack.Screen name="InventoryManagementScreen" component={InventoryManagementScreen} />
-              <Stack.Screen name="WaiterDashboard" component={WaiterDashboardScreen} /> 
-              <Stack.Screen name="KitchenDashboard" component={KitchenDashboardScreen} />
-              <Stack.Screen name="DriverDashboard" component={DriverDashboardScreen} />
-            </>
-          ) : (
-            // --- CUSTOMER STACK ---
-            <>
-              <Stack.Screen name="CustomerLanding" component={CustomerLandingScreen} />
-              <Stack.Screen name="MenuScreen" component={MenuScreen} />
-              <Stack.Screen name="FoodDetailScreen" component={FoodDetailScreen} />
-              <Stack.Screen name="Signup" component={SignupScreen} />
-              <Stack.Screen name="SignupScreen" component={SignupScreen} />
-              <Stack.Screen name="CustomerProfileScreen" component={CustomerProfileScreen} />
-              <Stack.Screen name="OrderHistoryScreen" component={OrderHistoryScreen} />
-              <Stack.Screen name="Login" component={LoginScreen} />
-              <Stack.Screen name="CartScreen" component={CartScreen} />
-              <Stack.Screen name="CheckoutScreen" component={CheckoutScreen} />
-            </>
-          )}
+    <NavigationContainer>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        {/* Always register common auth & navigation routes */}
+        <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen name="Signup" component={SignupScreen} />
+        <Stack.Screen name="SignupScreen" component={SignupScreen} />
 
-        </Stack.Navigator>
-      </NavigationContainer>
+        {/* Customer Screens */}
+        <Stack.Screen name="CustomerLanding" component={CustomerLandingScreen} />
+        <Stack.Screen name="MenuScreen" component={MenuScreen} />
+        <Stack.Screen name="FoodDetailScreen" component={FoodDetailScreen} />
+        <Stack.Screen name="CustomerProfileScreen" component={CustomerProfileScreen} />
+        <Stack.Screen name="OrderHistoryScreen" component={OrderHistoryScreen} />
+        <Stack.Screen name="CartScreen" component={CartScreen} />
+        <Stack.Screen name="CheckoutScreen" component={CheckoutScreen} />
+
+        {/* Role-Based Dashboards */}
+        <Stack.Screen name="ManagerDashboard" component={ManagerDashboardScreen} />
+        <Stack.Screen name="UserManagementScreen" component={UserManagementScreen} />
+        <Stack.Screen name="StaffManagementScreen" component={StaffManagementScreen} />
+        <Stack.Screen name="MenuManagementScreen" component={MenuManagementScreen} />
+        <Stack.Screen name="InventoryManagementScreen" component={InventoryManagementScreen} />
+        <Stack.Screen name="WaiterDashboard" component={WaiterDashboardScreen} />
+        <Stack.Screen name="KitchenDashboard" component={KitchenDashboardScreen} />
+        <Stack.Screen name="DriverDashboard" component={DriverDashboardScreen} />
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppNavigator />
     </AuthProvider>
   );
 }

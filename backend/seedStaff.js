@@ -1,10 +1,14 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const dotenv = require('dotenv'); // Make sure dotenv is required
 const User = require('./models/User'); // Adjust path if needed
+
+dotenv.config(); // Load environment variables from .env
 
 const seedUsers = async () => {
   try {
-    await mongoose.connect('mongodb://localhost:27017/restaurant_db'); // Adjust connection string
+    // Use process.env.MONGODB_URI so it connects to your cloud Atlas database
+    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/restaurant_db');
 
     const defaultUsers = [
       {

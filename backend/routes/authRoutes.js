@@ -1,57 +1,9 @@
+// backend/routes/authRoutes.js
 const express = require('express');
 const router = express.Router();
-const User = require('../models/User');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+const { loginUser, registerUser } = require('../controllers/authController');
 
-router.post('/login', async (req, res) => {
-  const { username, password } = req.body;
-  const email = username; // handles mapping if frontend sends username field
-
-  if (!email || !password) {
-    return res.status(400).json({ message: 'Please provide both email and password' });
-  }
-
-  try {
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(400).json({ message: 'Invalid email or password' });
-    }
-
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid email or password' });
-    }
-
-    // Role-based route mapping for frontend navigation
-    const redirectRoutes = {
-      manager: 'ManagerDashboard',
-      kitchen: 'KitchenDashboard',
-      waiter: 'WaiterDashboard',
-      driver: 'DriverDashboard',
-      customer: 'CustomerLanding'
-    };
-
-    const token = jwt.sign(
-      { id: user._id, role: user.role },
-      process.env.JWT_SECRET || 'secretkey',
-      { expiresIn: '7d' }
-    );
-
-    res.json({
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role
-      },
-      navigateTo: redirectRoutes[user.role] || 'CustomerLanding'
-    });
-
-  } catch (error) {
-    res.status(500).json({ message: 'Server error during login', error: error.message });
-  }
-});
+router.post('/login', loginUser);
+router.post('/register', registerUser);
 
 module.exports = router;

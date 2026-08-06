@@ -24,15 +24,27 @@ export default function ManagerDashboardScreen({ navigation }) {
 
         <ScrollView showsVerticalScrollIndicator={false} className="flex-1 pt-12 pb-24 px-5">
           
-          {/* Header */}
+          {/* Header with Title and Profile / Notification Icons on the Right */}
           <View className="flex-row justify-between items-center mb-6">
             <View>
               <Text className="text-[11px] font-bold text-orange-500 uppercase tracking-widest">Executive Portal</Text>
               <Text className="text-2xl font-black text-slate-900 tracking-wide">Manager Dashboard</Text>
             </View>
-            <TouchableOpacity className="w-11 h-11 bg-slate-50 rounded-2xl border border-slate-200 items-center justify-center shadow-sm active:scale-95">
-              <Ionicons name="notifications-outline" size={20} color="#0F172A" />
-            </TouchableOpacity>
+
+            <View className="flex-row items-center space-x-2.5">
+              {/* Profile Icon Button */}
+              <TouchableOpacity 
+                onPress={() => navigation.navigate('CustomerProfileScreen')}
+                className="w-11 h-11 bg-orange-500/10 rounded-2xl border border-orange-500/20 items-center justify-center shadow-sm active:scale-95"
+              >
+                <Ionicons name="person" size={20} color="#F97316" />
+              </TouchableOpacity>
+
+              {/* Notification Button */}
+              <TouchableOpacity className="w-11 h-11 bg-slate-50 rounded-2xl border border-slate-200 items-center justify-center shadow-sm active:scale-95">
+                <Ionicons name="notifications-outline" size={20} color="#0F172A" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Banner Card */}
