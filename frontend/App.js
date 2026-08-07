@@ -31,12 +31,31 @@ import DriverDashboardScreen from './src/screens/driver/DriverDashboardScreen';
 const Stack = createNativeStackNavigator();
 
 function AppNavigator() {
-  const { user } = useContext(AuthContext); // Get authenticated user state
+  const { user, loading } = useContext(AuthContext); // Get authenticated user state & loading flag
+
+  if (loading) {
+    return null; // Or return a splash screen component while checking AsyncStorage
+  }
+
+  // Determine the default starting screen based on the user's saved role
+  const getInitialRoute = () => {
+    if (!user || !user.role) return 'Login';
+    
+    const role = user.role.toLowerCase().trim();
+    if (role === 'manager' || role === 'admin') return 'ManagerDashboard';
+    if (role === 'kitchen') return 'KitchenDashboard';
+    if (role === 'waiter') return 'WaiterDashboard';
+    if (role === 'driver') return 'DriverDashboard';
+    return 'CustomerLanding';
+  };
 
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {/* Always register common auth & navigation routes */}
+      <Stack.Navigator 
+        screenOptions={{ headerShown: false }}
+        initialRouteName={getInitialRoute()}
+      >
+        {/* Auth Routes */}
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="Signup" component={SignupScreen} />
         <Stack.Screen name="SignupScreen" component={SignupScreen} />
