@@ -5,6 +5,7 @@ const cors = require('cors');
 const http = require('http');
 const { Server } = require('socket.io');
 const mongoose = require('mongoose');
+const nodemailer = require('nodemailer');
 
 dotenv.config();
 
@@ -31,6 +32,17 @@ app.use('/api/auth', authRoutes);
 app.use('/api/menu', menuRoutes);
 app.use('/api/orders', orderRoutes);
 
+// Configure Nodemailer Transporter
+const transporter = nodemailer.createTransport({
+  host: 'smtp.gmail.com',
+  port: 465,
+  secure: true, // true for 465, false for 587
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
+
 // --- FORGOT PASSWORD ENDPOINT ---
 app.post('/api/auth/forgot-password', async (req, res) => {
   try {
@@ -40,11 +52,20 @@ app.post('/api/auth/forgot-password', async (req, res) => {
       return res.status(400).json({ message: 'Email address is required.' });
     }
 
-    console.log(`Password reset requested for: ${email}`);
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: 'Password Reset Instructions - ROMS',
+      text: `Hello,\n\nYou requested a password reset for your ROMS account. Please use this request to proceed with updating your password.\n\nIf you did not request this, please ignore this email.`,
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`Password reset email successfully sent to: ${email}`);
+    
     return res.status(200).json({ message: 'Password reset instructions sent successfully.' });
   } catch (error) {
-    console.error('Forgot Password Error:', error);
-    return res.status(500).json({ message: 'Server error. Please try again later.' });
+    console.error('Forgot Password Email Error:', error);
+    return res.status(500).json({ message: 'Failed to send email. Check server configuration.' });
   }
 });
 
