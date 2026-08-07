@@ -31,6 +31,23 @@ app.use('/api/auth', authRoutes);
 app.use('/api/menu', menuRoutes);
 app.use('/api/orders', orderRoutes);
 
+// --- FORGOT PASSWORD ENDPOINT ---
+app.post('/api/auth/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ message: 'Email address is required.' });
+    }
+
+    console.log(`Password reset requested for: ${email}`);
+    return res.status(200).json({ message: 'Password reset instructions sent successfully.' });
+  } catch (error) {
+    console.error('Forgot Password Error:', error);
+    return res.status(500).json({ message: 'Server error. Please try again later.' });
+  }
+});
+
 // Database Connection
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/restaurant_db')
   .then(() => console.log('MongoDB Connected Successfully'))

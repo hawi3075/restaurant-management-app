@@ -1,12 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Image, ImageBackground } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function CustomerLandingScreen({ route, navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
-  
-  // Track authentication status via route params (defaults to false / guest)
-  const isLoggedIn = route?.params?.isLoggedIn ?? false;
+  const [isLoggedIn, setIsLoggedIn] = useState(route?.params?.isLoggedIn ?? false);
+
+  // Check storage on component load to see if user has authenticated token
+  useEffect(() => {
+    checkUserAuth();
+  }, []);
+
+  const checkUserAuth = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (token) {
+        setIsLoggedIn(true);
+      }
+    } catch (error) {
+      console.log('Error checking authentication token:', error);
+    }
+  };
 
   const categories = [
     { name: 'Breakfast', count: '18 Items', image: 'https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?auto=format&fit=crop&w=400&q=80' },
@@ -142,7 +157,7 @@ export default function CustomerLandingScreen({ route, navigation }) {
             </TouchableOpacity>
           </View>
 
-          {/* Trending Now Horizontal Carousel with Clean Images and Bottom Action Buttons */}
+          {/* Trending Now Horizontal Carousel */}
           <View className="px-5 mt-5 mb-10">
             <View className="flex-row justify-between items-center mb-3">
               <Text className="text-base font-black text-[#1F130D]">Trending Now</Text>
@@ -160,7 +175,6 @@ export default function CustomerLandingScreen({ route, navigation }) {
               {trendingItems.map((item) => (
                 <View key={item.id} className="bg-white w-64 rounded-2xl border border-[#EAE3DE] overflow-hidden mr-3 shadow-xs">
                   
-                  {/* Clean Image Container (No overlays on image) */}
                   <View className="relative h-32 w-full">
                     <Image source={{ uri: item.image }} className="w-full h-full" />
                     <View className="absolute inset-0 bg-black/10" />
@@ -180,9 +194,7 @@ export default function CustomerLandingScreen({ route, navigation }) {
                       <Text className="font-black text-xs text-[#1F130D]">${item.price.toFixed(2)}</Text>
                     </View>
 
-                    {/* Bottom Action Buttons Row: Detail, Cart, and Checkout */}
                     <View className="flex-row space-x-1.5">
-                      {/* Detail Button */}
                       <TouchableOpacity 
                         onPress={() => navigation.navigate('FoodDetailScreen', { foodItem: item })} 
                         className="flex-1 bg-gray-100 py-1.5 rounded-xl items-center flex-row justify-center"
@@ -191,7 +203,6 @@ export default function CustomerLandingScreen({ route, navigation }) {
                         <Text className="text-[9px] font-bold text-[#1F130D]">Detail</Text>
                       </TouchableOpacity>
 
-                      {/* Cart Button */}
                       <TouchableOpacity 
                         onPress={() => handleAddToCart(item)} 
                         className="flex-1 bg-[#FEF7F3] border border-[#B8520B]/40 py-1.5 rounded-xl items-center flex-row justify-center"
@@ -200,7 +211,6 @@ export default function CustomerLandingScreen({ route, navigation }) {
                         <Text className="text-[9px] font-bold text-[#B8520B]">Cart</Text>
                       </TouchableOpacity>
 
-                      {/* Checkout Button */}
                       <TouchableOpacity 
                         onPress={() => handleQuickCheckout(item)} 
                         className="flex-1 bg-[#B8520B] py-1.5 rounded-xl items-center flex-row justify-center"
@@ -236,16 +246,17 @@ export default function CustomerLandingScreen({ route, navigation }) {
             <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Cart</Text>
           </TouchableOpacity>
           
+          {/* Dynamic Profile / Sign Up Bottom Tab */}
           <TouchableOpacity 
             onPress={() => navigation.navigate(isLoggedIn ? 'CustomerProfileScreen' : 'Signup')} 
             className="items-center"
           >
             <Ionicons 
-              name={isLoggedIn ? "person-outline" : "person-add-outline"} 
+              name={isLoggedIn ? "person" : "person-add-outline"} 
               size={18} 
-              color="#757575" 
+              color={isLoggedIn ? "#B8520B" : "#757575"} 
             />
-            <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">
+            <Text className={`text-[9px] ${isLoggedIn ? 'font-bold text-[#B8520B]' : 'font-semibold text-gray-500'} mt-0.5`}>
               {isLoggedIn ? 'Profile' : 'Sign Up'}
             </Text>
           </TouchableOpacity>

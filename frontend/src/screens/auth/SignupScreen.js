@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Alert }
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -15,6 +16,10 @@ export default function SignupScreen({ navigation }) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // States for toggling password visibility
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [request, response, promptAsync] = Google.useAuthRequest({
     webClientId: '801403267793-ktbmci8hevllseach2e5jn101dgpf4mc.apps.googleusercontent.com',
@@ -52,10 +57,14 @@ export default function SignupScreen({ navigation }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Google authentication failed');
 
-      // Successfully authenticated with Google, navigate to customer landing
+      // Save token from backend response if available
+      if (data.token) {
+        await AsyncStorage.setItem('token', data.token);
+      }
+
       navigation.reset({
         index: 0,
-        routes: [{ name: 'CustomerLanding' }],
+        routes: [{ name: 'CustomerLanding', params: { isLoggedIn: true } }],
       });
     } catch (error) {
       Alert.alert('Error', error.message);
@@ -98,12 +107,16 @@ export default function SignupScreen({ navigation }) {
         throw new Error(data.message || 'Failed to sign up');
       }
 
+      // Save token to AsyncStorage so CustomerLandingScreen detects active login
+      if (data.token) {
+        await AsyncStorage.setItem('token', data.token);
+      }
+
       Alert.alert('Success', 'Account created successfully!');
       
-      // Successfully created account manually, navigate to customer landing
       navigation.reset({
         index: 0,
-        routes: [{ name: 'CustomerLanding' }],
+        routes: [{ name: 'CustomerLanding', params: { isLoggedIn: true } }],
       });
 
     } catch (error) {
@@ -118,7 +131,17 @@ export default function SignupScreen({ navigation }) {
       <View className="w-full max-w-[440px] flex-1 bg-white relative shadow-2xl overflow-hidden border-x-2 border-slate-200">
         <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
 
-        <ScrollView showsVerticalScrollIndicator={false} className="flex-1 pt-10 pb-20 px-6">
+        {/* Back Button Header */}
+        <View className="px-6 pt-4 pb-2 z-10">
+          <TouchableOpacity 
+            onPress={() => navigation.goBack()} 
+            className="w-10 h-10 bg-slate-100 rounded-2xl items-center justify-center border border-slate-200 active:scale-95"
+          >
+            <Ionicons name="arrow-back" size={20} color="#0F172A" />
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView showsVerticalScrollIndicator={false} className="flex-1 pt-2 pb-20 px-6">
           
           <View className="items-center mb-6 mt-2">
             <View className="w-12 h-12 bg-orange-500/10 rounded-2xl items-center justify-center mb-2">
@@ -165,28 +188,46 @@ export default function SignupScreen({ navigation }) {
               />
             </View>
 
+            {/* Password Field with Eye Icon */}
             <View>
               <Text className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Password</Text>
-              <TextInput
-                className="w-full bg-slate-50 px-4 py-3.5 rounded-2xl border-2 border-slate-200 text-slate-900 font-bold text-sm"
-                placeholder="••••••••"
-                placeholderTextColor="#94A3B8"
-                secureTextEntry={true}
-                value={password}
-                onChangeText={setPassword}
-              />
+              <View className="relative justify-center">
+                <TextInput
+                  className="w-full bg-slate-50 pl-4 pr-12 py-3.5 rounded-2xl border-2 border-slate-200 text-slate-900 font-bold text-sm"
+                  placeholder="••••••••"
+                  placeholderTextColor="#94A3B8"
+                  secureTextEntry={!showPassword}
+                  value={password}
+                  onChangeText={setPassword}
+                />
+                <TouchableOpacity 
+                  onPress={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 p-1"
+                >
+                  <Ionicons name={showPassword ? "eye-off" : "eye"} size={20} color="#94A3B8" />
+                </TouchableOpacity>
+              </View>
             </View>
 
+            {/* Confirm Password Field with Eye Icon */}
             <View>
               <Text className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Confirm Password</Text>
-              <TextInput
-                className="w-full bg-slate-50 px-4 py-3.5 rounded-2xl border-2 border-slate-200 text-slate-900 font-bold text-sm"
-                placeholder="••••••••"
-                placeholderTextColor="#94A3B8"
-                secureTextEntry={true}
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-              />
+              <View className="relative justify-center">
+                <TextInput
+                  className="w-full bg-slate-50 pl-4 pr-12 py-3.5 rounded-2xl border-2 border-slate-200 text-slate-900 font-bold text-sm"
+                  placeholder="••••••••"
+                  placeholderTextColor="#94A3B8"
+                  secureTextEntry={!showConfirmPassword}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                />
+                <TouchableOpacity 
+                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-4 p-1"
+                >
+                  <Ionicons name={showConfirmPassword ? "eye-off" : "eye"} size={20} color="#94A3B8" />
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
 

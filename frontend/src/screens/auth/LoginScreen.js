@@ -1,6 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as WebBrowser from 'expo-web-browser';
+import * as Google from 'expo-auth-session/providers/google';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+WebBrowser.maybeCompleteAuthSession();
 
 // Set to localhost for your local web test
 const BACKEND_URL = 'http://localhost:5000'; 
@@ -9,9 +14,62 @@ export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('manager@restaurant.com'); // Pre-filled for testing
   const [password, setPassword] = useState('Manager123!'); // Pre-filled for testing
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [isForgotPassword, setIsForgotPassword] = useState(false); // Toggle for Forgot Password view
+
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    webClientId: '801403267793-ktbmci8hevllseach2e5jn101dgpf4mc.apps.googleusercontent.com',
+    useProxy: true,
+  });
+
+  useEffect(() => {
+    if (response?.type === 'success') {
+      const { authentication } = response;
+      if (authentication?.accessToken) {
+        handleGoogleBackendAuth(authentication.accessToken);
+      }
+    }
+  }, [response]);
+
+  const handleGoogleBackendAuth = async (token) => {
+    try {
+      setIsLoading(true);
+      const userInfoResponse = await fetch('https://www.googleapis.com/userinfo/v2/me', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const googleUser = await userInfoResponse.json();
+
+      const res = await fetch(`${BACKEND_URL}/api/auth/google`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: googleUser.email,
+          name: googleUser.name,
+          googleId: googleUser.id,
+          profileImage: googleUser.picture,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Google authentication failed');
+
+      if (data.token) {
+        await AsyncStorage.setItem('token', data.token);
+      }
+
+      const targetScreen = data.navigateTo || 'CustomerLanding';
+      navigation.reset({
+        index: 0,
+        routes: [{ name: targetScreen, params: { user: data.user, token: data.token, isLoggedIn: true } }],
+      });
+    } catch (error) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleLogin = async () => {
-    // Basic validation
     if (!email || !password) {
       Alert.alert('Error', 'Please enter both email and password.');
       return;
@@ -36,14 +94,15 @@ export default function LoginScreen({ navigation }) {
         return;
       }
 
-      // --- LOGIN SUCCESS ---
+      if (data.token) {
+        await AsyncStorage.setItem('token', data.token);
+      }
+
       const targetScreen = data.navigateTo || 'CustomerLanding'; 
       
-      console.log(`Login successful. Redirecting to: ${targetScreen}`);
-
       navigation.reset({
         index: 0,
-        routes: [{ name: targetScreen, params: { user: data.user, token: data.token } }],
+        routes: [{ name: targetScreen, params: { user: data.user, token: data.token, isLoggedIn: true } }],
       });
 
     } catch (error) {
@@ -53,24 +112,79 @@ export default function LoginScreen({ navigation }) {
     }
   };
 
+  // Handle Forgot Password Request submission
+  const handleSendResetLink = async () => {
+    if (!email) {
+      Alert.alert('Error', 'Please enter your email address.');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const response = await fetch(`${BACKEND_URL}/api/auth/forgot-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await response.json();
+      setIsLoading(false);
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to send reset instructions.');
+      }
+
+      Alert.alert('Success', 'Password reset instructions have been sent to your email.');
+      setIsForgotPassword(false); // Return to login view
+    } catch (error) {
+      setIsLoading(false);
+      Alert.alert('Error', error.message || 'Server connection failed.');
+    }
+  };
+
   return (
-    <View className="flex-1 bg-[#F8F9FC] items-center">
-      <View className="w-full max-w-[440px] flex-1 bg-[#F8F9FC] relative shadow-2xl">
+    <View className="flex-1 bg-[#F8F9FC] items-center justify-center">
+      <View className="w-full max-w-[440px] flex-1 bg-[#F8F9FC] relative shadow-2xl overflow-hidden border-x border-[#EAE3DE]">
         <StatusBar barStyle="dark-content" backgroundColor="#F8F9FC" />
 
-        <ScrollView showsVerticalScrollIndicator={false} className="flex-1 pt-16 px-6 pb-24">
+        {/* Back Button Header */}
+        <View className="px-6 pt-6 pb-2 z-10">
+          <TouchableOpacity 
+            onPress={() => {
+              if (isForgotPassword) {
+                setIsForgotPassword(false);
+              } else {
+                navigation.goBack();
+              }
+            }} 
+            className="w-10 h-10 bg-white rounded-2xl items-center justify-center border border-[#EAE3DE] active:scale-95 shadow-xs"
+          >
+            <Ionicons name="arrow-back" size={20} color="#1F130D" />
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView showsVerticalScrollIndicator={false} className="flex-1 pt-4 px-6 pb-12">
           {/* Header Title */}
-          <View className="items-center mb-8">
+          <View className="items-center mb-6">
             <View className="w-12 h-12 bg-[#FEF7F3] rounded-2xl border border-[#B8520B]/30 items-center justify-center mb-3 shadow-xs">
-              <Ionicons name="restaurant" size={24} color="#B8520B" />
+              <Ionicons name={isForgotPassword ? "key-outline" : "restaurant"} size={24} color="#B8520B" />
             </View>
-            <Text className="text-3xl font-black text-[#1F130D] mb-1">Welcome Back</Text>
-            <Text className="text-xs text-gray-500">Sign in to manage staff, kitchen & deliveries</Text>
+            <Text className="text-3xl font-black text-[#1F130D] mb-1">
+              {isForgotPassword ? 'Reset Password' : 'Welcome Back'}
+            </Text>
+            <Text className="text-xs text-gray-500 text-center px-4">
+              {isForgotPassword 
+                ? 'Enter your email address and we will send you instructions to reset your password.' 
+                : 'Sign in to manage staff, kitchen & deliveries'}
+            </Text>
           </View>
 
           {/* Form Container */}
           <View className="bg-white p-6 rounded-3xl border border-[#EAE3DE] shadow-xs mb-6">
-            {/* Email Field */}
+            
+            {/* Email Field (Always visible) */}
             <View className="mb-4">
               <Text className="text-xs font-bold text-[#1F130D] mb-1.5">Email Address</Text>
               <TextInput 
@@ -85,84 +199,103 @@ export default function LoginScreen({ navigation }) {
               />
             </View>
 
-            {/* Password Field */}
-            <View className="mb-4">
-              <Text className="text-xs font-bold text-[#1F130D] mb-1.5">Password</Text>
-              <TextInput 
-                placeholder="••••••••"
-                placeholderTextColor="#9E9E9E"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-                className="bg-[#F8F9FC] border border-[#EAE3DE] rounded-2xl px-4 py-3 text-xs text-[#1F130D]"
-                editable={!isLoading}
-              />
-            </View>
+            {/* Conditional Views: Login vs Forgot Password */}
+            {!isForgotPassword ? (
+              <>
+                {/* Password Field with Eye Icon */}
+                <View className="mb-4">
+                  <Text className="text-xs font-bold text-[#1F130D] mb-1.5">Password</Text>
+                  <View className="relative justify-center">
+                    <TextInput 
+                      placeholder="••••••••"
+                      placeholderTextColor="#9E9E9E"
+                      value={password}
+                      onChangeText={setPassword}
+                      secureTextEntry={!showPassword}
+                      className="bg-[#F8F9FC] border border-[#EAE3DE] rounded-2xl pl-4 pr-12 py-3 text-xs text-[#1F130D]"
+                      editable={!isLoading}
+                    />
+                    <TouchableOpacity 
+                      onPress={() => setShowPassword(!showPassword)}
+                      className="absolute right-4 p-1"
+                    >
+                      <Ionicons name={showPassword ? "eye-off" : "eye"} size={20} color="#9E9E9E" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
 
-            {/* Forgot Password */}
-            <TouchableOpacity className="self-end mb-6">
-              <Text className="text-[11px] font-bold text-[#B8520B]">Forgot Password?</Text>
-            </TouchableOpacity>
+                {/* Forgot Password Link */}
+                <TouchableOpacity onPress={() => setIsForgotPassword(true)} className="self-end mb-6">
+                  <Text className="text-[11px] font-bold text-[#B8520B]">Forgot Password?</Text>
+                </TouchableOpacity>
 
-            {/* Sign In Button */}
-            <TouchableOpacity 
-              onPress={handleLogin}
-              className={`bg-[#B8520B] py-3.5 rounded-2xl items-center shadow-md mb-4 ${isLoading ? 'opacity-60' : 'active:opacity-90'}`}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <ActivityIndicator size="small" color="white" />
-              ) : (
-                <Text className="text-white font-black text-xs">Sign In</Text>
-              )}
-            </TouchableOpacity>
+                {/* Sign In Button */}
+                <TouchableOpacity 
+                  onPress={handleLogin}
+                  className={`bg-[#B8520B] py-3.5 rounded-2xl items-center shadow-md mb-4 ${isLoading ? 'opacity-60' : 'active:opacity-90'}`}
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator size="small" color="white" />
+                  ) : (
+                    <Text className="text-white font-black text-xs">Sign In</Text>
+                  )}
+                </TouchableOpacity>
 
-            {/* Divider */}
-            <View className="flex-row items-center my-4">
-              <View className="flex-1 h-[1px] bg-[#EAE3DE]" />
-              <Text className="mx-3 text-[10px] text-gray-400 font-semibold">Or continue with</Text>
-              <View className="flex-1 h-[1px] bg-[#EAE3DE]" />
-            </View>
+                {/* Divider */}
+                <View className="flex-row items-center my-4">
+                  <View className="flex-1 h-[1px] bg-[#EAE3DE]" />
+                  <Text className="mx-3 text-[10px] text-gray-400 font-semibold">Or continue with</Text>
+                  <View className="flex-1 h-[1px] bg-[#EAE3DE]" />
+                </View>
 
-            {/* Social Logins */}
-            <View className="flex-row space-x-3">
-              <TouchableOpacity className="flex-1 bg-[#F8F9FC] border border-[#EAE3DE] py-3 rounded-2xl items-center flex-row justify-center">
-                <Ionicons name="logo-google" size={16} color="#1F130D" />
-                <Text className="text-xs font-bold text-[#1F130D] ml-2">Google</Text>
-              </TouchableOpacity>
-              <TouchableOpacity className="flex-1 bg-[#F8F9FC] border border-[#EAE3DE] py-3 rounded-2xl items-center flex-row justify-center">
-                <Ionicons name="logo-apple" size={16} color="#1F130D" />
-                <Text className="text-xs font-bold text-[#1F130D] ml-2">Apple</Text>
-              </TouchableOpacity>
-            </View>
+                {/* Social Login (Google only) */}
+                <TouchableOpacity 
+                  disabled={!request || isLoading}
+                  onPress={() => promptAsync()}
+                  className="bg-[#F8F9FC] border border-[#EAE3DE] py-3.5 rounded-2xl items-center flex-row justify-center"
+                >
+                  <Ionicons name="logo-google" size={16} color="#EA4335" />
+                  <Text className="text-xs font-bold text-[#1F130D] ml-2">Continue with Google</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                {/* Send Reset Instructions Button */}
+                <TouchableOpacity 
+                  onPress={handleSendResetLink}
+                  className={`bg-[#B8520B] py-3.5 rounded-2xl items-center shadow-md mb-4 mt-2 ${isLoading ? 'opacity-60' : 'active:opacity-90'}`}
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator size="small" color="white" />
+                  ) : (
+                    <Text className="text-white font-black text-xs">Send Reset Instructions</Text>
+                  )}
+                </TouchableOpacity>
+
+                {/* Back to Sign In Link */}
+                <TouchableOpacity 
+                  onPress={() => setIsForgotPassword(false)}
+                  className="items-center py-2"
+                >
+                  <Text className="text-xs font-bold text-gray-500">Remember your password? <Text className="text-[#B8520B]">Sign In</Text></Text>
+                </TouchableOpacity>
+              </>
+            )}
+
           </View>
 
           {/* Switch to Signup */}
-          <View className="flex-row justify-center items-center">
-            <Text className="text-xs text-gray-500">Need to create an account? </Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
-              <Text className="text-xs font-bold text-[#B8520B]">Sign Up</Text>
-            </TouchableOpacity>
-          </View>
+          {!isForgotPassword && (
+            <View className="flex-row justify-center items-center pb-6">
+              <Text className="text-xs text-gray-500">Need to create an account? </Text>
+              <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
+                <Text className="text-xs font-bold text-[#B8520B]">Sign Up</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </ScrollView>
-
-        {/* Bottom Navigation */}
-        <View className="absolute bottom-0 left-0 right-0 bg-white border-t border-[#EAE3DE] px-6 py-2.5 flex-row justify-around items-center shadow-lg">
-          <TouchableOpacity onPress={() => navigation.navigate('CustomerLanding')} className="items-center">
-            <Ionicons name="home-outline" size={18} color="#757575" />
-            <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Home</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity onPress={() => navigation.navigate('MenuScreen')} className="items-center">
-            <Ionicons name="restaurant-outline" size={18} color="#757575" />
-            <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Menu</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={() => navigation.navigate('Login')} className="items-center">
-            <Ionicons name="person" size={18} color="#B8520B" />
-            <Text className="text-[9px] font-bold text-[#B8520B] mt-0.5">Staff Login</Text>
-          </TouchableOpacity>
-        </View>
       </View>
     </View>
   );
