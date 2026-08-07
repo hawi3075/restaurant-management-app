@@ -1,15 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AuthContext } from '../../context/AuthContext'; // Ensure this path matches your project structure
 
 WebBrowser.maybeCompleteAuthSession();
 
 const BACKEND_URL = 'http://localhost:5000'; 
 
 export default function LoginScreen({ navigation }) {
+  const { login } = useContext(AuthContext) || {}; // Pull global login action from context
+
   const [email, setEmail] = useState('manager@restaurant.com');
   const [password, setPassword] = useState('Manager123!');
   const [isLoading, setIsLoading] = useState(false);
@@ -36,20 +39,19 @@ export default function LoginScreen({ navigation }) {
     }
   }, [response]);
 
-  // Helper function to map roles safely to your navigator screens
   const getDashboardScreenByRole = (role) => {
     const normalizedRole = role?.toLowerCase()?.trim();
     switch (normalizedRole) {
       case 'manager':
       case 'admin':
-        return 'ManagerDashboard'; // Replace with your exact manager route name if different
+        return 'ManagerDashboard';
       case 'kitchen':
         return 'KitchenDashboard';
       case 'waiter':
         return 'WaiterDashboard';
       case 'driver':
       case 'delivery':
-        return 'DeliveryDashboard';
+        return 'DriverDashboard';
       default:
         return 'CustomerLanding';
     }
@@ -81,9 +83,13 @@ export default function LoginScreen({ navigation }) {
         await AsyncStorage.setItem('token', data.token);
       }
 
-      // Explicit role-based check or server-provided target screen
-      const targetScreen = getDashboardScreenByRole(data.user?.role) || data.navigateTo;
-      
+      const targetScreen = data.navigateTo || getDashboardScreenByRole(data.user?.role);
+
+      // If AuthContext provides a login method, update global state
+      if (login) {
+        await login(data.token, data.user);
+      }
+
       navigation.reset({
         index: 0,
         routes: [{ name: targetScreen, params: { user: data.user, token: data.token, isLoggedIn: true } }],
@@ -123,10 +129,14 @@ export default function LoginScreen({ navigation }) {
         await AsyncStorage.setItem('token', data.token);
       }
 
-      // Force evaluation of target screen using user role to prevent unwanted customer landing redirects
-      const userRole = data.user?.role;
-      const targetScreen = getDashboardScreenByRole(userRole); 
-      
+      // Determine correct screen based on backend route definition or role fallback
+      const targetScreen = data.navigateTo || getDashboardScreenByRole(data.user?.role);
+
+      // Update global AuthContext state so the entire navigator recognizes the login state & role
+      if (login) {
+        await login(data.token, data.user);
+      }
+
       navigation.reset({
         index: 0,
         routes: [{ name: targetScreen, params: { user: data.user, token: data.token, isLoggedIn: true } }],
@@ -139,7 +149,6 @@ export default function LoginScreen({ navigation }) {
     }
   };
 
-  // Step 1: Send Reset Instructions Email
   const handleSendResetLink = async () => {
     if (!email) {
       Alert.alert('Error', 'Please enter your email address.');
@@ -169,7 +178,6 @@ export default function LoginScreen({ navigation }) {
     }
   };
 
-  // Step 2: Submit Token & New Password
   const handleResetPassword = async () => {
     if (!resetToken || !newPassword) {
       Alert.alert('Error', 'Please enter both the reset token and your new password.');
