@@ -24,7 +24,9 @@ export default function SignupScreen({ navigation }) {
   useEffect(() => {
     if (response?.type === 'success') {
       const { authentication } = response;
-      handleGoogleBackendAuth(authentication.accessToken);
+      if (authentication?.accessToken) {
+        handleGoogleBackendAuth(authentication.accessToken);
+      }
     }
   }, [response]);
 
@@ -50,8 +52,11 @@ export default function SignupScreen({ navigation }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Google authentication failed');
 
-      Alert.alert('Success', 'Logged in with Google successfully!');
-      navigation.navigate('CustomerLanding'); // Redirects straight to customer dashboard
+      // Successfully authenticated with Google, navigate to customer landing
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'CustomerLanding' }],
+      });
     } catch (error) {
       Alert.alert('Error', error.message);
     } finally {
@@ -94,7 +99,12 @@ export default function SignupScreen({ navigation }) {
       }
 
       Alert.alert('Success', 'Account created successfully!');
-      navigation.navigate('CustomerLanding'); // Redirects straight to customer dashboard
+      
+      // Successfully created account manually, navigate to customer landing
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'CustomerLanding' }],
+      });
 
     } catch (error) {
       Alert.alert('Signup Error', error.message || 'Server connection failed.');
