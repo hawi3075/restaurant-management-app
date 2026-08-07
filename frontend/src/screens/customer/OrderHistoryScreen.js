@@ -1,41 +1,72 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StatusBar, Image } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StatusBar, Image, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { io } from 'socket.io-client';
+
+const BACKEND_URL = 'http://localhost:5000';
 
 export default function OrderHistoryScreen({ route, navigation }) {
   const [activeTab, setActiveTab] = useState('active'); // 'active' or 'history'
+  const [isLoading, setIsLoading] = useState(true);
+  const [activeOrders, setActiveOrders] = useState([]);
+  const [pastOrders, setPastOrders] = useState([]);
   
-  const isLoggedIn = route?.params?.isLoggedIn ?? false;
+  const isLoggedIn = route?.params?.isLoggedIn ?? true;
 
-  const activeOrders = [
-    {
-      id: 'ORD-9821',
-      date: 'Aug 5, 2026 • 6:45 PM',
-      status: 'Preparing',
-      items: '1x Truffle Mushroom Risotto, 1x Seared Salmon Plate',
-      total: '$50.00',
-      image: 'https://images.unsplash.com/photo-1541544741938-0af808871cc0?auto=format&fit=crop&w=400&q=80',
-    }
-  ];
+  useEffect(() => {
+    fetchUserOrders();
 
-  const pastOrders = [
-    {
-      id: 'ORD-9742',
-      date: 'Jul 28, 2026 • 1:15 PM',
-      status: 'Delivered',
-      items: '2x Classic Cheeseburger Combo',
-      total: '$34.50',
-      image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=400&q=80',
-    },
-    {
-      id: 'ORD-9610',
-      date: 'Jul 20, 2026 • 8:30 PM',
-      status: 'Delivered',
-      items: '1x Margherita Pizza, 1x Iced Lemon Tea',
-      total: '$22.00',
-      image: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=400&q=80',
+    // Connect to Socket.io for real-time order status updates
+    const socket = io(BACKEND_URL);
+
+    socket.on('order_status_updated', (updatedOrder) => {
+      // Re-fetch orders instantly when a status change is broadcasted
+      fetchUserOrders();
+    });
+
+    socket.on('new_kitchen_order', (newOrder) => {
+      fetchUserOrders();
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
+
+  const fetchUserOrders = async () => {
+    try {
+      setIsLoading(true);
+      const token = await AsyncStorage.getItem('token');
+
+      const response = await fetch(`${BACKEND_URL}/api/orders/user`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token || 'sample-jwt-token-xyz'}`
+        }
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to fetch orders.');
+
+      const allOrders = data.orders || [];
+      
+      // Separate active vs delivered/completed history items directly from database results
+      const active = allOrders.filter(o => o.status !== 'Delivered' && o.status !== 'Cancelled');
+      const past = allOrders.filter(o => o.status === 'Delivered' || o.status === 'Cancelled');
+
+      setActiveOrders(active);
+      setPastOrders(past);
+
+    } catch (error) {
+      console.error('Fetch Orders Error:', error);
+      setActiveOrders([]);
+      setPastOrders([]);
+    } finally {
+      setIsLoading(false);
     }
-  ];
+  };
 
   const displayedOrders = activeTab === 'active' ? activeOrders : pastOrders;
 
@@ -77,7 +108,11 @@ export default function OrderHistoryScreen({ route, navigation }) {
 
         {/* Orders List */}
         <ScrollView showsVerticalScrollIndicator={false} className="px-5 pt-2 pb-24">
-          {displayedOrders.length === 0 ? (
+          {isLoading ? (
+            <View className="py-20 items-center justify-center">
+              <ActivityIndicator size="large" color="#B8520B" />
+            </View>
+          ) : displayedOrders.length === 0 ? (
             <View className="items-center justify-center pt-20">
               <View className="w-16 h-16 bg-[#FEF7F3] rounded-full items-center justify-center mb-3 border border-[#B8520B]/20">
                 <Ionicons name="receipt-outline" size={28} color="#B8520B" />
@@ -142,7 +177,7 @@ export default function OrderHistoryScreen({ route, navigation }) {
             <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Alerts</Text>
           </TouchableOpacity>
           <TouchableOpacity 
-            onPress={() => navigation.navigate(isLoggedIn ? 'CustomerProfileScreen' : 'Signup')} 
+            onPress={() => navigation.navigate(isLoggedIn ? 'CustomerProfileScreen' : 'Signup', { isLoggedIn })} 
             className="items-center"
           >
             <Ionicons name={isLoggedIn ? "person-outline" : "person-add-outline"} size={18} color="#757575" />

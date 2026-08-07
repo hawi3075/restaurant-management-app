@@ -83,10 +83,12 @@ export default function LoginScreen({ navigation }) {
     setIsLoading(true);
 
     try {
+      const cleanEmail = email.trim();
       const response = await fetch(`${BACKEND_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: email, password }),
+        // Fixed payload: providing both email and username guarantees a successful match regardless of schema key
+        body: JSON.stringify({ email: cleanEmail, username: cleanEmail, password }),
       });
 
       const data = await response.json();
@@ -127,7 +129,7 @@ export default function LoginScreen({ navigation }) {
       const response = await fetch(`${BACKEND_URL}/api/auth/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: email.trim() }),
       });
 
       const data = await response.json();

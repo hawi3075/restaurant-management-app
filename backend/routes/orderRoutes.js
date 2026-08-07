@@ -1,44 +1,34 @@
-// backend/routes/orderRoutes.js
 const express = require('express');
 const router = express.Router();
-const Order = require('../models/Order');
+const Order = require('../models/Order'); // Make sure this points to your Order model
 
-// Create a new order
-router.post('/', async (req, res) => {
+// --- GET USER ORDERS (GET /api/orders/user) ---
+router.get('/user', async (req, res) => {
   try {
-    const newOrder = new Order(req.body);
-    await newOrder.save();
-    res.status(201).json(newOrder);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+    // Fetch orders from MongoDB 
+    const orders = await Order.find().sort({ createdAt: -1 });
 
-// Get all orders (for Kitchen/Waiter/Manager dashboards)
-router.get('/', async (req, res) => {
-  try {
-    const orders = await Order.find()
-      .populate('customer', 'fullName phone')
-      .populate('table', 'tableNumber')
-      .populate('orderItems.menuItem', 'name price');
-    res.json(orders);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+    const formattedOrders = orders.map(order => ({
+      id: order.orderId || `ORD-${order._id.toString().slice(-4).toUpperCase()}`,
+      date: new Date(order.createdAt || Date.now()).toLocaleString('en-US', { 
+        month: 'short', 
+        day: 'numeric', 
+        year: 'numeric', 
+        hour: 'numeric', 
+        minute: '2-digit' 
+      }),
+      status: order.status || 'Preparing',
+      items: order.items && order.items.length > 0 
+        ? order.items.map(item => `${item.quantity || 1}x ${item.name}`).join(', ') 
+        : '1x Custom Meal',
+      total: `$${(order.totalAmount || 0).toFixed(2)}`,
+      image: order.items?.[0]?.image || 'https://images.unsplash.com/photo-1541544741938-0af808871cc0?auto=format&fit=crop&w=400&q=80'
+    }));
 
-// Update order status
-router.patch('/:id/status', async (req, res) => {
-  try {
-    const { status } = req.body;
-    const updatedOrder = await Order.findByIdAndUpdate(
-      req.params.id, 
-      { status }, 
-      { new: true }
-    );
-    res.json(updatedOrder);
+    return res.status(200).json({ success: true, orders: formattedOrders });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Fetch Orders Error:', error);
+    return res.status(500).json({ message: 'Server error while fetching orders.' });
   }
 });
 

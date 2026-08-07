@@ -7,21 +7,28 @@ const jwt = require('jsonwebtoken');
 const loginUser = async (req, res) => {
   try {
     const { email, username, password } = req.body;
-    const userEmail = email || username;
+    const userIdentifier = email || username;
 
-    if (!userEmail || !password) {
-      return res.status(400).json({ message: 'Please provide email and password' });
+    if (!userIdentifier || !password) {
+      return res.status(400).json({ message: 'Please provide email/username and password' });
     }
 
-    const user = await User.findOne({ email: userEmail });
+    // Safely look up user by either email or username field
+    const user = await User.findOne({ 
+      $or: [{ email: userIdentifier }, { username: userIdentifier }] 
+    });
+
     if (!user) {
-      return res.status(400).json({ message: 'Invalid email or password' });
+      return res.status(400).json({ message: 'Invalid email/username or password' });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid email or password' });
+      return res.status(400).json({ message: 'Invalid email/username or password' });
     }
+
+    // Normalize role string to lowercase to safeguard against capitalization mismatches in DB
+    const userRole = user.role ? user.role.toLowerCase() : 'customer';
 
     const redirectRoutes = {
       manager: 'ManagerDashboard',
@@ -32,25 +39,25 @@ const loginUser = async (req, res) => {
     };
 
     const token = jwt.sign(
-      { id: user._id, role: user.role },
+      { id: user._id, role: userRole },
       process.env.JWT_SECRET || 'secretkey',
       { expiresIn: '7d' }
     );
 
-    res.json({
+    return res.status(200).json({
       token,
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
-        role: user.role
+        role: userRole
       },
-      navigateTo: redirectRoutes[user.role] || 'CustomerLanding'
+      navigateTo: redirectRoutes[userRole] || 'CustomerLanding'
     });
 
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ message: 'Server error during login', error: error.message });
+    return res.status(500).json({ message: 'Server error during login', error: error.message });
   }
 };
 
@@ -77,10 +84,10 @@ const registerUser = async (req, res) => {
       email,
       password: hashedPassword,
       phone: phone || '',
-      role: role || 'customer'
+      role: role ? role.toLowerCase() : 'customer'
     });
 
-    res.status(201).json({
+    return res.status(201).json({
       message: 'Account created successfully!',
       user: {
         id: user._id,
@@ -93,7 +100,7 @@ const registerUser = async (req, res) => {
 
   } catch (error) {
     console.error('Registration error:', error);
-    res.status(500).json({ message: 'Server error during registration', error: error.message });
+    return res.status(500).json({ message: 'Server error during registration', error: error.message });
   }
 };
 
@@ -124,26 +131,37 @@ const googleAuth = async (req, res) => {
       });
     }
 
+    const userRole = user.role ? user.role.toLowerCase() : 'customer';
+
     const token = jwt.sign(
-      { id: user._id, role: user.role },
+      { id: user._id, role: userRole },
       process.env.JWT_SECRET || 'secretkey',
       { expiresIn: '7d' }
     );
 
-    res.status(200).json({
+    const redirectRoutes = {
+      manager: 'ManagerDashboard',
+      kitchen: 'KitchenDashboard',
+      waiter: 'WaiterDashboard',
+      driver: 'DriverDashboard',
+      customer: 'CustomerLanding'
+    };
+
+    return res.status(200).json({
       message: 'Google authentication successful',
       token,
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
-        role: user.role
-      }
+        role: userRole
+      },
+      navigateTo: redirectRoutes[userRole] || 'CustomerLanding'
     });
 
   } catch (error) {
     console.error('Google Auth error:', error);
-    res.status(500).json({ message: 'Server error during Google authentication', error: error.message });
+    return res.status(500).json({ message: 'Server error during Google authentication', error: error.message });
   }
 };
 
