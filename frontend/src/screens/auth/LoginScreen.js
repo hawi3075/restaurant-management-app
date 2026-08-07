@@ -4,14 +4,14 @@ import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AuthContext } from '../../context/AuthContext'; // Ensure this path matches your project structure
+import { AuthContext } from '../../context/AuthContext';
 
 WebBrowser.maybeCompleteAuthSession();
 
 const BACKEND_URL = 'http://localhost:5000'; 
 
 export default function LoginScreen({ navigation }) {
-  const { login } = useContext(AuthContext) || {}; // Pull global login action from context
+  const { login } = useContext(AuthContext) || {};
 
   const [email, setEmail] = useState('manager@restaurant.com');
   const [password, setPassword] = useState('Manager123!');
@@ -83,13 +83,11 @@ export default function LoginScreen({ navigation }) {
         await AsyncStorage.setItem('token', data.token);
       }
 
-      const targetScreen = data.navigateTo || getDashboardScreenByRole(data.user?.role);
-
-      // If AuthContext provides a login method, update global state
       if (login) {
         await login(data.token, data.user);
       }
 
+      const targetScreen = data.navigateTo || getDashboardScreenByRole(data.user?.role);
       navigation.reset({
         index: 0,
         routes: [{ name: targetScreen, params: { user: data.user, token: data.token, isLoggedIn: true } }],
@@ -129,14 +127,11 @@ export default function LoginScreen({ navigation }) {
         await AsyncStorage.setItem('token', data.token);
       }
 
-      // Determine correct screen based on backend route definition or role fallback
-      const targetScreen = data.navigateTo || getDashboardScreenByRole(data.user?.role);
-
-      // Update global AuthContext state so the entire navigator recognizes the login state & role
       if (login) {
         await login(data.token, data.user);
       }
 
+      const targetScreen = data.navigateTo || getDashboardScreenByRole(data.user?.role);
       navigation.reset({
         index: 0,
         routes: [{ name: targetScreen, params: { user: data.user, token: data.token, isLoggedIn: true } }],
