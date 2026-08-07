@@ -1,29 +1,143 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StatusBar, TextInput, Modal } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StatusBar, TextInput, Modal, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const BACKEND_URL = 'http://localhost:5000';
 
 export default function CustomerProfileScreen({ route, navigation }) {
   const isLoggedIn = route?.params?.isLoggedIn ?? true;
 
-  // Modal states for interactive features right from profile
+  const [isLoading, setIsLoading] = useState(true);
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
+
+  // Modal states
   const [editModalVisible, setEditModalVisible] = useState(false);
-  const [name, setName] = useState('John Doe');
-  const [email, setEmail] = useState('john.doe@example.com');
-  const [phone, setPhone] = useState('+1 234 567 890');
-
   const [addressModalVisible, setAddressModalVisible] = useState(false);
-  const [address, setAddress] = useState('123 Main Street, Apt 4B, New York, NY');
-
   const [supportModalVisible, setSupportModalVisible] = useState(false);
   const [notificationSettingsVisible, setNotificationSettingsVisible] = useState(false);
   const [reviewsModalVisible, setReviewsModalVisible] = useState(false);
 
-  const handleLogout = () => {
+  // Fetch real profile data from database on load
+  useEffect(() => {
+    fetchUserProfile();
+  }, []);
+
+  const fetchUserProfile = async () => {
+    try {
+      setIsLoading(true);
+      const token = await AsyncStorage.getItem('token');
+      
+      if (!token) {
+        // Fallback if passed through route params
+        if (route?.params?.user) {
+          const u = route.params.user;
+          setName(u.name || '');
+          setEmail(u.email || '');
+          setPhone(u.phone || '+1 234 567 890');
+          setAddress(u.address || '123 Main Street, Apt 4B');
+          setIsLoading(false);
+          return;
+        }
+        throw new Error('No authentication token found.');
+      }
+
+      const response = await fetch(`${BACKEND_URL}/api/auth/profile`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to fetch profile.');
+
+      setName(data.user.name || '');
+      setEmail(data.user.email || '');
+      setPhone(data.user.phone || '+1 234 567 890');
+      setAddress(data.user.address || '123 Main Street, Apt 4B');
+    } catch (error) {
+      console.error('Fetch Profile Error:', error);
+      // Fallback defaults so screen doesn't break
+      setName('John Doe');
+      setEmail('john.doe@example.com');
+      setPhone('+1 234 567 890');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleUpdateProfile = async () => {
+    try {
+      setIsLoading(true);
+      const token = await AsyncStorage.getItem('token');
+
+      const response = await fetch(`${BACKEND_URL}/api/auth/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ name, email, phone })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to update profile.');
+
+      Alert.alert('Success', 'Profile updated successfully!');
+      setEditModalVisible(false);
+    } catch (error) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleUpdateAddress = async () => {
+    try {
+      setIsLoading(true);
+      const token = await AsyncStorage.getItem('token');
+
+      const response = await fetch(`${BACKEND_URL}/api/auth/address`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ address })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to update address.');
+
+      Alert.alert('Success', 'Delivery address updated successfully!');
+      setAddressModalVisible(false);
+    } catch (error) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await AsyncStorage.removeItem('token');
     navigation.reset({
       index: 0,
       routes: [{ name: 'CustomerLanding', params: { isLoggedIn: false } }],
     });
   };
+
+  if (isLoading && !name) {
+    return (
+      <View className="flex-1 bg-[#F8F9FC] items-center justify-center">
+        <ActivityIndicator size="large" color="#B8520B" />
+      </View>
+    );
+  }
 
   return (
     <View className="flex-1 bg-[#F8F9FC] items-center">
@@ -156,7 +270,7 @@ export default function CustomerProfileScreen({ route, navigation }) {
               <TextInput className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs mb-3 text-[#1F130D]" value={email} onChangeText={setEmail} />
               <Text className="text-[11px] font-bold text-gray-500 mb-1">Phone Number</Text>
               <TextInput className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs mb-5 text-[#1F130D]" value={phone} onChangeText={setPhone} />
-              <TouchableOpacity onPress={() => setEditModalVisible(false)} className="bg-[#B8520B] py-3.5 rounded-xl items-center">
+              <TouchableOpacity onPress={handleUpdateProfile} className="bg-[#B8520B] py-3.5 rounded-xl items-center">
                 <Text className="text-white text-xs font-bold">Save Changes</Text>
               </TouchableOpacity>
             </View>
@@ -175,7 +289,7 @@ export default function CustomerProfileScreen({ route, navigation }) {
               </View>
               <Text className="text-[11px] font-bold text-gray-500 mb-1">Saved Address</Text>
               <TextInput className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs mb-5 text-[#1F130D]" value={address} onChangeText={setAddress} multiline />
-              <TouchableOpacity onPress={() => setAddressModalVisible(false)} className="bg-[#B8520B] py-3.5 rounded-xl items-center">
+              <TouchableOpacity onPress={handleUpdateAddress} className="bg-[#B8520B] py-3.5 rounded-xl items-center">
                 <Text className="text-white text-xs font-bold">Update Address</Text>
               </TouchableOpacity>
             </View>
@@ -201,15 +315,6 @@ export default function CustomerProfileScreen({ route, navigation }) {
                     </View>
                   </View>
                   <Text className="text-[11px] text-gray-500">"Absolute perfection! Super creamy and packed with flavor."</Text>
-                </View>
-                <View className="bg-[#F8F9FC] p-3.5 rounded-2xl border border-[#EAE3DE]">
-                  <View className="flex-row justify-between mb-1">
-                    <Text className="text-xs font-bold text-[#1F130D]">Classic Cheeseburger Combo</Text>
-                    <View className="flex-row">
-                      {[1, 2, 3, 4].map((i) => (<Ionicons key={i} name="star" size={10} color="#F59E0B" />))}
-                    </View>
-                  </View>
-                  <Text className="text-[11px] text-gray-500">"Juicy patty and great fries. Fast delivery too!"</Text>
                 </View>
               </ScrollView>
             </View>

@@ -7,15 +7,20 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 WebBrowser.maybeCompleteAuthSession();
 
-// Set to localhost for your local web test
 const BACKEND_URL = 'http://localhost:5000'; 
 
 export default function LoginScreen({ navigation }) {
-  const [email, setEmail] = useState('manager@restaurant.com'); // Pre-filled for testing
-  const [password, setPassword] = useState('Manager123!'); // Pre-filled for testing
+  const [email, setEmail] = useState('manager@restaurant.com');
+  const [password, setPassword] = useState('Manager123!');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [isForgotPassword, setIsForgotPassword] = useState(false); // Toggle for Forgot Password view
+  
+  // Forgot Password States
+  const [isForgotPassword, setIsForgotPassword] = useState(false); 
+  const [forgotStep, setForgotStep] = useState('email'); // 'email' or 'reset'
+  const [resetToken, setResetToken] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
 
   const [request, response, promptAsync] = Google.useAuthRequest({
     webClientId: '801403267793-ktbmci8hevllseach2e5jn101dgpf4mc.apps.googleusercontent.com',
@@ -80,9 +85,7 @@ export default function LoginScreen({ navigation }) {
     try {
       const response = await fetch(`${BACKEND_URL}/api/auth/login`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: email, password }),
       });
 
@@ -112,7 +115,7 @@ export default function LoginScreen({ navigation }) {
     }
   };
 
-  // Handle Forgot Password Request submission
+  // Step 1: Send Reset Instructions Email
   const handleSendResetLink = async () => {
     if (!email) {
       Alert.alert('Error', 'Please enter your email address.');
@@ -123,9 +126,7 @@ export default function LoginScreen({ navigation }) {
       setIsLoading(true);
       const response = await fetch(`${BACKEND_URL}/api/auth/forgot-password`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       });
 
@@ -137,7 +138,40 @@ export default function LoginScreen({ navigation }) {
       }
 
       Alert.alert('Success', 'Password reset instructions have been sent to your email.');
-      setIsForgotPassword(false); // Return to login view
+      setForgotStep('reset'); // Move to token & new password entry step
+    } catch (error) {
+      setIsLoading(false);
+      Alert.alert('Error', error.message || 'Server connection failed.');
+    }
+  };
+
+  // Step 2: Submit Token & New Password
+  const handleResetPassword = async () => {
+    if (!resetToken || !newPassword) {
+      Alert.alert('Error', 'Please enter both the reset token and your new password.');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const response = await fetch(`${BACKEND_URL}/api/auth/reset-password/${resetToken.trim()}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newPassword }),
+      });
+
+      const data = await response.json();
+      setIsLoading(false);
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to reset password.');
+      }
+
+      Alert.alert('Success', 'Your password has been successfully updated! Please sign in.');
+      setIsForgotPassword(false);
+      setForgotStep('email');
+      setResetToken('');
+      setNewPassword('');
     } catch (error) {
       setIsLoading(false);
       Alert.alert('Error', error.message || 'Server connection failed.');
@@ -154,7 +188,11 @@ export default function LoginScreen({ navigation }) {
           <TouchableOpacity 
             onPress={() => {
               if (isForgotPassword) {
-                setIsForgotPassword(false);
+                if (forgotStep === 'reset') {
+                  setForgotStep('email');
+                } else {
+                  setIsForgotPassword(false);
+                }
               } else {
                 navigation.goBack();
               }
@@ -172,11 +210,13 @@ export default function LoginScreen({ navigation }) {
               <Ionicons name={isForgotPassword ? "key-outline" : "restaurant"} size={24} color="#B8520B" />
             </View>
             <Text className="text-3xl font-black text-[#1F130D] mb-1">
-              {isForgotPassword ? 'Reset Password' : 'Welcome Back'}
+              {isForgotPassword ? (forgotStep === 'email' ? 'Reset Password' : 'New Password') : 'Welcome Back'}
             </Text>
             <Text className="text-xs text-gray-500 text-center px-4">
               {isForgotPassword 
-                ? 'Enter your email address and we will send you instructions to reset your password.' 
+                ? (forgotStep === 'email' 
+                    ? 'Enter your email address and we will send you instructions.' 
+                    : 'Enter the reset token from your email and your new password.')
                 : 'Sign in to manage staff, kitchen & deliveries'}
             </Text>
           </View>
@@ -184,24 +224,24 @@ export default function LoginScreen({ navigation }) {
           {/* Form Container */}
           <View className="bg-white p-6 rounded-3xl border border-[#EAE3DE] shadow-xs mb-6">
             
-            {/* Email Field (Always visible) */}
-            <View className="mb-4">
-              <Text className="text-xs font-bold text-[#1F130D] mb-1.5">Email Address</Text>
-              <TextInput 
-                placeholder="manager@restaurant.com"
-                placeholderTextColor="#9E9E9E"
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                className="bg-[#F8F9FC] border border-[#EAE3DE] rounded-2xl px-4 py-3 text-xs text-[#1F130D]"
-                editable={!isLoading}
-              />
-            </View>
-
-            {/* Conditional Views: Login vs Forgot Password */}
+            {/* Conditional Views: Login vs Forgot Password Email vs Forgot Password Reset */}
             {!isForgotPassword ? (
               <>
+                {/* Email Field */}
+                <View className="mb-4">
+                  <Text className="text-xs font-bold text-[#1F130D] mb-1.5">Email Address</Text>
+                  <TextInput 
+                    placeholder="manager@restaurant.com"
+                    placeholderTextColor="#9E9E9E"
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    className="bg-[#F8F9FC] border border-[#EAE3DE] rounded-2xl px-4 py-3 text-xs text-[#1F130D]"
+                    editable={!isLoading}
+                  />
+                </View>
+
                 {/* Password Field with Eye Icon */}
                 <View className="mb-4">
                   <Text className="text-xs font-bold text-[#1F130D] mb-1.5">Password</Text>
@@ -225,7 +265,7 @@ export default function LoginScreen({ navigation }) {
                 </View>
 
                 {/* Forgot Password Link */}
-                <TouchableOpacity onPress={() => setIsForgotPassword(true)} className="self-end mb-6">
+                <TouchableOpacity onPress={() => { setIsForgotPassword(true); setForgotStep('email'); }} className="self-end mb-6">
                   <Text className="text-[11px] font-bold text-[#B8520B]">Forgot Password?</Text>
                 </TouchableOpacity>
 
@@ -259,8 +299,23 @@ export default function LoginScreen({ navigation }) {
                   <Text className="text-xs font-bold text-[#1F130D] ml-2">Continue with Google</Text>
                 </TouchableOpacity>
               </>
-            ) : (
+            ) : forgotStep === 'email' ? (
               <>
+                {/* Email Field for Reset */}
+                <View className="mb-4">
+                  <Text className="text-xs font-bold text-[#1F130D] mb-1.5">Email Address</Text>
+                  <TextInput 
+                    placeholder="manager@restaurant.com"
+                    placeholderTextColor="#9E9E9E"
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    className="bg-[#F8F9FC] border border-[#EAE3DE] rounded-2xl px-4 py-3 text-xs text-[#1F130D]"
+                    editable={!isLoading}
+                  />
+                </View>
+
                 {/* Send Reset Instructions Button */}
                 <TouchableOpacity 
                   onPress={handleSendResetLink}
@@ -280,6 +335,65 @@ export default function LoginScreen({ navigation }) {
                   className="items-center py-2"
                 >
                   <Text className="text-xs font-bold text-gray-500">Remember your password? <Text className="text-[#B8520B]">Sign In</Text></Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                {/* Token Field */}
+                <View className="mb-4">
+                  <Text className="text-xs font-bold text-[#1F130D] mb-1.5">Reset Token (from Email)</Text>
+                  <TextInput 
+                    placeholder="Paste 64-char token here"
+                    placeholderTextColor="#9E9E9E"
+                    value={resetToken}
+                    onChangeText={setResetToken}
+                    autoCapitalize="none"
+                    className="bg-[#F8F9FC] border border-[#EAE3DE] rounded-2xl px-4 py-3 text-xs text-[#1F130D]"
+                    editable={!isLoading}
+                  />
+                </View>
+
+                {/* New Password Field */}
+                <View className="mb-4">
+                  <Text className="text-xs font-bold text-[#1F130D] mb-1.5">New Password</Text>
+                  <View className="relative justify-center">
+                    <TextInput 
+                      placeholder="••••••••"
+                      placeholderTextColor="#9E9E9E"
+                      value={newPassword}
+                      onChangeText={setNewPassword}
+                      secureTextEntry={!showNewPassword}
+                      className="bg-[#F8F9FC] border border-[#EAE3DE] rounded-2xl pl-4 pr-12 py-3 text-xs text-[#1F130D]"
+                      editable={!isLoading}
+                    />
+                    <TouchableOpacity 
+                      onPress={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute right-4 p-1"
+                    >
+                      <Ionicons name={showNewPassword ? "eye-off" : "eye"} size={20} color="#9E9E9E" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Update Password Button */}
+                <TouchableOpacity 
+                  onPress={handleResetPassword}
+                  className={`bg-[#B8520B] py-3.5 rounded-2xl items-center shadow-md mb-4 mt-2 ${isLoading ? 'opacity-60' : 'active:opacity-90'}`}
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator size="small" color="white" />
+                  ) : (
+                    <Text className="text-white font-black text-xs">Update Password</Text>
+                  )}
+                </TouchableOpacity>
+
+                {/* Back to Email Step */}
+                <TouchableOpacity 
+                  onPress={() => setForgotStep('email')}
+                  className="items-center py-2"
+                >
+                  <Text className="text-xs font-bold text-gray-500">Didn't receive token? <Text className="text-[#B8520B]">Resend</Text></Text>
                 </TouchableOpacity>
               </>
             )}

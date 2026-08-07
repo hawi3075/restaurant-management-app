@@ -1,3 +1,4 @@
+// backend/models/User.js
 const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema({
@@ -8,7 +9,9 @@ const userSchema = new mongoose.Schema({
     type: String,
     enum: ['customer', 'manager', 'kitchen', 'waiter', 'driver'],
     default: 'customer'
-  }
+  },
+  resetPasswordToken: { type: String },
+  resetPasswordExpires: { type: Date }
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', userSchema);
