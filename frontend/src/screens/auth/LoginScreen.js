@@ -36,6 +36,25 @@ export default function LoginScreen({ navigation }) {
     }
   }, [response]);
 
+  // Helper function to map roles safely to your navigator screens
+  const getDashboardScreenByRole = (role) => {
+    const normalizedRole = role?.toLowerCase()?.trim();
+    switch (normalizedRole) {
+      case 'manager':
+      case 'admin':
+        return 'ManagerDashboard'; // Replace with your exact manager route name if different
+      case 'kitchen':
+        return 'KitchenDashboard';
+      case 'waiter':
+        return 'WaiterDashboard';
+      case 'driver':
+      case 'delivery':
+        return 'DeliveryDashboard';
+      default:
+        return 'CustomerLanding';
+    }
+  };
+
   const handleGoogleBackendAuth = async (token) => {
     try {
       setIsLoading(true);
@@ -62,7 +81,9 @@ export default function LoginScreen({ navigation }) {
         await AsyncStorage.setItem('token', data.token);
       }
 
-      const targetScreen = data.navigateTo || 'CustomerLanding';
+      // Explicit role-based check or server-provided target screen
+      const targetScreen = getDashboardScreenByRole(data.user?.role) || data.navigateTo;
+      
       navigation.reset({
         index: 0,
         routes: [{ name: targetScreen, params: { user: data.user, token: data.token, isLoggedIn: true } }],
@@ -87,7 +108,6 @@ export default function LoginScreen({ navigation }) {
       const response = await fetch(`${BACKEND_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // Fixed payload: providing both email and username guarantees a successful match regardless of schema key
         body: JSON.stringify({ email: cleanEmail, username: cleanEmail, password }),
       });
 
@@ -103,7 +123,9 @@ export default function LoginScreen({ navigation }) {
         await AsyncStorage.setItem('token', data.token);
       }
 
-      const targetScreen = data.navigateTo || 'CustomerLanding'; 
+      // Force evaluation of target screen using user role to prevent unwanted customer landing redirects
+      const userRole = data.user?.role;
+      const targetScreen = getDashboardScreenByRole(userRole); 
       
       navigation.reset({
         index: 0,
@@ -140,7 +162,7 @@ export default function LoginScreen({ navigation }) {
       }
 
       Alert.alert('Success', 'Password reset instructions have been sent to your email.');
-      setForgotStep('reset'); // Move to token & new password entry step
+      setForgotStep('reset'); 
     } catch (error) {
       setIsLoading(false);
       Alert.alert('Error', error.message || 'Server connection failed.');
@@ -226,7 +248,6 @@ export default function LoginScreen({ navigation }) {
           {/* Form Container */}
           <View className="bg-white p-6 rounded-3xl border border-[#EAE3DE] shadow-xs mb-6">
             
-            {/* Conditional Views: Login vs Forgot Password Email vs Forgot Password Reset */}
             {!isForgotPassword ? (
               <>
                 {/* Email Field */}
@@ -303,7 +324,6 @@ export default function LoginScreen({ navigation }) {
               </>
             ) : forgotStep === 'email' ? (
               <>
-                {/* Email Field for Reset */}
                 <View className="mb-4">
                   <Text className="text-xs font-bold text-[#1F130D] mb-1.5">Email Address</Text>
                   <TextInput 
@@ -318,7 +338,6 @@ export default function LoginScreen({ navigation }) {
                   />
                 </View>
 
-                {/* Send Reset Instructions Button */}
                 <TouchableOpacity 
                   onPress={handleSendResetLink}
                   className={`bg-[#B8520B] py-3.5 rounded-2xl items-center shadow-md mb-4 mt-2 ${isLoading ? 'opacity-60' : 'active:opacity-90'}`}
@@ -331,7 +350,6 @@ export default function LoginScreen({ navigation }) {
                   )}
                 </TouchableOpacity>
 
-                {/* Back to Sign In Link */}
                 <TouchableOpacity 
                   onPress={() => setIsForgotPassword(false)}
                   className="items-center py-2"
@@ -341,7 +359,6 @@ export default function LoginScreen({ navigation }) {
               </>
             ) : (
               <>
-                {/* Token Field */}
                 <View className="mb-4">
                   <Text className="text-xs font-bold text-[#1F130D] mb-1.5">Reset Token (from Email)</Text>
                   <TextInput 
@@ -355,7 +372,6 @@ export default function LoginScreen({ navigation }) {
                   />
                 </View>
 
-                {/* New Password Field */}
                 <View className="mb-4">
                   <Text className="text-xs font-bold text-[#1F130D] mb-1.5">New Password</Text>
                   <View className="relative justify-center">
@@ -377,7 +393,6 @@ export default function LoginScreen({ navigation }) {
                   </View>
                 </View>
 
-                {/* Update Password Button */}
                 <TouchableOpacity 
                   onPress={handleResetPassword}
                   className={`bg-[#B8520B] py-3.5 rounded-2xl items-center shadow-md mb-4 mt-2 ${isLoading ? 'opacity-60' : 'active:opacity-90'}`}
@@ -390,7 +405,6 @@ export default function LoginScreen({ navigation }) {
                   )}
                 </TouchableOpacity>
 
-                {/* Back to Email Step */}
                 <TouchableOpacity 
                   onPress={() => setForgotStep('email')}
                   className="items-center py-2"
@@ -402,7 +416,6 @@ export default function LoginScreen({ navigation }) {
 
           </View>
 
-          {/* Switch to Signup */}
           {!isForgotPassword && (
             <View className="flex-row justify-center items-center pb-6">
               <Text className="text-xs text-gray-500">Need to create an account? </Text>
