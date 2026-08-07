@@ -54,19 +54,19 @@ const loginUser = async (req, res) => {
   }
 };
 
-// @desc    Register user
-// @route   POST /api/auth/register
+// @desc    Register user (Supports both /signup and /register routes)
+// @route   POST /api/auth/signup & POST /api/auth/register
 const registerUser = async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password, phone, role } = req.body;
 
     if (!name || !email || !password) {
-      return res.status(400).json({ message: 'Please provide all required fields' });
+      return res.status(400).json({ message: 'Please provide all required fields (name, email, password)' });
     }
 
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(400).json({ message: 'User already exists' });
+      return res.status(400).json({ message: 'User already exists with this email' });
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -76,15 +76,17 @@ const registerUser = async (req, res) => {
       name,
       email,
       password: hashedPassword,
+      phone: phone || '',
       role: role || 'customer'
     });
 
     res.status(201).json({
-      message: 'User registered successfully',
+      message: 'Account created successfully!',
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
+        phone: user.phone,
         role: user.role
       }
     });
@@ -97,5 +99,6 @@ const registerUser = async (req, res) => {
 
 module.exports = {
   loginUser,
-  registerUser
+  registerUser,
+  signup: registerUser // Aliased so /api/auth/signup maps directly here
 };

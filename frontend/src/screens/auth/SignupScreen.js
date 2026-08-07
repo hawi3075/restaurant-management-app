@@ -1,28 +1,79 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { AuthContext } from '../../context/AuthContext';
+import * as WebBrowser from 'expo-web-browser';
+import * as Google from 'expo-auth-session/providers/google';
+
+WebBrowser.maybeCompleteAuthSession();
+
+const API_BASE_URL = 'http://localhost:5000';
 
 export default function SignupScreen({ navigation }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  
-  const { login } = useContext(AuthContext); // Optional: to auto-login after signup
+
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    webClientId: '801403267793-ktbmci8hevllseach2e5jn101dgpf4mc.apps.googleusercontent.com',
+    useProxy: true,
+  });
+
+  useEffect(() => {
+    if (response?.type === 'success') {
+      const { authentication } = response;
+      handleGoogleBackendAuth(authentication.accessToken);
+    }
+  }, [response]);
+
+  const handleGoogleBackendAuth = async (token) => {
+    try {
+      setLoading(true);
+      const userInfoResponse = await fetch('https://www.googleapis.com/userinfo/v2/me', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const googleUser = await userInfoResponse.json();
+
+      const res = await fetch(`${API_BASE_URL}/api/auth/google`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: googleUser.email,
+          name: googleUser.name,
+          googleId: googleUser.id,
+          profileImage: googleUser.picture,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Google authentication failed');
+
+      Alert.alert('Success', 'Logged in with Google successfully!');
+      navigation.navigate('CustomerLanding'); // Redirects straight to customer dashboard
+    } catch (error) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSignup = async () => {
-    if (!name || !email || !password) {
+    if (!name || !email || !password || !confirmPassword) {
       Alert.alert('Error', 'Please fill in all required fields.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match.');
       return;
     }
 
     try {
       setLoading(true);
 
-      // Connect to your backend signup endpoint
-      const response = await fetch('http://localhost:5000/api/auth/signup', {
+      const response = await fetch(`${API_BASE_URL}/api/auth/signup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -32,7 +83,7 @@ export default function SignupScreen({ navigation }) {
           email,
           password,
           phone,
-          role: 'customer' // default role
+          role: 'customer',
         }),
       });
 
@@ -43,12 +94,10 @@ export default function SignupScreen({ navigation }) {
       }
 
       Alert.alert('Success', 'Account created successfully!');
-      
-      // Navigate to login or automatically log them in
-      navigation.navigate('Login');
+      navigation.navigate('CustomerLanding'); // Redirects straight to customer dashboard
 
     } catch (error) {
-      Alert.alert('Signup Error', error.message || 'Something went wrong. Please try again.');
+      Alert.alert('Signup Error', error.message || 'Server connection failed.');
     } finally {
       setLoading(false);
     }
@@ -59,20 +108,22 @@ export default function SignupScreen({ navigation }) {
       <View className="w-full max-w-[440px] flex-1 bg-white relative shadow-2xl overflow-hidden border-x-2 border-slate-200">
         <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
 
-        <ScrollView showsVerticalScrollIndicator={false} className="flex-1 pt-12 pb-24 px-6">
+        <ScrollView showsVerticalScrollIndicator={false} className="flex-1 pt-10 pb-20 px-6">
           
-          <View className="mb-8 mt-4">
-            <Text className="text-[11px] font-black text-orange-500 uppercase tracking-widest">Get Started</Text>
-            <Text className="text-3xl font-black text-slate-900 tracking-wide mt-1">Create Account</Text>
-            <Text className="text-xs font-medium text-slate-500 mt-1">Sign up to start ordering delicious food</Text>
+          <View className="items-center mb-6 mt-2">
+            <View className="w-12 h-12 bg-orange-500/10 rounded-2xl items-center justify-center mb-2">
+              <Ionicons name="restaurant" size={24} color="#F97316" />
+            </View>
+            <Text className="text-2xl font-black text-slate-900 tracking-wide">Create Account</Text>
+            <Text className="text-xs font-bold text-slate-400 mt-1">Sign up to get started with DineFlow.</Text>
           </View>
 
-          <View className="space-y-4 mb-6">
+          <View className="space-y-3 mb-5">
             <View>
-              <Text className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1.5">Full Name</Text>
+              <Text className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Full Name</Text>
               <TextInput
                 className="w-full bg-slate-50 px-4 py-3.5 rounded-2xl border-2 border-slate-200 text-slate-900 font-bold text-sm"
-                placeholder="Hawi Girma"
+                placeholder="Full Name"
                 placeholderTextColor="#94A3B8"
                 value={name}
                 onChangeText={setName}
@@ -80,10 +131,10 @@ export default function SignupScreen({ navigation }) {
             </View>
 
             <View>
-              <Text className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1.5">Email Address</Text>
+              <Text className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Email Address</Text>
               <TextInput
                 className="w-full bg-slate-50 px-4 py-3.5 rounded-2xl border-2 border-slate-200 text-slate-900 font-bold text-sm"
-                placeholder="hawig3521@gmail.com"
+                placeholder="name@company.com"
                 placeholderTextColor="#94A3B8"
                 keyboardType="email-address"
                 autoCapitalize="none"
@@ -93,10 +144,10 @@ export default function SignupScreen({ navigation }) {
             </View>
 
             <View>
-              <Text className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1.5">Phone Number</Text>
+              <Text className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Phone Number</Text>
               <TextInput
                 className="w-full bg-slate-50 px-4 py-3.5 rounded-2xl border-2 border-slate-200 text-slate-900 font-bold text-sm"
-                placeholder="+251 91 234 5678"
+                placeholder="Phone Number"
                 placeholderTextColor="#94A3B8"
                 keyboardType="phone-pad"
                 value={phone}
@@ -105,7 +156,7 @@ export default function SignupScreen({ navigation }) {
             </View>
 
             <View>
-              <Text className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1.5">Password</Text>
+              <Text className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Password</Text>
               <TextInput
                 className="w-full bg-slate-50 px-4 py-3.5 rounded-2xl border-2 border-slate-200 text-slate-900 font-bold text-sm"
                 placeholder="••••••••"
@@ -115,22 +166,51 @@ export default function SignupScreen({ navigation }) {
                 onChangeText={setPassword}
               />
             </View>
+
+            <View>
+              <Text className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Confirm Password</Text>
+              <TextInput
+                className="w-full bg-slate-50 px-4 py-3.5 rounded-2xl border-2 border-slate-200 text-slate-900 font-bold text-sm"
+                placeholder="••••••••"
+                placeholderTextColor="#94A3B8"
+                secureTextEntry={true}
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+              />
+            </View>
           </View>
 
           <TouchableOpacity
             onPress={handleSignup}
             disabled={loading}
-            className="w-full bg-orange-500 py-4 rounded-2xl items-center shadow-lg shadow-orange-500/30 active:scale-95 mb-6"
+            className="w-full bg-[#B45309] py-4 rounded-2xl items-center shadow-lg shadow-orange-900/20 active:scale-95 mb-5"
           >
             <Text className="text-sm font-black text-white uppercase tracking-wider">
               {loading ? 'Creating Account...' : 'Sign Up'}
             </Text>
           </TouchableOpacity>
 
-          <View className="flex-row justify-center items-center space-x-1">
+          <View className="flex-row items-center my-3">
+            <View className="flex-1 h-0.5 bg-slate-200" />
+            <Text className="mx-3 text-[11px] font-bold text-slate-400 uppercase">Or continue with</Text>
+            <View className="flex-1 h-0.5 bg-slate-200" />
+          </View>
+
+          <View className="mb-6">
+            <TouchableOpacity
+              disabled={!request || loading}
+              onPress={() => promptAsync()}
+              className="w-full bg-white py-3.5 rounded-2xl border-2 border-slate-200 flex-row items-center justify-center space-x-2 shadow-sm active:scale-95"
+            >
+              <Ionicons name="logo-google" size={18} color="#EA4335" />
+              <Text className="text-xs font-black text-slate-700">Continue with Google</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View className="flex-row justify-center items-center space-x-1 pb-4">
             <Text className="text-xs font-medium text-slate-500">Already have an account?</Text>
             <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-              <Text className="text-xs font-black text-orange-500">Log In</Text>
+              <Text className="text-xs font-black text-[#B45309]">Log In</Text>
             </TouchableOpacity>
           </View>
 
