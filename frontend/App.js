@@ -31,56 +31,69 @@ import DriverDashboardScreen from './src/screens/driver/DriverDashboardScreen';
 const Stack = createNativeStackNavigator();
 
 function AppNavigator() {
-  const { user, loading } = useContext(AuthContext); // Get authenticated user state & loading flag
+  const { user, loading } = useContext(AuthContext);
 
   if (loading) {
-    return null; // Or return a splash screen component while checking AsyncStorage
+    return null; // Or a splash screen component
   }
 
-  // Determine the default starting screen based on the user's saved role
-  const getInitialRoute = () => {
-    if (!user || !user.role) return 'Login';
-    
+  // Determine which stack to render based on authentication and role
+  const getRoleStack = () => {
+    if (!user || !user.role) return 'Customer'; // Fallback or Guest
+
     const role = user.role.toLowerCase().trim();
-    if (role === 'manager' || role === 'admin') return 'ManagerDashboard';
-    if (role === 'kitchen') return 'KitchenDashboard';
-    if (role === 'waiter') return 'WaiterDashboard';
-    if (role === 'driver') return 'DriverDashboard';
-    return 'CustomerLanding';
+    if (role === 'manager' || role === 'admin') return 'Manager';
+    if (role === 'kitchen') return 'Kitchen';
+    if (role === 'waiter') return 'Waiter';
+    if (role === 'driver') return 'Driver';
+    return 'Customer';
   };
+
+  const activeStack = getRoleStack();
 
   return (
     <NavigationContainer>
-      <Stack.Navigator 
-        screenOptions={{ headerShown: false }}
-        initialRouteName={getInitialRoute()}
-      >
-        {/* Auth Routes */}
-        <Stack.Screen name="Login" component={LoginScreen} />
-        <Stack.Screen name="Signup" component={SignupScreen} />
-        <Stack.Screen name="SignupScreen" component={SignupScreen} />
-
-        {/* Customer Screens */}
-        <Stack.Screen name="CustomerLanding" component={CustomerLandingScreen} />
-        <Stack.Screen name="MenuScreen" component={MenuScreen} />
-        <Stack.Screen name="FoodDetailScreen" component={FoodDetailScreen} />
-        <Stack.Screen name="CustomerProfileScreen" component={CustomerProfileScreen} />
-        <Stack.Screen name="OrderHistoryScreen" component={OrderHistoryScreen} />
-        <Stack.Screen name="CartScreen" component={CartScreen} />
-        <Stack.Screen name="CheckoutScreen" component={CheckoutScreen} />
-
-        {/* Role-Based Dashboards & Profiles */}
-        <Stack.Screen name="ManagerDashboard" component={ManagerDashboardScreen} />
-        <Stack.Screen name="ManagerProfileScreen" component={ManagerProfileScreen} />
-        <Stack.Screen name="UserManagementScreen" component={UserManagementScreen} />
-        <Stack.Screen name="StaffManagementScreen" component={StaffManagementScreen} />
-        <Stack.Screen name="MenuManagementScreen" component={MenuManagementScreen} />
-        <Stack.Screen name="InventoryManagementScreen" component={InventoryManagementScreen} />
-        <Stack.Screen name="SupportMessageScreen" component={SupportMessageScreen} />
-        <Stack.Screen name="ReviewManagementScreen" component={ReviewManagementScreen} />
-        <Stack.Screen name="WaiterDashboard" component={WaiterDashboardScreen} />
-        <Stack.Screen name="KitchenDashboard" component={KitchenDashboardScreen} />
-        <Stack.Screen name="DriverDashboard" component={DriverDashboardScreen} />
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        {!user ? (
+          // --- AUTH STACK ---
+          <>
+            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="Signup" component={SignupScreen} />
+            <Stack.Screen name="SignupScreen" component={SignupScreen} />
+          </>
+        ) : activeStack === 'Manager' ? (
+          // --- MANAGER STACK ---
+          <>
+            <Stack.Screen name="ManagerDashboard" component={ManagerDashboardScreen} />
+            <Stack.Screen name="ManagerProfileScreen" component={ManagerProfileScreen} />
+            <Stack.Screen name="UserManagementScreen" component={UserManagementScreen} />
+            <Stack.Screen name="StaffManagementScreen" component={StaffManagementScreen} />
+            <Stack.Screen name="MenuManagementScreen" component={MenuManagementScreen} />
+            <Stack.Screen name="InventoryManagementScreen" component={InventoryManagementScreen} />
+            <Stack.Screen name="SupportMessageScreen" component={SupportMessageScreen} />
+            <Stack.Screen name="ReviewManagementScreen" component={ReviewManagementScreen} />
+          </>
+        ) : activeStack === 'Kitchen' ? (
+          // --- KITCHEN STACK ---
+          <Stack.Screen name="KitchenDashboard" component={KitchenDashboardScreen} />
+        ) : activeStack === 'Waiter' ? (
+          // --- WAITER STACK ---
+          <Stack.Screen name="WaiterDashboard" component={WaiterDashboardScreen} />
+        ) : activeStack === 'Driver' ? (
+          // --- DRIVER STACK ---
+          <Stack.Screen name="DriverDashboard" component={DriverDashboardScreen} />
+        ) : (
+          // --- CUSTOMER STACK ---
+          <>
+            <Stack.Screen name="CustomerLanding" component={CustomerLandingScreen} />
+            <Stack.Screen name="MenuScreen" component={MenuScreen} />
+            <Stack.Screen name="FoodDetailScreen" component={FoodDetailScreen} />
+            <Stack.Screen name="CustomerProfileScreen" component={CustomerProfileScreen} />
+            <Stack.Screen name="OrderHistoryScreen" component={OrderHistoryScreen} />
+            <Stack.Screen name="CartScreen" component={CartScreen} />
+            <Stack.Screen name="CheckoutScreen" component={CheckoutScreen} />
+          </>
+        )}
       </Stack.Navigator>
     </NavigationContainer>
   );
