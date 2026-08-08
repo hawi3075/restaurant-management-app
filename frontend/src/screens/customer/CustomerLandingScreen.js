@@ -1,27 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useContext } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Image, ImageBackground } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AuthContext } from '../../context/AuthContext'; // Adjust relative path to your context if needed
 
-export default function CustomerLandingScreen({ route, navigation }) {
+export default function CustomerLandingScreen({ navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [isLoggedIn, setIsLoggedIn] = useState(route?.params?.isLoggedIn ?? false);
-
-  // Check storage on component load to see if user has authenticated token
-  useEffect(() => {
-    checkUserAuth();
-  }, []);
-
-  const checkUserAuth = async () => {
-    try {
-      const token = await AsyncStorage.getItem('token');
-      if (token) {
-        setIsLoggedIn(true);
-      }
-    } catch (error) {
-      console.log('Error checking authentication token:', error);
-    }
-  };
+  const { user } = useContext(AuthContext); // Consume global auth state
+  
+  const isLoggedIn = !!user; // Automatically true if a user object exists
 
   const categories = [
     { name: 'Breakfast', count: '18 Items', image: 'https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?auto=format&fit=crop&w=400&q=80' },
@@ -69,7 +55,19 @@ export default function CustomerLandingScreen({ route, navigation }) {
             {/* Floating Glassmorphism Header Bar with Premium Pill Button */}
             <View className="absolute top-10 left-5 right-5 flex-row justify-end items-center z-10">
               <TouchableOpacity 
-                onPress={() => navigation.navigate(isLoggedIn ? 'CustomerProfileScreen' : 'Signup')} 
+                onPress={() => {
+                  if (isLoggedIn) {
+                    // Check if manager trying to access dashboard/profile
+                    const role = user?.role?.toLowerCase()?.trim();
+                    if (role === 'manager' || role === 'admin') {
+                      navigation.navigate('ManagerDashboard');
+                    } else {
+                      navigation.navigate('CustomerProfileScreen');
+                    }
+                  } else {
+                    navigation.navigate('Signup');
+                  }
+                }} 
                 className="bg-gradient-to-r from-[#B8520B] to-[#D35400] px-4 py-2 rounded-full shadow-lg border border-white/20 flex-row items-center active:opacity-90"
               >
                 <Ionicons name={isLoggedIn ? "person" : "sparkles"} size={11} color="white" style={{ marginRight: 4 }} />
@@ -229,7 +227,7 @@ export default function CustomerLandingScreen({ route, navigation }) {
 
         {/* Bottom Mobile Navigation Bar */}
         <View className="absolute bottom-0 left-0 right-0 bg-white border-t border-[#EAE3DE] px-6 py-2.5 flex-row justify-between items-center shadow-lg">
-          <TouchableOpacity onPress={() => navigation.navigate('CustomerLanding', { isLoggedIn })} className="items-center">
+          <TouchableOpacity onPress={() => navigation.navigate('CustomerLanding')} className="items-center">
             <Ionicons name="home" size={18} color="#B8520B" />
             <Text className="text-[9px] font-bold text-[#B8520B] mt-0.5">Home</Text>
           </TouchableOpacity>
@@ -248,7 +246,18 @@ export default function CustomerLandingScreen({ route, navigation }) {
           
           {/* Dynamic Profile / Sign Up Bottom Tab */}
           <TouchableOpacity 
-            onPress={() => navigation.navigate(isLoggedIn ? 'CustomerProfileScreen' : 'Signup')} 
+            onPress={() => {
+              if (isLoggedIn) {
+                const role = user?.role?.toLowerCase()?.trim();
+                if (role === 'manager' || role === 'admin') {
+                  navigation.navigate('ManagerDashboard');
+                } else {
+                  navigation.navigate('CustomerProfileScreen');
+                }
+              } else {
+                navigation.navigate('Signup');
+              }
+            }} 
             className="items-center"
           >
             <Ionicons 
