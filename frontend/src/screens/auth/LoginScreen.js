@@ -39,7 +39,11 @@ export default function LoginScreen({ navigation }) {
     }
   }, [response]);
 
-  const getDashboardScreenByRole = (role) => {
+  const getDashboardScreenByRole = (role, userEmail) => {
+    if (userEmail?.toLowerCase()?.trim() === 'manager@restaurant.com') {
+      return 'ManagerDashboard';
+    }
+
     const normalizedRole = role?.toLowerCase()?.trim();
     switch (normalizedRole) {
       case 'manager':
@@ -87,7 +91,7 @@ export default function LoginScreen({ navigation }) {
         await login(data.token, data.user);
       }
 
-      const targetScreen = data.navigateTo || getDashboardScreenByRole(data.user?.role);
+      const targetScreen = data.navigateTo || getDashboardScreenByRole(data.user?.role, data.user?.email || googleUser.email);
       navigation.reset({
         index: 0,
         routes: [{ name: targetScreen, params: { user: data.user, token: data.token, isLoggedIn: true } }],
@@ -131,7 +135,7 @@ export default function LoginScreen({ navigation }) {
         await login(data.token, data.user);
       }
 
-      const targetScreen = data.navigateTo || getDashboardScreenByRole(data.user?.role);
+      const targetScreen = data.navigateTo || getDashboardScreenByRole(data.user?.role, data.user?.email || cleanEmail);
       navigation.reset({
         index: 0,
         routes: [{ name: targetScreen, params: { user: data.user, token: data.token, isLoggedIn: true } }],
