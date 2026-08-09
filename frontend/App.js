@@ -4,18 +4,20 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { AuthProvider, AuthContext } from './src/context/AuthContext';
 
-// Import Customer Screens
+// Auth
+import SignupScreen from './src/screens/auth/SignupScreen';
+import LoginScreen from './src/screens/auth/LoginScreen';
+
+// Customer
 import CustomerLandingScreen from './src/screens/customer/CustomerLandingScreen';
 import MenuScreen from './src/screens/customer/MenuScreen';
 import FoodDetailScreen from './src/screens/customer/FoodDetailScreen';
-import SignupScreen from './src/screens/auth/SignupScreen';
-import LoginScreen from './src/screens/auth/LoginScreen';
 import OrderHistoryScreen from './src/screens/customer/OrderHistoryScreen';
 import CustomerProfileScreen from './src/screens/customer/CustomerProfileScreen';
 import CartScreen from './src/screens/customer/CartScreen';
 import CheckoutScreen from './src/screens/customer/CheckoutScreen';
 
-// Import Manager, Waiter, Kitchen & Driver Screens
+// Manager
 import ManagerDashboardScreen from './src/screens/manager/ManagerDashboardScreen';
 import ManagerProfileScreen from './src/screens/manager/ManagerProfileScreen';
 import UserManagementScreen from './src/screens/manager/UserManagementScreen';
@@ -24,6 +26,8 @@ import MenuManagementScreen from './src/screens/manager/MenuManagementScreen';
 import InventoryManagementScreen from './src/screens/manager/InventoryManagementScreen';
 import SupportMessageScreen from './src/screens/manager/SupportMessageScreen';
 import ReviewManagementScreen from './src/screens/manager/ReviewManagementScreen';
+
+// Other staff
 import WaiterDashboardScreen from './src/screens/waiter/WaiterDashboardScreen';
 import KitchenDashboardScreen from './src/screens/kitchen/KitchenDashboardScreen';
 import DriverDashboardScreen from './src/screens/driver/DriverDashboardScreen';
@@ -34,75 +38,144 @@ function AppNavigator() {
   const { user, loading } = useContext(AuthContext);
 
   if (loading) {
-    return null; // Or a splash screen component
+    return null;
   }
 
-  // Determine which stack to render based on authentication and role
-  const getRoleStack = () => {
-    if (!user || !user.role) return 'Customer'; // Fallback or Guest
-
-    const role = user.role.toLowerCase().trim();
-    if (role === 'manager' || role === 'admin') return 'Manager';
-    if (role === 'kitchen') return 'Kitchen';
-    if (role === 'waiter') return 'Waiter';
-    if (role === 'driver') return 'Driver';
-    return 'Customer';
-  };
-
-  const activeStack = getRoleStack();
-
-  return (
-    <NavigationContainer>
+  // User is not logged in
+  if (!user) {
+    return (
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {!user ? (
-          // --- AUTH STACK ---
-          <>
-            <Stack.Screen name="Login" component={LoginScreen} />
-            <Stack.Screen name="Signup" component={SignupScreen} />
-            <Stack.Screen name="SignupScreen" component={SignupScreen} />
-          </>
-        ) : activeStack === 'Manager' ? (
-          // --- MANAGER STACK ---
-          <>
-            <Stack.Screen name="ManagerDashboard" component={ManagerDashboardScreen} />
-            <Stack.Screen name="ManagerProfileScreen" component={ManagerProfileScreen} />
-            <Stack.Screen name="UserManagementScreen" component={UserManagementScreen} />
-            <Stack.Screen name="StaffManagementScreen" component={StaffManagementScreen} />
-            <Stack.Screen name="MenuManagementScreen" component={MenuManagementScreen} />
-            <Stack.Screen name="InventoryManagementScreen" component={InventoryManagementScreen} />
-            <Stack.Screen name="SupportMessageScreen" component={SupportMessageScreen} />
-            <Stack.Screen name="ReviewManagementScreen" component={ReviewManagementScreen} />
-          </>
-        ) : activeStack === 'Kitchen' ? (
-          // --- KITCHEN STACK ---
-          <Stack.Screen name="KitchenDashboard" component={KitchenDashboardScreen} />
-        ) : activeStack === 'Waiter' ? (
-          // --- WAITER STACK ---
-          <Stack.Screen name="WaiterDashboard" component={WaiterDashboardScreen} />
-        ) : activeStack === 'Driver' ? (
-          // --- DRIVER STACK ---
-          <Stack.Screen name="DriverDashboard" component={DriverDashboardScreen} />
-        ) : (
-          // --- CUSTOMER STACK ---
-          <>
-            <Stack.Screen name="CustomerLanding" component={CustomerLandingScreen} />
-            <Stack.Screen name="MenuScreen" component={MenuScreen} />
-            <Stack.Screen name="FoodDetailScreen" component={FoodDetailScreen} />
-            <Stack.Screen name="CustomerProfileScreen" component={CustomerProfileScreen} />
-            <Stack.Screen name="OrderHistoryScreen" component={OrderHistoryScreen} />
-            <Stack.Screen name="CartScreen" component={CartScreen} />
-            <Stack.Screen name="CheckoutScreen" component={CheckoutScreen} />
-          </>
-        )}
+        <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen name="Signup" component={SignupScreen} />
       </Stack.Navigator>
-    </NavigationContainer>
+    );
+  }
+
+  // Get role safely
+  const role = String(user.role || 'customer')
+    .toLowerCase()
+    .trim();
+
+  console.log('Logged in user:', user);
+  console.log('User role:', role);
+
+  // MANAGER / ADMIN
+  if (role === 'manager' || role === 'admin') {
+    return (
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen
+          name="ManagerDashboard"
+          component={ManagerDashboardScreen}
+        />
+        <Stack.Screen
+          name="ManagerProfileScreen"
+          component={ManagerProfileScreen}
+        />
+        <Stack.Screen
+          name="UserManagementScreen"
+          component={UserManagementScreen}
+        />
+        <Stack.Screen
+          name="StaffManagementScreen"
+          component={StaffManagementScreen}
+        />
+        <Stack.Screen
+          name="MenuManagementScreen"
+          component={MenuManagementScreen}
+        />
+        <Stack.Screen
+          name="InventoryManagementScreen"
+          component={InventoryManagementScreen}
+        />
+        <Stack.Screen
+          name="SupportMessageScreen"
+          component={SupportMessageScreen}
+        />
+        <Stack.Screen
+          name="ReviewManagementScreen"
+          component={ReviewManagementScreen}
+        />
+      </Stack.Navigator>
+    );
+  }
+
+  // KITCHEN
+  if (role === 'kitchen') {
+    return (
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen
+          name="KitchenDashboard"
+          component={KitchenDashboardScreen}
+        />
+      </Stack.Navigator>
+    );
+  }
+
+  // WAITER
+  if (role === 'waiter') {
+    return (
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen
+          name="WaiterDashboard"
+          component={WaiterDashboardScreen}
+        />
+      </Stack.Navigator>
+    );
+  }
+
+  // DRIVER
+  if (role === 'driver') {
+    return (
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen
+          name="DriverDashboard"
+          component={DriverDashboardScreen}
+        />
+      </Stack.Navigator>
+    );
+  }
+
+  // CUSTOMER
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen
+        name="CustomerLanding"
+        component={CustomerLandingScreen}
+      />
+      <Stack.Screen
+        name="MenuScreen"
+        component={MenuScreen}
+      />
+      <Stack.Screen
+        name="FoodDetailScreen"
+        component={FoodDetailScreen}
+      />
+      <Stack.Screen
+        name="CustomerProfileScreen"
+        component={CustomerProfileScreen}
+      />
+      <Stack.Screen
+        name="OrderHistoryScreen"
+        component={OrderHistoryScreen}
+      />
+      <Stack.Screen
+        name="CartScreen"
+        component={CartScreen}
+      />
+      <Stack.Screen
+        name="CheckoutScreen"
+        component={CheckoutScreen}
+      />
+    </Stack.Navigator>
   );
 }
 
 export default function App() {
   return (
     <AuthProvider>
-      <AppNavigator />
+      <NavigationContainer>
+        <AppNavigator />
+      </NavigationContainer>
     </AuthProvider>
   );
 }
