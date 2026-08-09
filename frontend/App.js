@@ -5,8 +5,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { AuthProvider, AuthContext } from './src/context/AuthContext';
 
 // Auth
-import SignupScreen from './src/screens/auth/SignupScreen';
 import LoginScreen from './src/screens/auth/LoginScreen';
+import SignupScreen from './src/screens/auth/SignupScreen';
 
 // Customer
 import CustomerLandingScreen from './src/screens/customer/CustomerLandingScreen';
@@ -27,7 +27,7 @@ import InventoryManagementScreen from './src/screens/manager/InventoryManagement
 import SupportMessageScreen from './src/screens/manager/SupportMessageScreen';
 import ReviewManagementScreen from './src/screens/manager/ReviewManagementScreen';
 
-// Other staff
+// Staff
 import WaiterDashboardScreen from './src/screens/waiter/WaiterDashboardScreen';
 import KitchenDashboardScreen from './src/screens/kitchen/KitchenDashboardScreen';
 import DriverDashboardScreen from './src/screens/driver/DriverDashboardScreen';
@@ -41,7 +41,7 @@ function AppNavigator() {
     return null;
   }
 
-  // User is not logged in
+  // Not logged in
   if (!user) {
     return (
       <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -51,13 +51,14 @@ function AppNavigator() {
     );
   }
 
-  // Get role safely
   const role = String(user.role || 'customer')
     .toLowerCase()
     .trim();
 
-  console.log('Logged in user:', user);
-  console.log('User role:', role);
+  console.log('============================');
+  console.log('LOGGED IN USER:', user);
+  console.log('USER ROLE:', role);
+  console.log('============================');
 
   // MANAGER / ADMIN
   if (role === 'manager' || role === 'admin') {
@@ -67,30 +68,37 @@ function AppNavigator() {
           name="ManagerDashboard"
           component={ManagerDashboardScreen}
         />
+
         <Stack.Screen
           name="ManagerProfileScreen"
           component={ManagerProfileScreen}
         />
+
         <Stack.Screen
           name="UserManagementScreen"
           component={UserManagementScreen}
         />
+
         <Stack.Screen
           name="StaffManagementScreen"
           component={StaffManagementScreen}
         />
+
         <Stack.Screen
           name="MenuManagementScreen"
           component={MenuManagementScreen}
         />
+
         <Stack.Screen
           name="InventoryManagementScreen"
           component={InventoryManagementScreen}
         />
+
         <Stack.Screen
           name="SupportMessageScreen"
           component={SupportMessageScreen}
         />
+
         <Stack.Screen
           name="ReviewManagementScreen"
           component={ReviewManagementScreen}
@@ -142,26 +150,32 @@ function AppNavigator() {
         name="CustomerLanding"
         component={CustomerLandingScreen}
       />
+
       <Stack.Screen
         name="MenuScreen"
         component={MenuScreen}
       />
+
       <Stack.Screen
         name="FoodDetailScreen"
         component={FoodDetailScreen}
       />
+
       <Stack.Screen
         name="CustomerProfileScreen"
         component={CustomerProfileScreen}
       />
+
       <Stack.Screen
         name="OrderHistoryScreen"
         component={OrderHistoryScreen}
       />
+
       <Stack.Screen
         name="CartScreen"
         component={CartScreen}
       />
+
       <Stack.Screen
         name="CheckoutScreen"
         component={CheckoutScreen}
