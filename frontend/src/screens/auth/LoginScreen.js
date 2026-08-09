@@ -10,7 +10,7 @@ WebBrowser.maybeCompleteAuthSession();
 
 const BACKEND_URL = 'http://localhost:5000'; 
 
-export default function LoginScreen({ navigation }) {
+export default function LoginScreen() {
   const { login } = useContext(AuthContext) || {};
 
   const [email, setEmail] = useState('manager@restaurant.com');
@@ -39,28 +39,6 @@ export default function LoginScreen({ navigation }) {
     }
   }, [response]);
 
-  const getDashboardScreenByRole = (role, userEmail) => {
-    if (userEmail?.toLowerCase()?.trim() === 'manager@restaurant.com') {
-      return 'ManagerDashboard';
-    }
-
-    const normalizedRole = role?.toLowerCase()?.trim();
-    switch (normalizedRole) {
-      case 'manager':
-      case 'admin':
-        return 'ManagerDashboard';
-      case 'kitchen':
-        return 'KitchenDashboard';
-      case 'waiter':
-        return 'WaiterDashboard';
-      case 'driver':
-      case 'delivery':
-        return 'DriverDashboard';
-      default:
-        return 'CustomerLanding';
-    }
-  };
-
   const handleGoogleBackendAuth = async (token) => {
     try {
       setIsLoading(true);
@@ -83,19 +61,9 @@ export default function LoginScreen({ navigation }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Google authentication failed');
 
-      if (data.token) {
-        await AsyncStorage.setItem('token', data.token);
+      if (login && data.token && data.user) {
+        await login(data.token, data.user); // App.js automatically handles redirection!
       }
-
-      if (login) {
-        await login(data.token, data.user);
-      }
-
-      const targetScreen = data.navigateTo || getDashboardScreenByRole(data.user?.role, data.user?.email || googleUser.email);
-      navigation.reset({
-        index: 0,
-        routes: [{ name: targetScreen, params: { user: data.user, token: data.token, isLoggedIn: true } }],
-      });
     } catch (error) {
       Alert.alert('Error', error.message);
     } finally {
@@ -127,19 +95,9 @@ export default function LoginScreen({ navigation }) {
         return;
       }
 
-      if (data.token) {
-        await AsyncStorage.setItem('token', data.token);
+      if (login && data.token && data.user) {
+        await login(data.token, data.user); // App.js automatically detects role and shifts stack!
       }
-
-      if (login) {
-        await login(data.token, data.user);
-      }
-
-      const targetScreen = data.navigateTo || getDashboardScreenByRole(data.user?.role, data.user?.email || cleanEmail);
-      navigation.reset({
-        index: 0,
-        routes: [{ name: targetScreen, params: { user: data.user, token: data.token, isLoggedIn: true } }],
-      });
 
     } catch (error) {
       setIsLoading(false);
@@ -224,8 +182,6 @@ export default function LoginScreen({ navigation }) {
                 } else {
                   setIsForgotPassword(false);
                 }
-              } else {
-                navigation.goBack();
               }
             }} 
             className="w-10 h-10 bg-white rounded-2xl items-center justify-center border border-[#EAE3DE] active:scale-95 shadow-xs"
@@ -422,15 +378,6 @@ export default function LoginScreen({ navigation }) {
             )}
 
           </View>
-
-          {!isForgotPassword && (
-            <View className="flex-row justify-center items-center pb-6">
-              <Text className="text-xs text-gray-500">Need to create an account? </Text>
-              <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
-                <Text className="text-xs font-bold text-[#B8520B]">Sign Up</Text>
-              </TouchableOpacity>
-            </View>
-          )}
         </ScrollView>
       </View>
     </View>
