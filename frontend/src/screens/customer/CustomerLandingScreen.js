@@ -273,4 +273,4 @@ export default function CustomerLandingScreen({ navigation }) {
       </View>
     </View>
   );
-}
+} 
