@@ -11,7 +11,11 @@ WebBrowser.maybeCompleteAuthSession();
 const BACKEND_URL = 'http://localhost:5000'; 
 
 export default function LoginScreen() {
-  const { login } = useContext(AuthContext) || {};
+  const authContext = useContext(AuthContext);
+  // Safely fallback to a no-op function if context is not yet mounted to prevent type errors
+  const login = authContext?.login || (() => {
+    console.warn("AuthContext is missing or login function is not available.");
+  });
 
   const [email, setEmail] = useState('manager@restaurant.com');
   const [password, setPassword] = useState('Manager123!');
@@ -61,8 +65,8 @@ export default function LoginScreen() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Google authentication failed');
 
-      if (login && data.token && data.user) {
-        await login(data.token, data.user); // App.js automatically handles redirection!
+      if (data.token && data.user) {
+        await login(data.token, data.user); 
       }
     } catch (error) {
       Alert.alert('Error', error.message);
@@ -95,8 +99,8 @@ export default function LoginScreen() {
         return;
       }
 
-      if (login && data.token && data.user) {
-        await login(data.token, data.user); // App.js automatically detects role and shifts stack!
+      if (data.token && data.user) {
+        await login(data.token, data.user); 
       }
 
     } catch (error) {
