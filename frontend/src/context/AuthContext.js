@@ -1,3 +1,4 @@
+```jsx
 import React, { createContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -7,18 +8,36 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Load saved login data when the app starts
   useEffect(() => {
-    // Load stored user & token when app starts
     const loadStorageData = async () => {
       try {
         const token = await AsyncStorage.getItem('token');
         const storedUser = await AsyncStorage.getItem('user');
-        
+
         if (token && storedUser) {
-          setUser(JSON.parse(storedUser)); // <-- This populates the user state with the role!
+          const parsedUser = JSON.parse(storedUser);
+
+          console.log('Stored user:', parsedUser);
+          console.log('Stored role:', parsedUser?.role);
+
+          // Only restore user if role exists
+          if (parsedUser && parsedUser.role) {
+            setUser(parsedUser);
+          } else {
+            // Invalid user data
+            await AsyncStorage.removeItem('token');
+            await AsyncStorage.removeItem('user');
+            setUser(null);
+          }
         }
       } catch (error) {
-        console.log('Failed to load storage data', error);
+        console.log('Failed to load storage data:', error);
+
+        // Clear corrupted storage
+        await AsyncStorage.removeItem('token');
+        await AsyncStorage.removeItem('user');
+        setUser(null);
       } finally {
         setLoading(false);
       }
@@ -27,30 +46,63 @@ export const AuthProvider = ({ children }) => {
     loadStorageData();
   }, []);
 
-  // CRITICAL: This login function must update state so App.js instantly reacts!
+  // Login
   const login = async (token, userData) => {
     try {
+      if (!token || !userData) {
+        console.log('Login failed: token or user data is missing');
+        return false;
+      }
+
+      console.log('Logging in user:', userData);
+      console.log('User role:', userData.role);
+
+      // Save token
       await AsyncStorage.setItem('token', token);
-      await AsyncStorage.setItem('user', JSON.stringify(userData));
-      setUser(userData); // <-- Updates React state, telling App.js to switch navigation stacks
+
+      // Save user including role
+      await AsyncStorage.setItem(
+        'user',
+        JSON.stringify(userData)
+      );
+
+      // Update React state
+      // This automatically makes App.js show
+      // the correct role-based dashboard
+      setUser(userData);
+
+      return true;
     } catch (error) {
       console.log('Login saving error:', error);
+      return false;
     }
   };
 
+  // Logout
   const logout = async () => {
     try {
       await AsyncStorage.removeItem('token');
       await AsyncStorage.removeItem('user');
-      setUser(null); // <-- Clears state on logout
+
+      setUser(null);
+
+      console.log('User logged out successfully');
     } catch (error) {
       console.log('Logout error:', error);
     }
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        login,
+        logout,
+        loading,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
 };
+```
