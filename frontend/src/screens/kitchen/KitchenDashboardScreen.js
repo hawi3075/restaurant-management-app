@@ -3,7 +3,9 @@ import { View, Text, TouchableOpacity, ScrollView, StatusBar, Image, Modal, Text
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
-import { BACKEND_URL } from '../../api/backend';
+
+// Define your backend URL directly here if you don't have a backend.js file
+const BACKEND_URL = 'http://localhost:5000'; 
 
 export default function KitchenDashboardScreen({ route, navigation }) {
   const [profileModalVisible, setProfileModalVisible] = useState(false);
