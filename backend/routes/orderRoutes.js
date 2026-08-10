@@ -46,7 +46,7 @@ router.get('/incoming', async (req, res) => {
 // --- CREATE ORDER (POST /api/orders) ---
 router.post('/', async (req, res) => {
   try {
-    const { customer, table, waiter, orderItems, totalAmount, specialInstructions } = req.body;
+    const { customer, table, waiter, orderItems, totalAmount, specialInstructions, paymentMethod, paymentReference } = req.body;
 
     const newOrder = new Order({
       customer,
@@ -55,6 +55,8 @@ router.post('/', async (req, res) => {
       orderItems: orderItems || [],
       totalAmount: totalAmount || 0,
       specialInstructions: specialInstructions || '',
+      paymentMethod: paymentMethod || 'telebirr',
+      paymentReference: paymentReference || '',
       status: 'Pending'
     });
 

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StatusBar, TextInput, Alert } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StatusBar, TextInput, Alert, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BACKEND_URL } from '../../api/backend';
@@ -15,6 +15,36 @@ export default function CheckoutScreen({ route, navigation }) {
   const [city, setCity] = useState('New York');
   const [phone, setPhone] = useState('+251 911 234 567');
   const [paymentMethod, setPaymentMethod] = useState('telebirr');
+  const [isActivatingTelebirr, setIsActivatingTelebirr] = useState(false);
+
+  const telebirrActivationUrl = useMemo(() => {
+    const amount = Number(totalAmount || 0).toFixed(2);
+    const reference = `DF-${Date.now()}`;
+    return `https://telebirr.et/pay?amount=${encodeURIComponent(amount)}&reference=${encodeURIComponent(reference)}`;
+  }, [totalAmount]);
+
+  const paymentLabels = {
+    telebirr: 'Telebirr',
+    card: 'Credit / Debit Card',
+    cash: 'Cash on Delivery'
+  };
+
+  const activateTelebirr = async () => {
+    setIsActivatingTelebirr(true);
+    try {
+      const supported = await Linking.canOpenURL(telebirrActivationUrl);
+      if (!supported) {
+        throw new Error('Telebirr activation link is not supported on this device.');
+      }
+
+      await Linking.openURL(telebirrActivationUrl);
+      Alert.alert('Telebirr Activated', 'Complete the payment in Telebirr, then return here and place the order.');
+    } catch (error) {
+      Alert.alert('Telebirr Activation Failed', error.message || 'Unable to open Telebirr.');
+    } finally {
+      setIsActivatingTelebirr(false);
+    }
+  };
 
   const handlePlaceOrder = () => {
     if (!fullName || !streetAddress || !phone) {
@@ -40,7 +70,9 @@ export default function CheckoutScreen({ route, navigation }) {
           waiter: null,
           orderItems,
           totalAmount,
-          specialInstructions: ''
+          specialInstructions: '',
+          paymentMethod,
+          paymentReference: paymentMethod === 'telebirr' ? `TELEBIRR-${Date.now()}` : ''
         };
 
         const res = await fetch(`${BACKEND_URL}/api/orders`, {
@@ -197,11 +229,24 @@ export default function CheckoutScreen({ route, navigation }) {
               <Text className="text-xs text-gray-500">Total Payable</Text>
               <Text className="text-base font-black text-[#B8520B]">${totalAmount.toFixed(2)}</Text>
             </View>
+            {paymentMethod === 'telebirr' ? (
+              <TouchableOpacity
+                onPress={activateTelebirr}
+                disabled={isActivatingTelebirr}
+                className="bg-[#0052CC] py-4 rounded-xl items-center shadow-md active:opacity-95 mb-3"
+              >
+                <Text className="text-white font-bold text-xs uppercase tracking-wider">
+                  {isActivatingTelebirr ? 'Activating Telebirr...' : 'Activate Telebirr Payment'}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
             <TouchableOpacity 
               onPress={handlePlaceOrder}
               className="bg-[#B8520B] py-4 rounded-xl items-center shadow-md active:opacity-95"
             >
-              <Text className="text-white font-bold text-xs uppercase tracking-wider">Place Order Now</Text>
+              <Text className="text-white font-bold text-xs uppercase tracking-wider">
+                Place Order Now {paymentLabels[paymentMethod] ? `with ${paymentLabels[paymentMethod]}` : ''}
+              </Text>
             </TouchableOpacity>
           </View>
 

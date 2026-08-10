@@ -15,6 +15,12 @@ const orderSchema = new mongoose.Schema({
   ],
   totalAmount: { type: Number, required: true },
   specialInstructions: { type: String },
+  paymentMethod: {
+    type: String,
+    enum: ['telebirr', 'card', 'cash'],
+    default: 'telebirr'
+  },
+  paymentReference: { type: String },
   status: { 
     type: String, 
     enum: ['Pending', 'Confirmed', 'Preparing', 'Ready', 'Served', 'Cancelled'], 
