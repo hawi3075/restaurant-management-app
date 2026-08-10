@@ -1,24 +1,41 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StatusBar, Image, Modal, TextInput, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { BACKEND_URL } from '../../api/backend';
 
 export default function KitchenDashboardScreen({ route, navigation }) {
   const [profileModalVisible, setProfileModalVisible] = useState(false);
-  const [chefName, setChefName] = useState('Chef Gordon');
-  const [chefEmail, setChefEmail] = useState('gordon.chef@restaurant.com');
-  const [chefPhone, setChefPhone] = useState('+1 555 019 283');
+  const [chefName, setChefName] = useState('Chef Alex');
+  const [chefEmail, setChefEmail] = useState('kitchen@restaurant.com');
+  const [chefPhone, setChefPhone] = useState('+251 911 223 344');
   const [chefImage, setChefImage] = useState(null);
   const [isLoadingOrders, setIsLoadingOrders] = useState(true);
 
   const [activeTab, setActiveTab] = useState('All');
-  
   const [kitchenOrders, setKitchenOrders] = useState([]);
 
   useEffect(() => {
+    loadChefProfile();
     fetchKitchenOrders();
   }, []);
+
+  const loadChefProfile = async () => {
+    try {
+      // Check if user info was passed via route params or saved in AsyncStorage
+      const storedUser = await AsyncStorage.getItem('user');
+      if (storedUser) {
+        const parsedUser = JSON.parse(storedUser);
+        if (parsedUser.name) setChefName(parsedUser.name);
+        if (parsedUser.email) setChefEmail(parsedUser.email);
+        if (parsedUser.phone) setChefPhone(parsedUser.phone);
+        if (parsedUser.image) setChefImage(parsedUser.image);
+      }
+    } catch (error) {
+      console.error('Error loading stored chef profile:', error);
+    }
+  };
 
   const fetchKitchenOrders = async () => {
     try {
@@ -34,8 +51,8 @@ export default function KitchenDashboardScreen({ route, navigation }) {
         status: order.status === 'Pending' ? 'Pending' : order.status === 'Confirmed' || order.status === 'Preparing' ? 'Cooking' : order.status === 'Ready' ? 'Ready' : order.status,
         source: order.paymentMethod === 'telebirr' ? 'Telebirr Order' : 'Customer App',
         items: (order.orderItems || []).map((item) => ({
-          name: `${item.quantity || 1}x ${item.name || 'Item'}`,
-          note: item.unitPrice ? `$${item.unitPrice.toFixed(2)}` : 'Regular'
+          name: `${item.quantity || 1}x ${item.name || item.menuItem?.name || 'Item'}`,
+          note: item.unitPrice ? `ETB ${item.unitPrice.toFixed(2)}` : 'Regular'
         })),
         image: null
       }));
@@ -49,11 +66,32 @@ export default function KitchenDashboardScreen({ route, navigation }) {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await AsyncStorage.removeItem('token');
+    await AsyncStorage.removeItem('user');
     navigation.reset({
       index: 0,
       routes: [{ name: 'CustomerLanding', params: { isLoggedIn: false } }],
     });
+  };
+
+  const saveProfileChanges = async () => {
+    try {
+      const storedUser = await AsyncStorage.getItem('user');
+      let parsedUser = storedUser ? JSON.parse(storedUser) : {};
+      
+      parsedUser.name = chefName;
+      parsedUser.email = chefEmail;
+      parsedUser.phone = chefPhone;
+      if (chefImage) parsedUser.image = chefImage;
+
+      await AsyncStorage.setItem('user', JSON.stringify(parsedUser));
+      setProfileModalVisible(false);
+      Alert.alert('Success', 'Profile updated successfully!');
+    } catch (error) {
+      console.error('Save Profile Error:', error);
+      Alert.alert('Error', 'Failed to save profile changes.');
+    }
   };
 
   const pickChefImage = async () => {
@@ -112,7 +150,7 @@ export default function KitchenDashboardScreen({ route, navigation }) {
               )}
             </View>
             <View>
-              <Text className="text-sm font-black text-[#1F130D]">Kitchen Station</Text>
+              <Text className="text-sm font-black text-[#1F130D]">{chefName}</Text>
               <Text className="text-[10px] text-gray-400">Tap profile to edit</Text>
             </View>
           </TouchableOpacity>
@@ -192,12 +230,9 @@ export default function KitchenDashboardScreen({ route, navigation }) {
                 {order.items.map((item, idx) => (
                   <View key={idx} className="flex-row justify-between py-1 border-b border-gray-50 last:border-b-0">
                     <Text className="text-xs font-bold text-[#1F130D]">{item.name}</Text>
-                    <Text className="text-[10px] text-red-500 font-semibold italic">{item.note}</Text>
+                    <Text className="text-[10px] text-[#B8520B] font-semibold">{item.note}</Text>
                   </View>
                 ))}
-                {order.image && (
-                  <Image source={{ uri: order.image }} className="w-full h-32 rounded-xl mt-2.5 object-cover" />
-                )}
               </View>
 
               <View className="flex-row justify-end items-center pt-2.5 border-t border-[#F8F9FC] gap-2">
@@ -266,7 +301,7 @@ export default function KitchenDashboardScreen({ route, navigation }) {
               <Text className="text-[11px] font-bold text-gray-500 mb-1">Phone Number</Text>
               <TextInput className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs mb-5 text-[#1F130D]" value={chefPhone} onChangeText={setChefPhone} />
               
-              <TouchableOpacity onPress={() => setProfileModalVisible(false)} className="bg-[#B8520B] py-3.5 rounded-xl items-center mb-3">
+              <TouchableOpacity onPress={saveProfileChanges} className="bg-[#B8520B] py-3.5 rounded-xl items-center mb-3">
                 <Text className="text-white text-xs font-bold">Save Changes</Text>
               </TouchableOpacity>
 
