@@ -1,4 +1,3 @@
-// backend/models/Order.js
 const mongoose = require('mongoose');
 
 const orderSchema = new mongoose.Schema({
@@ -18,6 +17,8 @@ const orderSchema = new mongoose.Schema({
   paymentMethod: {
     type: String,
     enum: ['telebirr', 'chapa', 'card', 'cash'],
+    lowercase: true,
+    trim: true,
     default: 'telebirr'
   },
   paymentReference: { type: String },
