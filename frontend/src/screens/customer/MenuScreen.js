@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StatusBar, Image, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:5001';
+import { BACKEND_URL } from '../../api/backend';
 
 export default function MenuScreen({ navigation }) {
   const [selectedCategory, setSelectedCategory] = useState('Breakfast');
@@ -41,42 +40,10 @@ export default function MenuScreen({ navigation }) {
         image: item.image || 'https://images.unsplash.com/photo-1541544741938-0af808871cc0?auto=format&fit=crop&w=400&q=80'
       }));
 
-      // Fallback sample mock items if database query returns empty for this filter combination
-      if (formattedItems.length === 0) {
-        setMenuItems([
-          { 
-            id: 1, 
-            name: `${selectedCategory} Special (${selectedStyle})`, 
-            desc: 'Arborio rice, wild mushrooms, truffle oil, freshly made to order', 
-            price: 24.00, 
-            rating: '4.8', 
-            image: 'https://images.unsplash.com/photo-1541544741938-0af808871cc0?auto=format&fit=crop&w=400&q=80' 
-          },
-          { 
-            id: 2, 
-            name: 'Artisanal Wagyu Burger', 
-            desc: 'Wagyu beef patty, cheddar, brioche bun with crispy fries', 
-            price: 18.50, 
-            rating: '4.9', 
-            image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=400&q=80' 
-          }
-        ]);
-      } else {
-        setMenuItems(formattedItems);
-      }
+      setMenuItems(formattedItems);
     } catch (error) {
       console.error('Fetch Menu Error:', error);
-      // Graceful fallback display if backend connection drops
-      setMenuItems([
-        { 
-          id: 1, 
-          name: 'Truffle Mushroom Risotto', 
-          desc: 'Arborio rice, wild mushrooms, truffle oil', 
-          price: 24.00, 
-          rating: '4.8', 
-          image: 'https://images.unsplash.com/photo-1541544741938-0af808871cc0?auto=format&fit=crop&w=400&q=80' 
-        }
-      ]);
+      setMenuItems([]);
     } finally {
       setIsLoading(false);
     }

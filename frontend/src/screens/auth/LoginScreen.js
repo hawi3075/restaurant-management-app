@@ -6,10 +6,9 @@ import * as Google from 'expo-auth-session/providers/google';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthContext } from '../../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
+import { BACKEND_URL } from '../../api/backend';
 
 WebBrowser.maybeCompleteAuthSession();
-
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:5001'; 
 
 export default function LoginScreen() {
   const authContext = useContext(AuthContext);

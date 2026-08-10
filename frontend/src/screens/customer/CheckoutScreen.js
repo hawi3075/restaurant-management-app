@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StatusBar, TextInput, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:5001';
+import { BACKEND_URL } from '../../api/backend';
 
 export default function CheckoutScreen({ route, navigation }) {
   const totalAmount = route?.params?.total ?? 40.99;

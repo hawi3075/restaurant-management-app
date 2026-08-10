@@ -3,8 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView, StatusBar, TextInput, Modal, 
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthContext } from '../../context/AuthContext';
-
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:5001';
+import { BACKEND_URL } from '../../api/backend';
 
 export default function CustomerProfileScreen({ route, navigation }) {
   const isLoggedIn = route?.params?.isLoggedIn ?? true;
@@ -343,14 +342,9 @@ export default function CustomerProfileScreen({ route, navigation }) {
                 </TouchableOpacity>
               </View>
               <ScrollView showsVerticalScrollIndicator={false}>
-                <View className="bg-[#F8F9FC] p-3.5 rounded-2xl border border-[#EAE3DE] mb-3">
-                  <View className="flex-row justify-between mb-1">
-                    <Text className="text-xs font-bold text-[#1F130D]">Truffle Mushroom Risotto</Text>
-                    <View className="flex-row">
-                      {[1, 2, 3, 4, 5].map((i) => (<Ionicons key={i} name="star" size={10} color="#F59E0B" />))}
-                    </View>
-                  </View>
-                  <Text className="text-[11px] text-gray-500">"Absolute perfection! Super creamy and packed with flavor."</Text>
+                <View className="bg-[#F8F9FC] p-3.5 rounded-2xl border border-[#EAE3DE] items-center">
+                  <Text className="text-xs font-bold text-[#1F130D] mb-1">No saved reviews yet</Text>
+                  <Text className="text-[11px] text-gray-500 text-center">Your submitted food reviews will appear here once you start rating dishes.</Text>
                 </View>
               </ScrollView>
             </View>

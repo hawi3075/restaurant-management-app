@@ -1,32 +1,31 @@
-import React, { useState, useContext } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Image, ImageBackground } from 'react-native';
+import React, { useState, useContext, useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Image, ImageBackground, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { AuthContext } from '../../context/AuthContext'; // Adjust relative path to your context if needed
-import { useEffect } from 'react';
-
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:5001';
+import { AuthContext } from '../../context/AuthContext';
+import { BACKEND_URL } from '../../api/backend';
 
 export default function CustomerLandingScreen({ navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [menuItems, setMenuItems] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   const { user } = useContext(AuthContext); // Consume global auth state
   
   const isLoggedIn = !!user; // Automatically true if a user object exists
 
   const categories = [
-    { name: 'Breakfast', count: '18 Items', image: 'https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?auto=format&fit=crop&w=400&q=80' },
-    { name: 'Lunch', count: '32 Items', image: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=400&q=80' },
-    { name: 'Dinner', count: '24 Items', image: 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=400&q=80' },
-    { name: 'Drink', count: '40 Items', image: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=400&q=80' },
-    { name: 'Dessert', count: '15 Items', image: 'https://images.unsplash.com/photo-1551024601-bec78aea704b?auto=format&fit=crop&w=400&q=80' },
-    { name: 'Fast Food', count: '20 Items', image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=400&q=80' },
+    { name: 'Breakfast', image: 'https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?auto=format&fit=crop&w=400&q=80' },
+    { name: 'Lunch', image: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=400&q=80' },
+    { name: 'Dinner', image: 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=400&q=80' },
+    { name: 'Drinks', image: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=400&q=80' },
+    { name: 'Desserts', image: 'https://images.unsplash.com/photo-1551024601-bec78aea704b?auto=format&fit=crop&w=400&q=80' },
+    { name: 'Fast Food', image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=400&q=80' },
   ];
 
-  const trendingItems = [
-    { id: 1, name: 'Truffle Mushroom Risotto', desc: 'Creamy arborio rice, wild mushrooms, white truffle oil.', price: 24.00, rating: '4.9', image: 'https://images.unsplash.com/photo-1541544741938-0af808871cc0?auto=format&fit=crop&w=400&q=80' },
-    { id: 2, name: 'Seared Salmon Plate', desc: 'Pan-seared Atlantic salmon with asparagus.', price: 26.00, rating: '4.8', image: 'https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&w=400&q=80' },
-  ];
+  const trendingItems = menuItems.slice(0, 4);
+  const categoryCounts = categories.reduce((counts, category) => {
+    counts[category.name] = menuItems.filter((item) => item.category === category.name).length;
+    return counts;
+  }, {});
 
   const handleAddToCart = (item) => {
     navigation.navigate('CartScreen', { 
@@ -42,10 +41,10 @@ export default function CustomerLandingScreen({ navigation }) {
     });
   };
 
-  // Fetch menu and tables for dynamic content
   useEffect(() => {
     const loadData = async () => {
       try {
+        setIsLoading(true);
         const [menuRes, tablesRes] = await Promise.all([
           fetch(`${BACKEND_URL}/api/menu`),
           fetch(`${BACKEND_URL}/api/tables`)
@@ -55,18 +54,27 @@ export default function CustomerLandingScreen({ navigation }) {
 
         const items = menuJson.items || menuJson || [];
         if (items && items.length > 0) {
-          // Update trending items dynamically
-          // take top 4 items
-          const top = items.slice(0, 4).map((it, idx) => ({ id: it._id || it.id || idx, name: it.name || it.title, desc: it.description || it.desc || '', price: it.price || 0, rating: it.rating || '4.8', image: it.image }));
-          // directly mutate local trendingItems? use state instead; for minimal change, persist in AsyncStorage for other screens
-          await AsyncStorage.setItem('menu_cache', JSON.stringify(items));
+          setMenuItems(items.map((it, idx) => ({
+            id: it._id || it.id || idx,
+            name: it.name || it.title || 'Menu Item',
+            desc: it.description || it.desc || '',
+            price: Number(it.price || 0),
+            rating: Number(it.rating || 4.8).toFixed(1),
+            image: it.image || 'https://images.unsplash.com/photo-1541544741938-0af808871cc0?auto=format&fit=crop&w=400&q=80',
+            category: it.category || 'Uncategorized'
+          })));
+        } else {
+          setMenuItems([]);
         }
 
         if (tablesJson.tables) {
-          await AsyncStorage.setItem('tables_cache', JSON.stringify(tablesJson.tables));
+          void tablesJson.tables.length;
         }
       } catch (err) {
         console.error('CustomerLanding loadData error', err);
+        setMenuItems([]);
+      } finally {
+        setIsLoading(false);
       }
     };
     loadData();
@@ -166,7 +174,7 @@ export default function CustomerLandingScreen({ navigation }) {
 
                   <View className="absolute bottom-2 left-2 right-2">
                     <Text className="text-white font-black text-[11px]" numberOfLines={1}>{cat.name}</Text>
-                    <Text className="text-gray-200 text-[8px] font-semibold">{cat.count}</Text>
+                    <Text className="text-gray-200 text-[8px] font-semibold">{categoryCounts[cat.name] || 0} Items</Text>
                   </View>
                 </TouchableOpacity>
               ))}
@@ -204,8 +212,17 @@ export default function CustomerLandingScreen({ navigation }) {
               </View>
             </View>
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="space-x-3">
-              {trendingItems.map((item) => (
+            {isLoading ? (
+              <View className="py-8 items-center">
+                <ActivityIndicator size="small" color="#B8520B" />
+              </View>
+            ) : trendingItems.length === 0 ? (
+              <View className="py-8 items-center">
+                <Text className="text-xs text-gray-500">No menu items available yet.</Text>
+              </View>
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} className="space-x-3">
+                {trendingItems.map((item) => (
                 <View key={item.id} className="bg-white w-64 rounded-2xl border border-[#EAE3DE] overflow-hidden mr-3 shadow-xs">
                   
                   <View className="relative h-32 w-full">
@@ -255,8 +272,9 @@ export default function CustomerLandingScreen({ navigation }) {
 
                   </View>
                 </View>
-              ))}
-            </ScrollView>
+                ))}
+              </ScrollView>
+            )}
           </View>
         </ScrollView>
 

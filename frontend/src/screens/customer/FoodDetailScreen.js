@@ -1,35 +1,55 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StatusBar, Image, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { BACKEND_URL } from '../../api/backend';
 
 export default function FoodDetailScreen({ route, navigation }) {
-  const foodItem = route?.params?.foodItem || {
-    id: 1,
-    name: 'Truffle Mushroom Risotto',
-    desc: 'Creamy arborio rice infused with wild forest mushrooms, finished with authentic white truffle oil and aged parmesan flakes.',
-    price: 24.00,
-    rating: '4.9',
-    image: 'https://images.unsplash.com/photo-1541544741938-0af808871cc0?auto=format&fit=crop&w=600&q=80'
-  };
+  const foodItem = route?.params?.foodItem || null;
 
   const [selectedSize, setSelectedSize] = useState('Regular');
   const [quantity, setQuantity] = useState(1);
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [userRating, setUserRating] = useState(5);
   const [userComment, setUserComment] = useState('');
-  
-  const [reviews, setReviews] = useState([
-    { id: 1, name: 'Sarah Jenkins', rating: 5, comment: 'Absolute perfection! The truffle oil flavor stands out amazingly.', date: 'Yesterday' },
-    { id: 2, name: 'Michael Bekele', rating: 4.8, comment: 'Very rich and creamy portion size was great.', date: '3 days ago' }
-  ]);
+  const [reviews, setReviews] = useState([]);
+  const [isLoadingReviews, setIsLoadingReviews] = useState(true);
+
+  useEffect(() => {
+    const loadReviews = async () => {
+      try {
+        setIsLoadingReviews(true);
+        const response = await fetch(`${BACKEND_URL}/api/reviews`);
+        const data = await response.json();
+        const items = Array.isArray(data) ? data : data.reviews || [];
+        setReviews(
+          items.slice(0, 5).map((review) => ({
+            id: review._id || review.id,
+            name: review.user?.name || 'Guest',
+            rating: Number(review.rating || 5),
+            comment: review.comment || '',
+            date: review.createdAt ? new Date(review.createdAt).toLocaleDateString() : 'Recently',
+          }))
+        );
+      } catch (error) {
+        console.error('Fetch Reviews Error:', error);
+        setReviews([]);
+      } finally {
+        setIsLoadingReviews(false);
+      }
+    };
+
+    loadReviews();
+  }, []);
 
   const handleAddToCart = () => {
+    if (!foodItem) return;
     navigation.navigate('CartScreen', { 
       addedItem: { ...foodItem, quantity, options: selectedSize } 
     });
   };
 
   const handleQuickCheckout = () => {
+    if (!foodItem) return;
     const itemPrice = foodItem.price * quantity;
     const total = itemPrice + 3.99;
     navigation.navigate('CheckoutScreen', { 
@@ -52,13 +72,27 @@ export default function FoodDetailScreen({ route, navigation }) {
     setShowReviewModal(false);
   };
 
+  if (!foodItem) {
+    return (
+      <View className="flex-1 bg-[#F8F9FC] items-center">
+        <View className="w-full max-w-[440px] flex-1 bg-[#F8F9FC] relative shadow-2xl items-center justify-center px-6">
+          <Ionicons name="restaurant-outline" size={32} color="#B8520B" />
+          <Text className="text-sm font-bold text-[#1F130D] mt-3">No dish selected</Text>
+          <Text className="text-[11px] text-gray-400 text-center px-8 mt-1">Open a dish from the menu to view live details and reviews.</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('MenuScreen')} className="mt-5 bg-[#B8520B] px-5 py-3 rounded-2xl">
+            <Text className="text-white text-xs font-bold">Go to Menu</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View className="flex-1 bg-[#F8F9FC] items-center">
       <View className="w-full max-w-[440px] flex-1 bg-[#F8F9FC] relative shadow-2xl">
         <StatusBar barStyle="dark-content" backgroundColor="#F8F9FC" />
 
         <ScrollView showsVerticalScrollIndicator={false} className="flex-1 pt-12 pb-24 px-5">
-          
           {/* Back Button Header */}
           <View className="flex-row items-center mb-4">
             <TouchableOpacity 
@@ -198,7 +232,11 @@ export default function FoodDetailScreen({ route, navigation }) {
             )}
 
             {/* List of Reviews */}
-            {reviews.map((rev) => (
+            {isLoadingReviews ? (
+              <Text className="text-xs text-gray-400">Loading reviews...</Text>
+            ) : reviews.length === 0 ? (
+              <Text className="text-xs text-gray-400">No reviews yet.</Text>
+            ) : reviews.map((rev) => (
               <View key={rev.id} className="border-b border-gray-100 pb-3 mb-3 last:border-b-0 last:mb-0 last:pb-0">
                 <View className="flex-row justify-between items-center mb-1">
                   <Text className="font-bold text-xs text-[#1F130D]">{rev.name}</Text>

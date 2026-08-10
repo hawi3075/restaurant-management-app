@@ -3,8 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView, StatusBar, Image, ActivityInd
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { io } from 'socket.io-client';
-
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:5001';
+import { BACKEND_URL } from '../../api/backend';
 
 export default function OrderHistoryScreen({ route, navigation }) {
   const [activeTab, setActiveTab] = useState('active'); // 'active' or 'history'
@@ -43,7 +42,7 @@ export default function OrderHistoryScreen({ route, navigation }) {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token || 'sample-jwt-token-xyz'}`
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         }
       });
 
