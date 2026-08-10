@@ -1,5 +1,5 @@
-import React, { useState, useContext } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StatusBar, TextInput, Modal, Image } from 'react-native';
+import React, { useState, useContext, useEffect, useCallback } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StatusBar, TextInput, Modal, Image, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../../context/AuthContext';
 import * as ImagePicker from 'expo-image-picker';
@@ -7,60 +7,59 @@ import * as ImagePicker from 'expo-image-picker';
 export default function WaiterDashboardScreen({ route, navigation }) {
   const authContext = useContext(AuthContext);
   const [editModalVisible, setEditModalVisible] = useState(false);
+  
+  // Profile state
   const [name, setName] = useState('Sarah Jenkins');
   const [email, setEmail] = useState('sarah.jenkins@restaurant.com');
   const [phone, setPhone] = useState('+1 987 654 321');
   const [profileImage, setProfileImage] = useState(null);
 
+  // New order modal state
   const [newOrderModalVisible, setNewOrderModalVisible] = useState(false);
   const [tableNumber, setTableNumber] = useState('');
   const [orderDetails, setOrderDetails] = useState('');
   const [orderImage, setOrderImage] = useState(null);
   
+  // Filter and API state
   const [activeTab, setActiveTab] = useState('All');
-  
-  // Orders list initialized with incoming orders from customers
-  const [orders, setOrders] = useState([
-    {
-      id: '1',
-      table: 'Table 04',
-      time: 'Just now',
-      status: 'New',
-      source: 'Customer App',
-      items: [
-        { name: '1x Crispy Chicken Burger', note: 'No onions' },
-        { name: '1x Fresh Orange Juice', note: 'Regular' }
-      ],
-      total: '$24.50',
-      image: null
-    },
-    {
-      id: '2',
-      table: 'Table 08',
-      time: '25m ago',
-      status: 'Served',
-      source: 'Waiter Entry',
-      items: [
-        { name: '2x Grilled Ribeye Steak', note: 'Well done' },
-        { name: '1x House Red Wine Bottle', note: 'Room temp' }
-      ],
-      total: '$86.00',
-      image: null
-    },
-    {
-      id: '3',
-      table: 'Table 03',
-      time: '5m ago',
-      status: 'Preparing',
-      source: 'Customer App',
-      items: [
-        { name: '1x Truffle Mushroom Risotto', note: 'Extra parmesan' },
-        { name: '2x Lemonade', note: 'Less ice' }
-      ],
-      total: '$42.50',
-      image: null
+  const [searchQuery, setSearchQuery] = useState('');
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Base API URL (adjust to match your backend port/host)
+  const API_URL = 'http://localhost:5000/api';
+
+  // Fetch orders from backend
+  const fetchOrders = useCallback(async () => {
+    try {
+      setLoading(true);
+      const token = authContext?.token || '';
+      const response = await fetch(`${API_URL}/orders`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setOrders(data);
+      } else {
+        console.error('Failed to fetch orders:', data.message);
+      }
+    } catch (err) {
+      console.error('Network request failed:', err);
+    } finally {
+      setLoading(false);
     }
-  ]);
+  }, [authContext?.token]);
+
+  useEffect(() => {
+    fetchOrders();
+    // Optional: set up interval to poll for new orders live
+    const interval = setInterval(fetchOrders, 10000);
+    return () => clearInterval(interval);
+  }, [fetchOrders]);
 
   const handleLogout = () => {
     (async () => {
@@ -98,32 +97,76 @@ export default function WaiterDashboardScreen({ route, navigation }) {
     }
   };
 
-  const handleCreateOrder = () => {
+  const handleCreateOrder = async () => {
     if (!tableNumber || !orderDetails) return;
-    const newOrder = {
-      id: Date.now().toString(),
-      table: `Table ${tableNumber}`,
-      time: 'Just now',
-      status: 'New',
-      source: 'Waiter Entry',
-      items: [{ name: orderDetails, note: 'Custom manual entry' }],
-      total: '$35.00',
-      image: orderImage
-    };
-    setOrders([newOrder, ...orders]);
-    setTableNumber('');
-    setOrderDetails('');
-    setOrderImage(null);
-    setNewOrderModalVisible(false);
+    
+    try {
+      setSubmitting(true);
+      const token = authContext?.token || '';
+      
+      const response = await fetch(`${API_URL}/orders`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          table: `Table ${tableNumber}`,
+          items: [{ name: orderDetails, note: 'Custom manual entry' }],
+          source: 'Waiter Entry',
+          image: orderImage
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setOrders([data, ...orders]);
+        setTableNumber('');
+        setOrderDetails('');
+        setOrderImage(null);
+        setNewOrderModalVisible(false);
+        fetchOrders(); // Refresh list
+      } else {
+        alert(data.message || 'Failed to create order');
+      }
+    } catch (err) {
+      console.error('Create order error:', err);
+      alert('Network error while creating order.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const updateOrderStatus = (id, newStatus) => {
-    setOrders(orders.map(order => order.id === id ? { ...order, status: newStatus } : order));
+  const updateOrderStatus = async (id, newStatus) => {
+    try {
+      const token = authContext?.token || '';
+      const response = await fetch(`${API_URL}/orders/${id}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ status: newStatus })
+      });
+
+      if (response.ok) {
+        setOrders(orders.map(order => order.id === id || order._id === id ? { ...order, status: newStatus } : order));
+      } else {
+        const data = await response.json();
+        alert(data.message || 'Failed to update order status');
+      }
+    } catch (err) {
+      console.error('Status update failed:', err);
+    }
   };
 
   const filteredOrders = orders.filter(order => {
-    if (activeTab === 'All') return true;
-    return order.status.toLowerCase() === activeTab.toLowerCase();
+    const matchesTab = activeTab === 'All' || (order.status && order.status.toLowerCase() === activeTab.toLowerCase());
+    const matchesSearch = searchQuery === '' || 
+      order.table?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      order.items?.some(item => item.name?.toLowerCase().includes(searchQuery.toLowerCase()));
+    return matchesTab && matchesSearch;
   });
 
   const newOrdersCount = orders.filter(o => o.status === 'New').length;
@@ -187,6 +230,8 @@ export default function WaiterDashboardScreen({ route, navigation }) {
               placeholder="Search table number or dishes..." 
               placeholderTextColor="#9E9E9E"
               className="flex-1 text-xs text-[#1F130D]"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
             />
           </View>
 
@@ -208,69 +253,72 @@ export default function WaiterDashboardScreen({ route, navigation }) {
             Live Table Orders ({filteredOrders.length})
           </Text>
 
-          {/* Order Cards List */}
-          {filteredOrders.map((order) => (
-            <View key={order.id} className={`bg-white rounded-3xl p-4 border mb-3 shadow-xs ${order.status === 'New' ? 'border-[#B8520B]' : 'border-[#EAE3DE]'}`}>
-              <View className="flex-row justify-between items-center mb-2.5 pb-2.5 border-b border-[#F8F9FC]">
-                <View className="flex-row items-center">
-                  <Text className="text-xs font-black text-[#1F130D] bg-[#FEF7F3] px-2.5 py-1 rounded-lg border border-[#B8520B]/20 mr-2">
-                    {order.table}
-                  </Text>
-                  <Text className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded mr-2">{order.source}</Text>
-                  <Text className="text-[11px] text-gray-400">{order.time}</Text>
-                </View>
-                <View className={`px-2.5 py-1 rounded-full ${order.status === 'New' ? 'bg-[#FEF7F3] border border-[#B8520B]/30' : 'bg-gray-100'}`}>
-                  <Text className={`text-[10px] font-bold ${order.status === 'New' ? 'text-[#B8520B]' : 'text-gray-600'}`}>{order.status}</Text>
-                </View>
-              </View>
-
-              <View className="mb-3">
-                {order.items.map((item, idx) => (
-                  <View key={idx} className="flex-row justify-between py-0.5">
-                    <Text className="text-xs font-semibold text-[#1F130D]">{item.name}</Text>
-                    <Text className="text-[10px] text-gray-400 italic">{item.note}</Text>
+          {loading && orders.length === 0 ? (
+            <ActivityIndicator size="large" color="#B8520B" className="mt-10" />
+          ) : (
+            filteredOrders.map((order) => {
+              const orderId = order.id || order._id;
+              return (
+                <View key={orderId} className={`bg-white rounded-3xl p-4 border mb-3 shadow-xs ${order.status === 'New' ? 'border-[#B8520B]' : 'border-[#EAE3DE]'}`}>
+                  <View className="flex-row justify-between items-center mb-2.5 pb-2.5 border-b border-[#F8F9FC]">
+                    <View className="flex-row items-center">
+                      <Text className="text-xs font-black text-[#1F130D] bg-[#FEF7F3] px-2.5 py-1 rounded-lg border border-[#B8520B]/20 mr-2">
+                        {order.table}
+                      </Text>
+                      <Text className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded mr-2">{order.source || 'Customer App'}</Text>
+                      <Text className="text-[11px] text-gray-400">{order.time || 'Just now'}</Text>
+                    </View>
+                    <View className={`px-2.5 py-1 rounded-full ${order.status === 'New' ? 'bg-[#FEF7F3] border border-[#B8520B]/30' : 'bg-gray-100'}`}>
+                      <Text className={`text-[10px] font-bold ${order.status === 'New' ? 'text-[#B8520B]' : 'text-gray-600'}`}>{order.status}</Text>
+                    </View>
                   </View>
-                ))}
-                {order.image && (
-                  <Image source={{ uri: order.image }} className="w-full h-32 rounded-xl mt-2.5 object-cover" />
-                )}
-              </View>
 
-              <View className="flex-row justify-between items-center pt-2.5 border-t border-[#F8F9FC]">
-                <Text className="text-xs font-black text-[#1F130D]">Total: {order.total}</Text>
-                
-                <View className="flex-row gap-2">
-                  {order.status === 'New' && (
-                    <TouchableOpacity 
-                      onPress={() => updateOrderStatus(order.id, 'Preparing')}
-                      className="bg-[#B8520B] px-3 py-1.5 rounded-xl"
-                    >
-                      <Text className="text-[10px] font-bold text-white">Accept Order</Text>
-                    </TouchableOpacity>
-                  )}
-                  {order.status === 'Preparing' && (
-                    <TouchableOpacity 
-                      onPress={() => updateOrderStatus(order.id, 'Ready')}
-                      className="bg-amber-500 px-3 py-1.5 rounded-xl"
-                    >
-                      <Text className="text-[10px] font-bold text-white">Mark Ready</Text>
-                    </TouchableOpacity>
-                  )}
-                  {order.status === 'Ready' && (
-                    <TouchableOpacity 
-                      onPress={() => updateOrderStatus(order.id, 'Served')}
-                      className="bg-green-600 px-3 py-1.5 rounded-xl"
-                    >
-                      <Text className="text-[10px] font-bold text-white">Mark Served</Text>
-                    </TouchableOpacity>
-                  )}
-                  <TouchableOpacity className="bg-[#FEF7F3] px-3 py-1.5 rounded-xl border border-[#B8520B]/20">
-                    <Text className="text-[10px] font-bold text-[#B8520B]">Details</Text>
-                  </TouchableOpacity>
+                  <View className="mb-3">
+                    {order.items?.map((item, idx) => (
+                      <View key={idx} className="flex-row justify-between py-0.5">
+                        <Text className="text-xs font-semibold text-[#1F130D]">{item.name}</Text>
+                        <Text className="text-[10px] text-gray-400 italic">{item.note}</Text>
+                      </View>
+                    ))}
+                    {order.image && (
+                      <Image source={{ uri: order.image }} className="w-full h-32 rounded-xl mt-2.5 object-cover" />
+                    )}
+                  </View>
+
+                  <View className="flex-row justify-between items-center pt-2.5 border-t border-[#F8F9FC]">
+                    <Text className="text-xs font-black text-[#1F130D]">Total: {order.total || '$0.00'}</Text>
+                    
+                    <View className="flex-row gap-2">
+                      {order.status === 'New' && (
+                        <TouchableOpacity 
+                          onPress={() => updateOrderStatus(orderId, 'Preparing')}
+                          className="bg-[#B8520B] px-3 py-1.5 rounded-xl"
+                        >
+                          <Text className="text-[10px] font-bold text-white">Accept Order</Text>
+                        </TouchableOpacity>
+                      )}
+                      {order.status === 'Preparing' && (
+                        <TouchableOpacity 
+                          onPress={() => updateOrderStatus(orderId, 'Ready')}
+                          className="bg-amber-500 px-3 py-1.5 rounded-xl"
+                        >
+                          <Text className="text-[10px] font-bold text-white">Mark Ready</Text>
+                        </TouchableOpacity>
+                      )}
+                      {order.status === 'Ready' && (
+                        <TouchableOpacity 
+                          onPress={() => updateOrderStatus(orderId, 'Served')}
+                          className="bg-green-600 px-3 py-1.5 rounded-xl"
+                        >
+                          <Text className="text-[10px] font-bold text-white">Mark Served</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
                 </View>
-              </View>
-            </View>
-          ))}
+              );
+            })
+          )}
 
         </ScrollView>
 
@@ -377,8 +425,16 @@ export default function WaiterDashboardScreen({ route, navigation }) {
                 </View>
               )}
 
-              <TouchableOpacity onPress={handleCreateOrder} className="bg-[#B8520B] py-3.5 rounded-xl items-center">
-                <Text className="text-white text-xs font-bold">Submit Order to Kitchen</Text>
+              <TouchableOpacity 
+                onPress={handleCreateOrder} 
+                disabled={submitting}
+                className="bg-[#B8520B] py-3.5 rounded-xl items-center opacity-100"
+              >
+                {submitting ? (
+                  <ActivityIndicator color="white" size="small" />
+                ) : (
+                  <Text className="text-white text-xs font-bold">Submit Order to Kitchen</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
