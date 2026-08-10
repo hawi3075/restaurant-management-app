@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StatusBar, TextInput, Modal, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AuthContext } from '../../context/AuthContext';
 
-const BACKEND_URL = 'http://localhost:5000';
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:5001';
 
 export default function CustomerProfileScreen({ route, navigation }) {
   const isLoggedIn = route?.params?.isLoggedIn ?? true;
+  const authContext = useContext(AuthContext);
 
   const [isLoading, setIsLoading] = useState(true);
   const [name, setName] = useState('');
@@ -29,10 +31,19 @@ export default function CustomerProfileScreen({ route, navigation }) {
   const fetchUserProfile = async () => {
     try {
       setIsLoading(true);
-      const token = await AsyncStorage.getItem('token');
-      
+      // Prefer token and user from AuthContext when available
+      let token = await AsyncStorage.getItem('token');
+      const ctxUser = authContext?.user;
+      if (ctxUser && ctxUser.email) {
+        setName(ctxUser.name || '');
+        setEmail(ctxUser.email || '');
+        setPhone(ctxUser.phone || '+1 234 567 890');
+        setAddress(ctxUser.address || '123 Main Street, Apt 4B');
+        // still attempt to refresh from backend if we have a token
+      }
+
       if (!token) {
-        // Fallback if passed through route params
+        // Fallback to route params
         if (route?.params?.user) {
           const u = route.params.user;
           setName(u.name || '');
@@ -49,7 +60,8 @@ export default function CustomerProfileScreen({ route, navigation }) {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'x-user-email': authContext?.user?.email || ''
         }
       });
 
@@ -80,13 +92,26 @@ export default function CustomerProfileScreen({ route, navigation }) {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'x-user-email': authContext?.user?.email || ''
         },
         body: JSON.stringify({ name, email, phone })
       });
 
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Failed to update profile.');
+
+      // Update stored user and auth context if available
+      const updatedUser = { ...(authContext?.user || {}), name, email, phone, address };
+      try {
+        await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+        if (authContext && authContext.login) {
+          // re-run login to refresh context and storage
+          await authContext.login(token, updatedUser);
+        }
+      } catch (e) {
+        console.warn('Failed to persist updated user locally', e);
+      }
 
       Alert.alert('Success', 'Profile updated successfully!');
       setEditModalVisible(false);
@@ -106,7 +131,8 @@ export default function CustomerProfileScreen({ route, navigation }) {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'x-user-email': authContext?.user?.email || ''
         },
         body: JSON.stringify({ address })
       });
@@ -124,7 +150,17 @@ export default function CustomerProfileScreen({ route, navigation }) {
   };
 
   const handleLogout = async () => {
-    await AsyncStorage.removeItem('token');
+    try {
+      if (authContext && authContext.logout) {
+        await authContext.logout();
+      } else {
+        await AsyncStorage.removeItem('token');
+        await AsyncStorage.removeItem('user');
+      }
+    } catch (e) {
+      console.warn('Logout cleanup error', e);
+    }
+
     navigation.reset({
       index: 0,
       routes: [{ name: 'CustomerLanding', params: { isLoggedIn: false } }],

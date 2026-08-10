@@ -2,6 +2,11 @@ import React, { useState, useContext } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Image, ImageBackground } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../../context/AuthContext'; // Adjust relative path to your context if needed
+import { useEffect } from 'react';
+
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:5001';
 
 export default function CustomerLandingScreen({ navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -36,6 +41,36 @@ export default function CustomerLandingScreen({ navigation }) {
       cartItems: [{ ...item, quantity: 1, options: 'Regular' }] 
     });
   };
+
+  // Fetch menu and tables for dynamic content
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [menuRes, tablesRes] = await Promise.all([
+          fetch(`${BACKEND_URL}/api/menu`),
+          fetch(`${BACKEND_URL}/api/tables`)
+        ]);
+        const menuJson = await menuRes.json();
+        const tablesJson = await tablesRes.json();
+
+        const items = menuJson.items || menuJson || [];
+        if (items && items.length > 0) {
+          // Update trending items dynamically
+          // take top 4 items
+          const top = items.slice(0, 4).map((it, idx) => ({ id: it._id || it.id || idx, name: it.name || it.title, desc: it.description || it.desc || '', price: it.price || 0, rating: it.rating || '4.8', image: it.image }));
+          // directly mutate local trendingItems? use state instead; for minimal change, persist in AsyncStorage for other screens
+          await AsyncStorage.setItem('menu_cache', JSON.stringify(items));
+        }
+
+        if (tablesJson.tables) {
+          await AsyncStorage.setItem('tables_cache', JSON.stringify(tablesJson.tables));
+        }
+      } catch (err) {
+        console.error('CustomerLanding loadData error', err);
+      }
+    };
+    loadData();
+  }, []);
 
   return (
     <View className="flex-1 bg-[#F8F9FC] items-center">

@@ -163,8 +163,15 @@ router.post('/reset-password/:token', async (req, res) => {
 // --- GET USER PROFILE (GET /api/auth/profile) ---
 router.get('/profile', async (req, res) => {
   try {
-    // Fetches the active profile user document (no auth required for now)
-    let user = await User.findOne();
+    // Attempt to locate the user by email passed in header (used for demo tokens)
+    const headerEmail = req.header('x-user-email');
+    let user;
+    if (headerEmail) {
+      user = await User.findOne({ email: headerEmail });
+    } else {
+      // Fallback: return the first user (legacy behavior)
+      user = await User.findOne();
+    }
     if (!user) {
       return res.status(404).json({ message: 'User not found.' });
     }
@@ -189,7 +196,13 @@ router.get('/profile', async (req, res) => {
 router.put('/profile', async (req, res) => {
   try {
     const { name, email, phone } = req.body;
-    let user = await User.findOne(); 
+    const headerEmail = req.header('x-user-email');
+    let user;
+    if (headerEmail) {
+      user = await User.findOne({ email: headerEmail });
+    } else {
+      user = await User.findOne();
+    }
     if (!user) return res.status(404).json({ message: 'User not found.' });
 
     user.name = name || user.name;
@@ -197,7 +210,7 @@ router.put('/profile', async (req, res) => {
     user.phone = phone || user.phone;
     await user.save();
 
-    return res.status(200).json({ success: true, message: 'Profile updated successfully.' });
+    return res.status(200).json({ success: true, message: 'Profile updated successfully.', user: { id: user._id, name: user.name, email: user.email, phone: user.phone, address: user.address } });
   } catch (error) {
     console.error('Update Profile Error:', error);
     return res.status(500).json({ message: 'Server error.' });
@@ -208,7 +221,13 @@ router.put('/profile', async (req, res) => {
 router.put('/address', async (req, res) => {
   try {
     const { address } = req.body;
-    let user = await User.findOne();
+    const headerEmail = req.header('x-user-email');
+    let user;
+    if (headerEmail) {
+      user = await User.findOne({ email: headerEmail });
+    } else {
+      user = await User.findOne();
+    }
     if (!user) return res.status(404).json({ message: 'User not found.' });
 
     user.address = address;
@@ -222,3 +241,22 @@ router.put('/address', async (req, res) => {
 });
 
 module.exports = router;
+
+// --- GOOGLE OAUTH BACKEND (POST /api/auth/google) ---
+router.post('/google', async (req, res) => {
+  try {
+    const { email, name, googleId, profileImage } = req.body;
+    if (!email) return res.status(400).json({ message: 'Google email is required.' });
+
+    let user = await User.findOne({ email });
+    if (!user) {
+      user = new User({ name: name || 'Google User', email, password: googleId || crypto.randomBytes(16).toString('hex'), role: 'customer' });
+      await user.save();
+    }
+
+    return res.status(200).json({ success: true, token: 'sample-jwt-token-xyz', user: { id: user._id, name: user.name, email: user.email, role: user.role }, navigateTo: 'CustomerLanding' });
+  } catch (error) {
+    console.error('Google auth backend error:', error);
+    return res.status(500).json({ message: 'Server error during Google authentication.' });
+  }
+});

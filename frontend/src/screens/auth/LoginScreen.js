@@ -9,7 +9,7 @@ import { useNavigation } from '@react-navigation/native';
 
 WebBrowser.maybeCompleteAuthSession();
 
-const BACKEND_URL = 'http://localhost:5000'; 
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:5001'; 
 
 export default function LoginScreen() {
   const authContext = useContext(AuthContext);

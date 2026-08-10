@@ -390,6 +390,10 @@ export default function WaiterDashboardScreen({ route, navigation }) {
             <Ionicons name="grid" size={18} color="#B8520B" />
             <Text className="text-[9px] font-bold text-[#B8520B] mt-0.5">Station</Text>
           </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate('WaiterLiveOrders')} className="items-center">
+            <Ionicons name="notifications" size={18} color="#757575" />
+            <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Live</Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => setNewOrderModalVisible(true)} className="items-center">
             <Ionicons name="add-circle-outline" size={18} color="#757575" />
             <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">New Order</Text>

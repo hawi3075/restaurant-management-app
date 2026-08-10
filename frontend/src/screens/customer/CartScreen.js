@@ -1,41 +1,56 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StatusBar, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function CartScreen({ route, navigation }) {
   const isLoggedIn = route?.params?.isLoggedIn ?? true;
+  const [cartItems, setCartItems] = useState([]);
 
-  const [cartItems, setCartItems] = useState([
-    {
-      id: '1',
-      name: 'Artisanal Truffle Burger',
-      options: 'Medium Rare, No Onions',
-      price: 18.50,
-      quantity: 2,
-      image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=400&q=80',
-    },
-    {
-      id: '2',
-      name: 'Sweet Potato Fries',
-      options: 'Side of Garlic Aioli',
-      price: 6.00,
-      quantity: 1,
-      image: 'https://images.unsplash.com/photo-1573080496219-bb080dd4f877?auto=format&fit=crop&w=400&q=80',
-    }
-  ]);
+  // Load cart from AsyncStorage and accept addedItem from navigation
+  useEffect(() => {
+    const loadCart = async () => {
+      try {
+        const stored = await AsyncStorage.getItem('cart');
+        let parsed = stored ? JSON.parse(stored) : [];
+        // If route provided an addedItem, merge it
+        const added = route?.params?.addedItem;
+        if (added) {
+          const existing = parsed.find(i => String(i.id) === String(added.id));
+          if (existing) {
+            parsed = parsed.map(i => i.id === existing.id ? { ...i, quantity: i.quantity + (added.quantity || 1) } : i);
+          } else {
+            parsed.unshift(added);
+          }
+          await AsyncStorage.setItem('cart', JSON.stringify(parsed));
+        }
+        setCartItems(parsed || []);
+      } catch (err) {
+        console.error('Load cart error', err);
+        setCartItems([]);
+      }
+    };
+    loadCart();
+  }, [route?.params?.addedItem]);
 
   const updateQuantity = (id, delta) => {
-    setCartItems(prev => prev.map(item => {
-      if (item.id === id) {
-        const newQty = item.quantity + delta;
-        return newQty > 0 ? { ...item, quantity: newQty } : null;
-      }
-      return item;
-    }).filter(Boolean));
+    setCartItems(prev => {
+      const next = prev.map(item => {
+        if (String(item.id) === String(id)) {
+          const newQty = item.quantity + delta;
+          return newQty > 0 ? { ...item, quantity: newQty } : null;
+        }
+        return item;
+      }).filter(Boolean);
+      AsyncStorage.setItem('cart', JSON.stringify(next)).catch(e => console.error('Save cart', e));
+      return next;
+    });
   };
 
   const removeItem = (id) => {
-    setCartItems(prev => prev.filter(item => item.id !== id));
+    const next = cartItems.filter(item => String(item.id) !== String(id));
+    setCartItems(next);
+    AsyncStorage.setItem('cart', JSON.stringify(next)).catch(e => console.error('Save cart', e));
   };
 
   const handleSingleItemCheckout = (item) => {

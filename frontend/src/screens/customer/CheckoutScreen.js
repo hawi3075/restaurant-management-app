@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView, StatusBar, TextInput, Alert }
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const BACKEND_URL = 'http://localhost:5000';
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:5001';
 
 export default function CheckoutScreen({ route, navigation }) {
   const totalAmount = route?.params?.total ?? 40.99;
@@ -27,7 +27,12 @@ export default function CheckoutScreen({ route, navigation }) {
       try {
         const token = await AsyncStorage.getItem('token');
         // Build order items from route cartItems or from defaults
-        const items = route?.params?.cartItems || [];
+        let items = route?.params?.cartItems || [];
+        if ((!items || items.length === 0)) {
+          // Try load from persisted cart
+          const stored = await AsyncStorage.getItem('cart');
+          items = stored ? JSON.parse(stored) : [];
+        }
         const orderItems = items.map(i => ({ name: i.name, quantity: i.quantity, unitPrice: i.price, menuItem: i.id }));
 
         const payload = {

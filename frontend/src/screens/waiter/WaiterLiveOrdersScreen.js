@@ -3,8 +3,8 @@ import { View, Text, TouchableOpacity, ScrollView, StatusBar, Alert } from 'reac
 import { Ionicons } from '@expo/vector-icons';
 import io from 'socket.io-client';
 
-const BACKEND_URL = 'http://localhost:5000';
-const SOCKET_URL = BACKEND_URL;
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:5001';
+const SOCKET_URL = process.env.SOCKET_URL || BACKEND_URL;
 
 export default function WaiterLiveOrdersScreen() {
   const [orders, setOrders] = useState([]);
