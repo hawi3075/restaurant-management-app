@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StatusBar, TextInput, Alert, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -14,16 +14,38 @@ export default function CheckoutScreen({ route, navigation }) {
   const [streetAddress, setStreetAddress] = useState('123 Main St, Apt 4B');
   const [city, setCity] = useState('New York');
   const [phone, setPhone] = useState('+251 911 234 567');
+  const [email, setEmail] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('telebirr');
   const [isActivatingTelebirr, setIsActivatingTelebirr] = useState(false);
-  const [telebirrReference, setTelebirrReference] = useState(`TELEBIRR-${Date.now()}`);
+  const [paymentReference, setPaymentReference] = useState(`CHAPA-${Date.now()}`);
 
-  const fallbackTelebirrUrl = useMemo(() => {
-    return process.env.EXPO_PUBLIC_TELEBIRR_PAYMENT_URL || process.env.TELEBIRR_PAYMENT_URL || '';
+  useEffect(() => {
+    const loadUserEmail = async () => {
+      try {
+        const storedUser = await AsyncStorage.getItem('user');
+        if (storedUser) {
+          const parsedUser = JSON.parse(storedUser);
+          if (parsedUser?.email) {
+            setEmail(parsedUser.email);
+          }
+          if (parsedUser?.name) {
+            setFullName(parsedUser.name);
+          }
+          if (parsedUser?.phone) {
+            setPhone(parsedUser.phone);
+          }
+        }
+      } catch (error) {
+        console.error('Load user profile error', error);
+      }
+    };
+
+    loadUserEmail();
   }, []);
 
   const paymentLabels = {
     telebirr: 'Telebirr',
+    chapa: 'Chapa',
     card: 'Credit / Debit Card',
     cash: 'Cash on Delivery'
   };
@@ -31,55 +53,22 @@ export default function CheckoutScreen({ route, navigation }) {
   const activateTelebirr = async () => {
     setIsActivatingTelebirr(true);
     try {
-      const token = await AsyncStorage.getItem('token');
-
-      // 1. Request secure payment token/URL from your backend server
-      let paymentUrl = fallbackTelebirrUrl;
-      try {
-        const res = await fetch(`${BACKEND_URL}/api/payments/telebirr/initiate`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: token ? `Bearer ${token}` : ''
-          },
-          body: JSON.stringify({
-            amount: totalAmount,
-            reference: telebirrReference,
-            serviceType,
-            phone
-          })
-        });
-
-        const data = await res.json();
-        if (res.ok && (data.paymentUrl || data.checkoutUrl)) {
-          paymentUrl = data.paymentUrl || data.checkoutUrl;
-          if (data.reference) {
-            setTelebirrReference(data.reference);
-          }
-        }
-      } catch (backendErr) {
-        console.log('Backend Telebirr init warning (falling back to env/local):', backendErr);
-      }
-
-      // 2. Open the Telebirr gateway link via Linking API
-      if (paymentUrl) {
-        const openUrl = `${paymentUrl}${paymentUrl.includes('?') ? '&' : '?'}amount=${encodeURIComponent(Number(totalAmount || 0).toFixed(2))}&reference=${encodeURIComponent(telebirrReference)}`;
-        const supported = await Linking.canOpenURL(openUrl);
-        if (!supported) {
-          throw new Error('Telebirr payment link is not supported on this device.');
-        }
-
-        await Linking.openURL(openUrl);
-        Alert.alert('Telebirr Opened', 'Complete the payment in Telebirr, then return here and place the order.');
-        return;
-      }
+      await new Promise(resolve => setTimeout(resolve, 1500));
 
       Alert.alert(
-        'Telebirr Reference Generated',
-        `Use reference ${telebirrReference} to complete your payment with Telebirr merchant checkout, then place your order.`
+        'Telebirr Prompt Sent 📱',
+        `A payment request for $${Number(totalAmount).toFixed(2)} has been sent to your phone (${phone}). Please enter your Telebirr PIN on your device to authorize.`,
+        [
+          { 
+            text: 'Simulate Success ✅', 
+            onPress: () => {
+              Alert.alert('Payment Verified!', 'Telebirr payment successful. You can now tap "Place Order Now".');
+            }
+          }
+        ]
       );
     } catch (error) {
-      Alert.alert('Telebirr Activation Failed', error.message || 'Unable to open Telebirr.');
+      Alert.alert('Telebirr Failed', 'Unable to reach Telebirr service.');
     } finally {
       setIsActivatingTelebirr(false);
     }
@@ -100,6 +89,8 @@ export default function CheckoutScreen({ route, navigation }) {
           items = stored ? JSON.parse(stored) : [];
         }
         const orderItems = items.map(i => ({ name: i.name, quantity: i.quantity, unitPrice: i.price, menuItem: i.id }));
+        const txRef = paymentReference || `CHAPA-${Date.now()}`;
+        setPaymentReference(txRef);
 
         const payload = {
           customer: null,
@@ -109,7 +100,8 @@ export default function CheckoutScreen({ route, navigation }) {
           totalAmount,
           specialInstructions: '',
           paymentMethod,
-          paymentReference: paymentMethod === 'telebirr' ? telebirrReference : ''
+          paymentReference: ['telebirr', 'chapa'].includes(paymentMethod) ? txRef : '',
+          paymentStatus: paymentMethod === 'chapa' ? 'Pending' : 'Pending'
         };
 
         const res = await fetch(`${BACKEND_URL}/api/orders`, {
@@ -120,6 +112,40 @@ export default function CheckoutScreen({ route, navigation }) {
 
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || 'Failed to place order');
+
+        if (paymentMethod === 'chapa') {
+          if (!email) {
+            throw new Error('Please sign in or provide an email before paying with Chapa.');
+          }
+
+          const paymentResponse = await fetch(`${BACKEND_URL}/api/payments/chapa/initiate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              amount: totalAmount,
+              tx_ref: txRef,
+              email,
+              first_name: fullName.split(' ')[0] || fullName,
+              last_name: fullName.split(' ').slice(1).join(' ') || fullName,
+              phone_number: phone,
+              orderId: data.order?._id,
+            }),
+          });
+
+          const paymentData = await paymentResponse.json();
+          if (!paymentResponse.ok) {
+            throw new Error(paymentData.message || 'Unable to initialize Chapa payment.');
+          }
+
+          const checkoutUrl = paymentData.checkout_url || paymentData.data?.checkout_url;
+          if (!checkoutUrl) {
+            throw new Error('Chapa did not return a checkout URL.');
+          }
+
+          Alert.alert('Redirecting to Chapa', 'Complete the payment in Chapa to confirm your order.');
+          await Linking.openURL(checkoutUrl);
+          return;
+        }
 
         Alert.alert('Order Placed Successfully!', 'Your order has been sent to the kitchen.', [
           { text: 'View Orders', onPress: () => navigation.navigate('OrderHistoryScreen') }
@@ -210,7 +236,7 @@ export default function CheckoutScreen({ route, navigation }) {
             </View>
           </View>
 
-          {/* Payment Method with Telebirr */}
+          {/* Payment Methods */}
           <Text className="text-xs font-bold text-gray-400 uppercase mb-2 ml-1 tracking-wider">Payment Method</Text>
           <View className="bg-white rounded-2xl border border-[#EAE3DE] p-3 mb-6 shadow-xs">
             
@@ -229,6 +255,23 @@ export default function CheckoutScreen({ route, navigation }) {
                 </View>
               </View>
               <Ionicons name={paymentMethod === 'telebirr' ? "radio-button-on" : "radio-button-off"} size={16} color="#B8520B" />
+            </TouchableOpacity>
+
+            {/* Chapa Option */}
+            <TouchableOpacity 
+              onPress={() => setPaymentMethod('chapa')}
+              className={`flex-row items-center justify-between p-3 rounded-xl mb-2 ${paymentMethod === 'chapa' ? 'bg-[#FEF7F3] border border-[#B8520B]/30' : ''}`}
+            >
+              <View className="flex-row items-center">
+                <View className="w-8 h-8 bg-green-50 rounded-xl items-center justify-center mr-3 border border-green-200">
+                  <Ionicons name="card-outline" size={16} color="#008000" />
+                </View>
+                <View>
+                  <Text className="text-xs font-bold text-[#1F130D]">Chapa</Text>
+                  <Text className="text-[9px] text-gray-400">Pay via Chapa payment gateway</Text>
+                </View>
+              </View>
+              <Ionicons name={paymentMethod === 'chapa' ? "radio-button-on" : "radio-button-off"} size={16} color="#B8520B" />
             </TouchableOpacity>
 
             {/* Credit Card Option */}
@@ -266,11 +309,11 @@ export default function CheckoutScreen({ route, navigation }) {
               <Text className="text-xs text-gray-500">Total Payable</Text>
               <Text className="text-base font-black text-[#B8520B]">${totalAmount.toFixed(2)}</Text>
             </View>
+
             {paymentMethod === 'telebirr' ? (
               <View className="mb-3 rounded-2xl border border-[#B8520B]/20 bg-[#FEF7F3] p-3">
                 <Text className="text-xs font-bold text-[#1F130D]">Telebirr reference</Text>
-                <Text className="text-[11px] text-gray-600 mt-1">{telebirrReference}</Text>
-                <Text className="text-[10px] text-gray-500 mt-2">Activate Telebirr first, then place the order with this reference.</Text>
+                <Text className="text-[11px] text-gray-600 mt-1">{paymentReference}</Text>
                 <TouchableOpacity
                   onPress={activateTelebirr}
                   disabled={isActivatingTelebirr}
@@ -282,6 +325,15 @@ export default function CheckoutScreen({ route, navigation }) {
                 </TouchableOpacity>
               </View>
             ) : null}
+
+            {paymentMethod === 'chapa' ? (
+              <View className="mb-3 rounded-2xl border border-[#B8520B]/20 bg-[#FEF7F3] p-3">
+                <Text className="text-xs font-bold text-[#1F130D]">Chapa Reference</Text>
+                <Text className="text-[11px] text-gray-600 mt-1">{paymentReference}</Text>
+                <Text className="text-[10px] text-gray-500 mt-2">The app will open Chapa when you place the order.</Text>
+              </View>
+            ) : null}
+
             <TouchableOpacity 
               onPress={handlePlaceOrder}
               className="bg-[#B8520B] py-4 rounded-xl items-center shadow-md active:opacity-95"
