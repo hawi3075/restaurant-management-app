@@ -18,7 +18,7 @@ export default function CheckoutScreen({ route, navigation }) {
   const [isActivatingTelebirr, setIsActivatingTelebirr] = useState(false);
   const [telebirrReference, setTelebirrReference] = useState(`TELEBIRR-${Date.now()}`);
 
-  const telebirrActivationUrl = useMemo(() => {
+  const fallbackTelebirrUrl = useMemo(() => {
     return process.env.EXPO_PUBLIC_TELEBIRR_PAYMENT_URL || process.env.TELEBIRR_PAYMENT_URL || '';
   }, []);
 
@@ -31,8 +31,39 @@ export default function CheckoutScreen({ route, navigation }) {
   const activateTelebirr = async () => {
     setIsActivatingTelebirr(true);
     try {
-      if (telebirrActivationUrl) {
-        const openUrl = `${telebirrActivationUrl}${telebirrActivationUrl.includes('?') ? '&' : '?'}amount=${encodeURIComponent(Number(totalAmount || 0).toFixed(2))}&reference=${encodeURIComponent(telebirrReference)}`;
+      const token = await AsyncStorage.getItem('token');
+
+      // 1. Request secure payment token/URL from your backend server
+      let paymentUrl = fallbackTelebirrUrl;
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/payments/telebirr/initiate`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: token ? `Bearer ${token}` : ''
+          },
+          body: JSON.stringify({
+            amount: totalAmount,
+            reference: telebirrReference,
+            serviceType,
+            phone
+          })
+        });
+
+        const data = await res.json();
+        if (res.ok && (data.paymentUrl || data.checkoutUrl)) {
+          paymentUrl = data.paymentUrl || data.checkoutUrl;
+          if (data.reference) {
+            setTelebirrReference(data.reference);
+          }
+        }
+      } catch (backendErr) {
+        console.log('Backend Telebirr init warning (falling back to env/local):', backendErr);
+      }
+
+      // 2. Open the Telebirr gateway link via Linking API
+      if (paymentUrl) {
+        const openUrl = `${paymentUrl}${paymentUrl.includes('?') ? '&' : '?'}amount=${encodeURIComponent(Number(totalAmount || 0).toFixed(2))}&reference=${encodeURIComponent(telebirrReference)}`;
         const supported = await Linking.canOpenURL(openUrl);
         if (!supported) {
           throw new Error('Telebirr payment link is not supported on this device.');
@@ -44,8 +75,8 @@ export default function CheckoutScreen({ route, navigation }) {
       }
 
       Alert.alert(
-        'Telebirr Not Configured',
-        `No Telebirr gateway URL is configured yet. Use reference ${telebirrReference} with your merchant checkout flow, then place the order manually.`
+        'Telebirr Reference Generated',
+        `Use reference ${telebirrReference} to complete your payment with Telebirr merchant checkout, then place your order.`
       );
     } catch (error) {
       Alert.alert('Telebirr Activation Failed', error.message || 'Unable to open Telebirr.');
@@ -63,10 +94,8 @@ export default function CheckoutScreen({ route, navigation }) {
     (async () => {
       try {
         const token = await AsyncStorage.getItem('token');
-        // Build order items from route cartItems or from defaults
         let items = route?.params?.cartItems || [];
         if ((!items || items.length === 0)) {
-          // Try load from persisted cart
           const stored = await AsyncStorage.getItem('cart');
           items = stored ? JSON.parse(stored) : [];
         }
