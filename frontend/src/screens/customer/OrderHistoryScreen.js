@@ -19,12 +19,11 @@ export default function OrderHistoryScreen({ route, navigation }) {
     // Connect to Socket.io for real-time order status updates
     const socket = io(BACKEND_URL);
 
-    socket.on('order_status_updated', (updatedOrder) => {
-      // Re-fetch orders instantly when a status change is broadcasted
+    socket.on('order_status_updated', () => {
       fetchUserOrders();
     });
 
-    socket.on('new_kitchen_order', (newOrder) => {
+    socket.on('new_kitchen_order', () => {
       fetchUserOrders();
     });
 
@@ -42,7 +41,7 @@ export default function OrderHistoryScreen({ route, navigation }) {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         }
       });
 
@@ -52,8 +51,8 @@ export default function OrderHistoryScreen({ route, navigation }) {
       const allOrders = data.orders || [];
       
       // Separate active vs delivered/completed history items directly from database results
-      const active = allOrders.filter(o => o.status !== 'Delivered' && o.status !== 'Cancelled');
-      const past = allOrders.filter(o => o.status === 'Delivered' || o.status === 'Cancelled');
+      const active = allOrders.filter(o => o.status !== 'Delivered' && o.status !== 'Cancelled' && o.status !== 'Served');
+      const past = allOrders.filter(o => o.status === 'Delivered' || o.status === 'Cancelled' || o.status === 'Served');
 
       setActiveOrders(active);
       setPastOrders(past);
@@ -122,38 +121,48 @@ export default function OrderHistoryScreen({ route, navigation }) {
               </Text>
             </View>
           ) : (
-            displayedOrders.map((order) => (
-              <View key={order.id} className="bg-white rounded-2xl border border-[#EAE3DE] p-4 mb-3 shadow-xs">
-                <View className="flex-row justify-between items-center mb-3 border-b border-[#F8F9FC] pb-2.5">
-                  <View>
-                    <Text className="text-xs font-black text-[#1F130D]">{order.id}</Text>
-                    <Text className="text-[9px] text-gray-400">{order.date}</Text>
+            displayedOrders.map((order) => {
+              // Extract and map item names cleanly from orderItems array
+              const itemNames = order.orderItems?.map(i => `${i.quantity}x ${i.name || i.menuItem?.name || 'Item'}`).join(', ') || 'Custom Order';
+              const orderIdDisplay = `#${order._id ? order._id.slice(-6).toUpperCase() : '000000'}`;
+              const orderDate = new Date(order.createdAt).toLocaleDateString() + ' ' + new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+              
+              return (
+                <View key={order._id} className="bg-white rounded-2xl border border-[#EAE3DE] p-4 mb-3 shadow-xs">
+                  <View className="flex-row justify-between items-center mb-3 border-b border-[#F8F9FC] pb-2.5">
+                    <View>
+                      <Text className="text-xs font-black text-[#1F130D]">{orderIdDisplay}</Text>
+                      <Text className="text-[9px] text-gray-400">{orderDate}</Text>
+                    </View>
+                    <View className={`px-2.5 py-1 rounded-full ${order.status === 'Preparing' || order.status === 'Pending' ? 'bg-[#FEF7F3] border border-[#B8520B]/30' : 'bg-green-50 border border-green-200'}`}>
+                      <Text className={`text-[9px] font-bold ${order.status === 'Preparing' || order.status === 'Pending' ? 'text-[#B8520B]' : 'text-green-600'}`}>
+                        {order.status}
+                      </Text>
+                    </View>
                   </View>
-                  <View className={`px-2.5 py-1 rounded-full ${order.status === 'Preparing' ? 'bg-[#FEF7F3] border border-[#B8520B]/30' : 'bg-green-50 border border-green-200'}`}>
-                    <Text className={`text-[9px] font-bold ${order.status === 'Preparing' ? 'text-[#B8520B]' : 'text-green-600'}`}>
-                      {order.status}
-                    </Text>
-                  </View>
-                </View>
 
-                <View className="flex-row items-center mb-3">
-                  <Image source={{ uri: order.image }} className="w-14 h-14 rounded-xl mr-3" />
-                  <View className="flex-1">
-                    <Text className="text-[11px] font-bold text-[#1F130D] mb-1" numberOfLines={2}>{order.items}</Text>
-                    <Text className="text-xs font-black text-[#B8520B]">{order.total}</Text>
+                  <View className="flex-row items-center mb-3">
+                    <View className="w-14 h-14 bg-[#FEF7F3] rounded-xl mr-3 items-center justify-center border border-[#B8520B]/20">
+                      <Ionicons name="fast-food-outline" size={24} color="#B8520B" />
+                    </View>
+                    <View className="flex-1">
+                      <Text className="text-[11px] font-bold text-[#1F130D] mb-1" numberOfLines={2}>{itemNames}</Text>
+                      <Text className="text-xs font-black text-[#B8520B]">ETB {order.totalAmount?.toFixed(2)}</Text>
+                    </View>
+                  </View>
+
+                  <View className="flex-row justify-between items-center pt-2 border-t border-[#F8F9FC]">
+                    <Text className="text-[10px] text-gray-400 uppercase font-semibold">Payment: {order.paymentMethod || 'Cash'}</Text>
+                    <TouchableOpacity 
+                      onPress={() => navigation.navigate('MenuScreen')}
+                      className="bg-[#FEF7F3] border border-[#B8520B]/30 px-3 py-1.5 rounded-xl"
+                    >
+                      <Text className="text-[10px] font-bold text-[#B8520B]">Reorder</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
-
-                <View className="flex-row justify-end space-x-2 pt-2 border-t border-[#F8F9FC]">
-                  <TouchableOpacity 
-                    onPress={() => navigation.navigate('MenuScreen')}
-                    className="bg-[#FEF7F3] border border-[#B8520B]/30 px-3 py-1.5 rounded-xl"
-                  >
-                    <Text className="text-[10px] font-bold text-[#B8520B]">Reorder</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))
+              );
+            })
           )}
         </ScrollView>
 
