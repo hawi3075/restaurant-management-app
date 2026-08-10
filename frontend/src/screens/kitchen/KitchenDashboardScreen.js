@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView, StatusBar, Image, Modal, Text
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
+import { CommonActions } from '@react-navigation/native';
 import { BACKEND_URL } from '../../api/backend';
 
 export default function KitchenDashboardScreen({ route, navigation }) {
@@ -67,20 +68,18 @@ export default function KitchenDashboardScreen({ route, navigation }) {
 
   const handleLogout = async () => {
     try {
-      // Clear token and user data completely from storage
       await AsyncStorage.removeItem('token');
       await AsyncStorage.removeItem('user');
       await AsyncStorage.clear();
 
-      // Close profile modal immediately
       setProfileModalVisible(false);
 
-      // Reset navigation stack directly to your Login screen
-      // (Change 'Login' below to match your actual route name if it is 'LoginScreen' or 'Auth')
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'Login' }],
-      });
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [{ name: 'Login' }], // Ensure 'Login' matches your root navigator route name
+        })
+      );
     } catch (error) {
       console.error('Logout Error:', error);
       Alert.alert('Error', 'Failed to log out properly.');
