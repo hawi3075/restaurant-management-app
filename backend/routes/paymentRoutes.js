@@ -82,7 +82,7 @@ router.post('/chapa/initiate', async (req, res) => {
       callback_url: buildCallbackUrl(req),
       return_url: buildReturnUrl(tx_ref),
       customization: {
-        title: 'Restaurant Order Payment',
+        title: 'Order Payment',
         description: `Payment for order ${tx_ref}`,
       },
     };

@@ -78,6 +78,15 @@ app.get('/', (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
+server.on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`Port ${PORT} is already in use. Another backend instance is already running.`);
+    process.exit(1);
+  }
+
+  throw error;
+});
+
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
