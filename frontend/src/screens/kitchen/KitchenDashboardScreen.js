@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView, StatusBar, Image, Modal, Text
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
+import { io } from 'socket.io-client';
 import { BACKEND_URL } from '../../api/backend';
 
 export default function KitchenDashboardScreen({ route, navigation }) {
@@ -23,7 +24,6 @@ export default function KitchenDashboardScreen({ route, navigation }) {
 
   const loadChefProfile = async () => {
     try {
-      // Check if user info was passed via route params or saved in AsyncStorage
       const storedUser = await AsyncStorage.getItem('user');
       if (storedUser) {
         const parsedUser = JSON.parse(storedUser);
@@ -67,12 +67,24 @@ export default function KitchenDashboardScreen({ route, navigation }) {
   };
 
   const handleLogout = async () => {
-    await AsyncStorage.removeItem('token');
-    await AsyncStorage.removeItem('user');
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'CustomerLanding', params: { isLoggedIn: false } }],
-    });
+    try {
+      // Clear token and user data completely from storage
+      await AsyncStorage.removeItem('token');
+      await AsyncStorage.removeItem('user');
+      await AsyncStorage.clear();
+
+      // Close profile modal if open
+      setProfileModalVisible(false);
+
+      // Reset navigation stack back to customer landing / login screen
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'CustomerLanding', params: { isLoggedIn: false } }],
+      });
+    } catch (error) {
+      console.error('Logout Error:', error);
+      Alert.alert('Error', 'Failed to log out properly.');
+    }
   };
 
   const saveProfileChanges = async () => {
