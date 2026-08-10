@@ -3,7 +3,6 @@ import { View, Text, TouchableOpacity, ScrollView, StatusBar, Image, Modal, Text
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
-import { CommonActions } from '@react-navigation/native';
 import { BACKEND_URL } from '../../api/backend';
 
 export default function KitchenDashboardScreen({ route, navigation }) {
@@ -71,15 +70,7 @@ export default function KitchenDashboardScreen({ route, navigation }) {
       await AsyncStorage.removeItem('token');
       await AsyncStorage.removeItem('user');
       await AsyncStorage.clear();
-
       setProfileModalVisible(false);
-
-      navigation.dispatch(
-        CommonActions.reset({
-          index: 0,
-          routes: [{ name: 'Login' }], // Ensure 'Login' matches your root navigator route name
-        })
-      );
     } catch (error) {
       console.error('Logout Error:', error);
       Alert.alert('Error', 'Failed to log out properly.');
