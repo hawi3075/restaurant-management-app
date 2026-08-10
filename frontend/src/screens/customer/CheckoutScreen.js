@@ -16,12 +16,11 @@ export default function CheckoutScreen({ route, navigation }) {
   const [phone, setPhone] = useState('+251 911 234 567');
   const [paymentMethod, setPaymentMethod] = useState('telebirr');
   const [isActivatingTelebirr, setIsActivatingTelebirr] = useState(false);
+  const [telebirrReference, setTelebirrReference] = useState(`TELEBIRR-${Date.now()}`);
 
   const telebirrActivationUrl = useMemo(() => {
-    const amount = Number(totalAmount || 0).toFixed(2);
-    const reference = `DF-${Date.now()}`;
-    return `https://telebirr.et/pay?amount=${encodeURIComponent(amount)}&reference=${encodeURIComponent(reference)}`;
-  }, [totalAmount]);
+    return process.env.EXPO_PUBLIC_TELEBIRR_PAYMENT_URL || process.env.TELEBIRR_PAYMENT_URL || '';
+  }, []);
 
   const paymentLabels = {
     telebirr: 'Telebirr',
@@ -32,13 +31,22 @@ export default function CheckoutScreen({ route, navigation }) {
   const activateTelebirr = async () => {
     setIsActivatingTelebirr(true);
     try {
-      const supported = await Linking.canOpenURL(telebirrActivationUrl);
-      if (!supported) {
-        throw new Error('Telebirr activation link is not supported on this device.');
+      if (telebirrActivationUrl) {
+        const openUrl = `${telebirrActivationUrl}${telebirrActivationUrl.includes('?') ? '&' : '?'}amount=${encodeURIComponent(Number(totalAmount || 0).toFixed(2))}&reference=${encodeURIComponent(telebirrReference)}`;
+        const supported = await Linking.canOpenURL(openUrl);
+        if (!supported) {
+          throw new Error('Telebirr payment link is not supported on this device.');
+        }
+
+        await Linking.openURL(openUrl);
+        Alert.alert('Telebirr Opened', 'Complete the payment in Telebirr, then return here and place the order.');
+        return;
       }
 
-      await Linking.openURL(telebirrActivationUrl);
-      Alert.alert('Telebirr Activated', 'Complete the payment in Telebirr, then return here and place the order.');
+      Alert.alert(
+        'Telebirr Not Configured',
+        `No Telebirr gateway URL is configured yet. Use reference ${telebirrReference} with your merchant checkout flow, then place the order manually.`
+      );
     } catch (error) {
       Alert.alert('Telebirr Activation Failed', error.message || 'Unable to open Telebirr.');
     } finally {
@@ -72,7 +80,7 @@ export default function CheckoutScreen({ route, navigation }) {
           totalAmount,
           specialInstructions: '',
           paymentMethod,
-          paymentReference: paymentMethod === 'telebirr' ? `TELEBIRR-${Date.now()}` : ''
+          paymentReference: paymentMethod === 'telebirr' ? telebirrReference : ''
         };
 
         const res = await fetch(`${BACKEND_URL}/api/orders`, {
@@ -230,15 +238,20 @@ export default function CheckoutScreen({ route, navigation }) {
               <Text className="text-base font-black text-[#B8520B]">${totalAmount.toFixed(2)}</Text>
             </View>
             {paymentMethod === 'telebirr' ? (
-              <TouchableOpacity
-                onPress={activateTelebirr}
-                disabled={isActivatingTelebirr}
-                className="bg-[#0052CC] py-4 rounded-xl items-center shadow-md active:opacity-95 mb-3"
-              >
-                <Text className="text-white font-bold text-xs uppercase tracking-wider">
-                  {isActivatingTelebirr ? 'Activating Telebirr...' : 'Activate Telebirr Payment'}
-                </Text>
-              </TouchableOpacity>
+              <View className="mb-3 rounded-2xl border border-[#B8520B]/20 bg-[#FEF7F3] p-3">
+                <Text className="text-xs font-bold text-[#1F130D]">Telebirr reference</Text>
+                <Text className="text-[11px] text-gray-600 mt-1">{telebirrReference}</Text>
+                <Text className="text-[10px] text-gray-500 mt-2">Activate Telebirr first, then place the order with this reference.</Text>
+                <TouchableOpacity
+                  onPress={activateTelebirr}
+                  disabled={isActivatingTelebirr}
+                  className="bg-[#0052CC] py-3 rounded-xl items-center shadow-md active:opacity-95 mt-3"
+                >
+                  <Text className="text-white font-bold text-xs uppercase tracking-wider">
+                    {isActivatingTelebirr ? 'Activating Telebirr...' : 'Activate Telebirr Payment'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             ) : null}
             <TouchableOpacity 
               onPress={handlePlaceOrder}

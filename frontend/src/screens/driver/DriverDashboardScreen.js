@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StatusBar, Image, Modal, TextInput } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StatusBar, Image, Modal, TextInput, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { BACKEND_URL } from '../../api/backend';
 
 export default function DriverDashboardScreen({ route, navigation }) {
   const [profileModalVisible, setProfileModalVisible] = useState(false);
@@ -9,52 +10,43 @@ export default function DriverDashboardScreen({ route, navigation }) {
   const [driverEmail, setDriverEmail] = useState('alex.driver@restaurant.com');
   const [driverPhone, setDriverPhone] = useState('+1 444 892 109');
   const [driverImage, setDriverImage] = useState(null);
+  const [isLoadingDeliveries, setIsLoadingDeliveries] = useState(true);
 
   const [activeTab, setActiveTab] = useState('All');
   
-  // Delivery Orders Queue
-  const [deliveries, setDeliveries] = useState([
-    {
-      id: 'd1',
-      customer: 'Sarah Jenkins',
-      address: '123 Maple Street, Apt 4B',
-      phone: '+1 987 654 321',
-      time: '10m ago',
-      status: 'Ready for Pickup',
-      items: [
-        { name: '1x Family Combo Meal', note: 'Extra napkins' },
-        { name: '2x Large Cokes', note: 'Cold' }
-      ],
-      total: '$45.00',
-      image: null
-    },
-    {
-      id: 'd2',
-      customer: 'Michael Scott',
-      address: '1725 Slough Avenue',
-      phone: '+1 570 555 019',
-      time: '25m ago',
-      status: 'On the Way',
-      items: [
-        { name: '2x Pepperoni Pizzas', note: 'Well done crust' }
-      ],
-      total: '$32.00',
-      image: null
-    },
-    {
-      id: 'd3',
-      customer: 'Pam Beesly',
-      address: '88 Scranton Business Park',
-      phone: '+1 570 555 882',
-      time: '1h ago',
-      status: 'Delivered',
-      items: [
-        { name: '1x Caesar Salad', note: 'Dressing on the side' }
-      ],
-      total: '$18.50',
-      image: null
+  const [deliveries, setDeliveries] = useState([]);
+
+  useEffect(() => {
+    fetchDeliveries();
+  }, []);
+
+  const fetchDeliveries = async () => {
+    try {
+      setIsLoadingDeliveries(true);
+      const response = await fetch(`${BACKEND_URL}/api/orders/user`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to fetch deliveries');
+
+      const mapped = (data.orders || []).map((order, index) => ({
+        id: order.id || `d${index + 1}`,
+        customer: 'Customer',
+        address: 'Delivery Address Pending',
+        phone: '+251 000 000 000',
+        time: order.date || 'Now',
+        status: order.deliveryStatus || (order.status === 'Ready' ? 'Ready for Pickup' : order.status === 'Served' ? 'Delivered' : 'On the Way'),
+        items: (order.items || '').split(', ').map((entry) => ({ name: entry || '1x Item', note: order.paymentMethod === 'telebirr' ? 'Telebirr paid' : 'Pending payment' })),
+        total: order.total || '$0.00',
+        image: order.image || null
+      }));
+
+      setDeliveries(mapped);
+    } catch (error) {
+      console.error('Fetch Deliveries Error:', error);
+      setDeliveries([]);
+    } finally {
+      setIsLoadingDeliveries(false);
     }
-  ]);
+  };
 
   const handleLogout = () => {
     navigation.reset({
@@ -76,8 +68,23 @@ export default function DriverDashboardScreen({ route, navigation }) {
     }
   };
 
-  const updateDeliveryStatus = (id, newStatus) => {
-    setDeliveries(deliveries.map(order => order.id === id ? { ...order, status: newStatus } : order));
+  const updateDeliveryStatus = async (id, newStatus) => {
+    try {
+      const apiStatus = newStatus === 'On the Way' ? 'Ready' : newStatus === 'Delivered' ? 'Served' : newStatus;
+      const response = await fetch(`${BACKEND_URL}/api/orders/${id}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: apiStatus })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to update delivery');
+
+      setDeliveries((prev) => prev.map((order) => (order.id === id ? { ...order, status: newStatus } : order)));
+    } catch (error) {
+      console.error('Update Delivery Error:', error);
+      Alert.alert('Error', error.message || 'Unable to update delivery status');
+    }
   };
 
   const filteredDeliveries = deliveries.filter(order => {
@@ -155,7 +162,15 @@ export default function DriverDashboardScreen({ route, navigation }) {
           </Text>
 
           {/* Delivery Cards List */}
-          {filteredDeliveries.map((delivery) => (
+          {isLoadingDeliveries ? (
+            <View className="py-16 items-center justify-center">
+              <ActivityIndicator size="large" color="#B8520B" />
+            </View>
+          ) : filteredDeliveries.length === 0 ? (
+            <View className="py-16 items-center justify-center">
+              <Text className="text-sm text-gray-500">No deliveries yet.</Text>
+            </View>
+          ) : filteredDeliveries.map((delivery) => (
             <View key={delivery.id} className={`bg-white rounded-3xl p-4 border mb-3 shadow-xs ${delivery.status === 'Ready for Pickup' ? 'border-[#B8520B]' : 'border-[#EAE3DE]'}`}>
               <View className="flex-row justify-between items-center mb-2.5 pb-2.5 border-b border-[#F8F9FC]">
                 <View className="flex-row items-center">

@@ -18,11 +18,14 @@ router.get('/user', async (req, res) => {
         minute: '2-digit' 
       }),
       status: order.status || 'Preparing',
-      items: order.items && order.items.length > 0 
-        ? order.items.map(item => `${item.quantity || 1}x ${item.name}`).join(', ') 
+      paymentStatus: order.paymentStatus || 'Pending',
+      paymentMethod: order.paymentMethod || 'telebirr',
+      items: order.orderItems && order.orderItems.length > 0 
+        ? order.orderItems.map(item => `${item.quantity || 1}x ${item.name || 'Item'}`).join(', ')
         : '1x Custom Meal',
       total: `$${(order.totalAmount || 0).toFixed(2)}`,
-      image: order.items?.[0]?.image || 'https://images.unsplash.com/photo-1541544741938-0af808871cc0?auto=format&fit=crop&w=400&q=80'
+      image: order.orderItems?.[0]?.image || 'https://images.unsplash.com/photo-1541544741938-0af808871cc0?auto=format&fit=crop&w=400&q=80',
+      deliveryStatus: order.status === 'Served' ? 'Delivered' : order.status === 'Ready' ? 'Ready for Pickup' : order.status === 'Preparing' ? 'Cooking' : 'Pending'
     }));
 
     return res.status(200).json({ success: true, orders: formattedOrders });
@@ -81,7 +84,15 @@ router.put('/:id/status', async (req, res) => {
     const order = await Order.findById(id);
     if (!order) return res.status(404).json({ message: 'Order not found.' });
 
-    order.status = status || order.status;
+    const normalizedStatus = String(status || '').trim();
+    const statusMap = {
+      'Preparing': 'Preparing',
+      'Ready': 'Ready',
+      'Served': 'Served',
+      'Delivered': 'Served'
+    };
+
+    order.status = statusMap[normalizedStatus] || order.status;
     await order.save();
 
     // Emit status update
