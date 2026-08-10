@@ -3,7 +3,6 @@ import { View, Text, TouchableOpacity, ScrollView, StatusBar, Image, Modal, Text
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
-import { io } from 'socket.io-client';
 import { BACKEND_URL } from '../../api/backend';
 
 export default function KitchenDashboardScreen({ route, navigation }) {
@@ -73,13 +72,14 @@ export default function KitchenDashboardScreen({ route, navigation }) {
       await AsyncStorage.removeItem('user');
       await AsyncStorage.clear();
 
-      // Close profile modal if open
+      // Close profile modal immediately
       setProfileModalVisible(false);
 
-      // Reset navigation stack back to customer landing / login screen
+      // Reset navigation stack directly to your Login screen
+      // (Change 'Login' below to match your actual route name if it is 'LoginScreen' or 'Auth')
       navigation.reset({
         index: 0,
-        routes: [{ name: 'CustomerLanding', params: { isLoggedIn: false } }],
+        routes: [{ name: 'Login' }],
       });
     } catch (error) {
       console.error('Logout Error:', error);
