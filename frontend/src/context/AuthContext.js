@@ -1,4 +1,3 @@
-```jsx
 import React, { createContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -57,19 +56,20 @@ export const AuthProvider = ({ children }) => {
       console.log('Logging in user:', userData);
       console.log('User role:', userData.role);
 
+      // Ensure saved user has a role (default to 'customer') so navigator can route correctly
+      const userToSave = Object.assign({}, userData, { role: userData.role || 'customer' });
+
       // Save token
       await AsyncStorage.setItem('token', token);
 
       // Save user including role
-      await AsyncStorage.setItem(
-        'user',
-        JSON.stringify(userData)
-      );
+      console.log('Saving user to storage:', JSON.stringify(userToSave, null, 2));
+      await AsyncStorage.setItem('user', JSON.stringify(userToSave));
 
       // Update React state
       // This automatically makes App.js show
       // the correct role-based dashboard
-      setUser(userData);
+      setUser(userToSave);
 
       return true;
     } catch (error) {
@@ -105,4 +105,3 @@ export const AuthProvider = ({ children }) => {
     </AuthContext.Provider>
   );
 };
-```

@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StatusBar, TextInput, Modal, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { AuthContext } from '../../context/AuthContext';
 import * as ImagePicker from 'expo-image-picker';
 
 export default function WaiterDashboardScreen({ route, navigation }) {
+  const authContext = useContext(AuthContext);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [name, setName] = useState('Sarah Jenkins');
   const [email, setEmail] = useState('sarah.jenkins@restaurant.com');
@@ -61,10 +63,14 @@ export default function WaiterDashboardScreen({ route, navigation }) {
   ]);
 
   const handleLogout = () => {
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'CustomerLanding', params: { isLoggedIn: false } }],
-    });
+    (async () => {
+      try {
+        if (authContext && authContext.logout) await authContext.logout();
+      } catch (err) {
+        console.error('Logout failed', err);
+      }
+      navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+    })();
   };
 
   const pickProfileImage = async () => {

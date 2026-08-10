@@ -5,11 +5,8 @@ const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
-  role: {
-    type: String,
-    enum: ['customer', 'manager', 'kitchen', 'waiter', 'driver'],
-    default: 'customer'
-  },
+  role: { type: String, default: 'customer' },
+  active: { type: Boolean, default: true },
   resetPasswordToken: { type: String },
   resetPasswordExpires: { type: Date }
 }, { timestamps: true });

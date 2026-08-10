@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Modal, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function SupportMessageScreen({ navigation }) {
   const [messages, setMessages] = useState([
-    { id: '1', user: 'Abebe Kebede', message: 'Hello, when will my delivery arrive?', time: '10:42 AM', status: 'Pending' },
-    { id: '2', user: 'Sara Tadesse', message: 'Can I change my order item after checkout?', time: '09:15 AM', status: 'Resolved' },
+    // placeholder while loading
   ]);
+  
   
   const [selectedChat, setSelectedChat] = useState(null);
   const [replyText, setReplyText] = useState('');
@@ -24,11 +24,37 @@ export default function SupportMessageScreen({ navigation }) {
       return;
     }
 
-    // Update message status to resolved and close modal
-    setMessages(messages.map(m => m.id === selectedChat.id ? { ...m, status: 'Resolved' } : m));
-    setIsModalVisible(false);
-    Alert.alert('Success', 'Reply sent successfully!');
+    // send reply to backend
+    fetch(`http://localhost:5000/api/support/${selectedChat.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reply: replyText, status: 'Resolved' })
+    }).then(r => r.json()).then(j => {
+      if (j.success && j.message) {
+        setMessages(prev => prev.map(m => m._id === j.message._id || m.id === j.message._id ? { ...m, reply: j.message.reply, status: j.message.status } : m));
+        setIsModalVisible(false);
+        Alert.alert('Success', 'Reply sent successfully!');
+      } else {
+        Alert.alert('Error', 'Failed to send reply');
+      }
+    }).catch(err => {
+      console.error('Reply error', err);
+      Alert.alert('Error', 'Failed to send reply');
+    });
   };
+
+  useEffect(() => {
+    const fetchMessages = async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/support');
+        const data = await res.json();
+        if (Array.isArray(data)) setMessages(data);
+      } catch (err) {
+        console.error('Fetch support messages error', err);
+      }
+    };
+    fetchMessages();
+  }, []);
 
   return (
     <View className="flex-1 bg-[#F8FAFC] items-center justify-center">

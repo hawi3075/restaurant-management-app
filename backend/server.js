@@ -25,11 +25,25 @@ app.use(cors());
 const authRoutes = require('./routes/authRoutes');
 const menuRoutes = require('./routes/menuRoutes');
 const orderRoutes = require('./routes/orderRoutes');
+const staffRoutes = require('./routes/staffRoutes');
+const inventoryRoutes = require('./routes/inventoryRoutes');
+const supportRoutes = require('./routes/supportRoutes');
+const userRoutes = require('./routes/userRoutes');
+const adminRoutes = require('./routes/adminRoutes');
+const reviewRoutes = require('./routes/reviewRoutes');
+const tableRoutes = require('./routes/tableRoutes');
 
 // Mount Routes (All /api/auth/* requests go to authRoutes.js)
 app.use('/api/auth', authRoutes);
 app.use('/api/menu', menuRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/staff', staffRoutes);
+app.use('/api/inventory', inventoryRoutes);
+app.use('/api/support', supportRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/reviews', reviewRoutes);
+app.use('/api/tables', tableRoutes);
 
 // Database Connection
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/restaurant_db')
@@ -52,6 +66,9 @@ io.on('connection', (socket) => {
     console.log(`User Disconnected: ${socket.id}`);
   });
 });
+
+// Make io available to routes via app locals
+app.set('io', io);
 
 // Test Route
 app.get('/', (req, res) => {

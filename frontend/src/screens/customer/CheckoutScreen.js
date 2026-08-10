@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StatusBar, TextInput, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const BACKEND_URL = 'http://localhost:5000';
 
 export default function CheckoutScreen({ route, navigation }) {
   const totalAmount = route?.params?.total ?? 40.99;
@@ -20,16 +23,39 @@ export default function CheckoutScreen({ route, navigation }) {
       return;
     }
     
-    Alert.alert(
-      'Order Placed Successfully!', 
-      `Your order has been sent. Payment via ${paymentMethod === 'telebirr' ? 'Telebirr' : paymentMethod === 'card' ? 'Credit Card' : 'Cash'} is confirmed.`,
-      [
-        { 
-          text: 'View Orders', 
-          onPress: () => navigation.navigate('OrderHistoryScreen') 
-        }
-      ]
-    );
+    (async () => {
+      try {
+        const token = await AsyncStorage.getItem('token');
+        // Build order items from route cartItems or from defaults
+        const items = route?.params?.cartItems || [];
+        const orderItems = items.map(i => ({ name: i.name, quantity: i.quantity, unitPrice: i.price, menuItem: i.id }));
+
+        const payload = {
+          customer: null,
+          table: route?.params?.selectedTableId || null,
+          waiter: null,
+          orderItems,
+          totalAmount,
+          specialInstructions: ''
+        };
+
+        const res = await fetch(`${BACKEND_URL}/api/orders`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: token ? `Bearer ${token}` : '' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Failed to place order');
+
+        Alert.alert('Order Placed Successfully!', 'Your order has been sent to the kitchen.', [
+          { text: 'View Orders', onPress: () => navigation.navigate('OrderHistoryScreen') }
+        ]);
+      } catch (err) {
+        console.error('Place Order Error:', err);
+        Alert.alert('Order Failed', err.message || 'Unable to place order');
+      }
+    })();
   };
 
   return (

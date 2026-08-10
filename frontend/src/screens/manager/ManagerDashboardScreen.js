@@ -3,12 +3,50 @@ import { View, Text, TouchableOpacity, ScrollView, StatusBar } from 'react-nativ
 import { Ionicons } from '@expo/vector-icons';
 
 export default function ManagerDashboardScreen({ navigation }) {
-  const stats = [
-    { title: "Today's Revenue", value: '$1,245.80', icon: 'cash-outline', color: '#F97316', bg: 'bg-orange-500/10' },
-    { title: 'Active Orders', value: '14', icon: 'receipt-outline', color: '#38BDF8', bg: 'bg-sky-500/10' },
-    { title: 'Total Staff', value: '8 On Duty', icon: 'people-outline', color: '#34D399', bg: 'bg-emerald-500/10' },
-    { title: 'Inventory', value: '3 Items', icon: 'cube-outline', color: '#A855F7', bg: 'bg-purple-500/10' },
-  ];
+  const [stats, setStats] = React.useState([
+    { title: "Today's Revenue", value: '$0.00', icon: 'cash-outline', color: '#F97316', bg: 'bg-orange-500/10' },
+    { title: 'Active Orders', value: '0', icon: 'receipt-outline', color: '#38BDF8', bg: 'bg-sky-500/10' },
+    { title: 'Total Staff', value: '0', icon: 'people-outline', color: '#34D399', bg: 'bg-emerald-500/10' },
+    { title: 'Inventory', value: '0 Items', icon: 'cube-outline', color: '#A855F7', bg: 'bg-purple-500/10' },
+  ]);
+
+  React.useEffect(() => {
+    const fetchMetrics = async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/admin/metrics');
+        const j = await res.json();
+        if (j) {
+          setStats([
+            { title: "Today's Revenue", value: `$${(j.revenue||0).toFixed(2)}`, icon: 'cash-outline', color: '#F97316', bg: 'bg-orange-500/10' },
+            { title: 'Active Orders', value: String(j.activeOrders||0), icon: 'receipt-outline', color: '#38BDF8', bg: 'bg-sky-500/10' },
+            { title: 'Total Staff', value: String(j.totalStaff||0)+' Members', icon: 'people-outline', color: '#34D399', bg: 'bg-emerald-500/10' },
+            { title: 'Inventory', value: String(j.inventoryItems||0)+' Items', icon: 'cube-outline', color: '#A855F7', bg: 'bg-purple-500/10' },
+          ]);
+        }
+      } catch (err) {
+        console.error('Fetch metrics error', err);
+      }
+    };
+    fetchMetrics();
+  }, []);
+
+  // Allow manual refresh
+  const refreshMetrics = async () => {
+    try {
+      const res = await fetch('http://localhost:5000/api/admin/metrics');
+      const j = await res.json();
+      if (j) {
+        setStats([
+          { title: "Today's Revenue", value: `$${(j.revenue||0).toFixed(2)}`, icon: 'cash-outline', color: '#F97316', bg: 'bg-orange-500/10' },
+          { title: 'Active Orders', value: String(j.activeOrders||0), icon: 'receipt-outline', color: '#38BDF8', bg: 'bg-sky-500/10' },
+          { title: 'Total Staff', value: String(j.totalStaff||0)+' Members', icon: 'people-outline', color: '#34D399', bg: 'bg-emerald-500/10' },
+          { title: 'Inventory', value: String(j.inventoryItems||0)+' Items', icon: 'cube-outline', color: '#A855F7', bg: 'bg-purple-500/10' },
+        ]);
+      }
+    } catch (err) {
+      console.error('Refresh metrics error', err);
+    }
+  };
 
   const modules = [
     { title: 'User Management', desc: 'Manage customer accounts and roles', icon: 'person-circle-outline', screen: 'UserManagementScreen' },
@@ -35,8 +73,8 @@ export default function ManagerDashboardScreen({ navigation }) {
               <Ionicons name="person" size={20} color="#F97316" />
             </TouchableOpacity>
 
-            <TouchableOpacity className="w-11 h-11 bg-slate-50 rounded-2xl border-2 border-slate-200 items-center justify-center shadow-md active:scale-95">
-              <Ionicons name="notifications-outline" size={20} color="#0F172A" />
+            <TouchableOpacity onPress={refreshMetrics} className="w-11 h-11 bg-slate-50 rounded-2xl border-2 border-slate-200 items-center justify-center shadow-md active:scale-95">
+              <Ionicons name="sync-outline" size={20} color="#0F172A" />
             </TouchableOpacity>
           </View>
 

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Modal } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Modal, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function InventoryManagementScreen({ navigation }) {
@@ -8,6 +8,11 @@ export default function InventoryManagementScreen({ navigation }) {
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editQuantity, setEditQuantity] = useState('');
+  const [editUnit, setEditUnit] = useState('Kg');
+  const [editSupplier, setEditSupplier] = useState('');
 
   const categories = ['All', 'Ingredients', 'Beverages', 'Packaging', 'Cleaning'];
 
@@ -64,6 +69,31 @@ export default function InventoryManagementScreen({ navigation }) {
     }
   ]);
 
+  useEffect(() => {
+    const fetchInventory = async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/inventory');
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          const mapped = data.map(i => ({
+            id: String(i._id || i.id),
+            name: i.ingredientName,
+            category: 'Ingredients',
+            quantity: i.quantity,
+            unit: i.unit,
+            status: i.quantity < (i.minimumLevel || 5) ? (i.quantity < 5 ? 'Low Stock' : 'Medium') : 'Optimal',
+            supplier: i.supplier || '',
+            cost: i.unitCost || ''
+          }));
+          setInventoryItems(mapped);
+        }
+      } catch (err) {
+        console.error('Failed to fetch inventory', err);
+      }
+    };
+    fetchInventory();
+  }, []);
+
   // Form states for adding items
   const [newName, setNewName] = useState('');
   const [newCategory, setNewCategory] = useState('Ingredients');
@@ -86,32 +116,49 @@ export default function InventoryManagementScreen({ navigation }) {
 
   const handleAddItem = () => {
     if (!newName || !newQuantity) return;
-    const qty = parseInt(newQuantity) || 10;
-    let status = 'Optimal';
-    if (qty < 5) status = 'Low Stock';
-    else if (qty < 15) status = 'Medium';
-
-    const newItem = {
-      id: Date.now().toString(),
+    const qty = parseInt(newQuantity) || 0;
+    const payload = {
       name: newName,
-      category: newCategory,
       quantity: qty,
       unit: newUnit,
-      status: status,
-      supplier: newSupplier || 'General Vendor',
-      cost: newCost ? `$${newCost}` : '$5.00'
+      supplier: newSupplier,
+      minimumLevel: 5
     };
-
-    setInventoryItems([...inventoryItems, newItem]);
-    setNewName('');
-    setNewQuantity('');
-    setNewSupplier('');
-    setNewCost('');
-    setAddModalVisible(false);
+    fetch('http://localhost:5000/api/inventory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(r => r.json()).then(j => {
+      if (j.success && j.item) {
+        const i = j.item;
+        const mapped = {
+          id: String(i._id || i.id),
+          name: i.ingredientName,
+          category: 'Ingredients',
+          quantity: i.quantity,
+          unit: i.unit,
+          status: i.quantity < (i.minimumLevel || 5) ? (i.quantity < 5 ? 'Low Stock' : 'Medium') : 'Optimal',
+          supplier: i.supplier || '',
+          cost: ''
+        };
+        setInventoryItems(prev => [mapped, ...prev]);
+        setNewName('');
+        setNewQuantity('');
+        setNewSupplier('');
+        setNewCost('');
+        setAddModalVisible(false);
+      } else {
+        alert('Failed to add inventory item');
+      }
+    }).catch(err => {
+      console.error('Add inventory error', err);
+      alert('Failed to add inventory item');
+    });
   };
 
   const updateQuantity = (id, amount) => {
-    setInventoryItems(inventoryItems.map(item => {
+    // Optimistic update
+    setInventoryItems(prev => prev.map(item => {
       if (item.id === id) {
         const updatedQty = Math.max(0, item.quantity + amount);
         let status = 'Optimal';
@@ -121,6 +168,83 @@ export default function InventoryManagementScreen({ navigation }) {
       }
       return item;
     }));
+
+    fetch(`http://localhost:5000/api/inventory/${id}/adjust`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount })
+    }).then(r => r.json()).then(j => {
+      if (!j.success) console.warn('Failed to adjust inventory', j);
+    }).catch(err => console.error('Adjust error', err));
+  };
+
+  const openEditItem = (item) => {
+    setSelectedItem(item);
+    setEditName(item.name || '');
+    setEditQuantity(String(item.quantity || ''));
+    setEditUnit(item.unit || 'Kg');
+    setEditSupplier(item.supplier || '');
+    setEditModalVisible(true);
+  };
+
+  const confirmDeleteItem = (id) => {
+    Alert.alert('Delete Item', 'Are you sure you want to delete this inventory item?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => handleDeleteItem(id) }
+    ]);
+  };
+
+  const handleDeleteItem = async (id) => {
+    try {
+      console.log('Deleting inventory id=', id);
+      const res = await fetch(`http://localhost:5000/api/inventory/${id}`, { method: 'DELETE' });
+      const j = await res.json();
+      console.log('Delete response', j);
+      if (j.success) setInventoryItems(prev => prev.filter(i => String(i.id || i._id) !== String(id)));
+      else Alert.alert('Error', j.message || 'Failed to delete');
+    } catch (err) {
+      console.error('Delete inventory error', err);
+      Alert.alert('Error', 'Failed to delete');
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!selectedItem) return;
+    try {
+      const payload = {
+        name: editName,
+        quantity: parseInt(editQuantity) || 0,
+        unit: editUnit,
+        supplier: editSupplier
+      };
+      const id = selectedItem.id || selectedItem._id;
+      const res = await fetch(`http://localhost:5000/api/inventory/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const j = await res.json();
+      if (j.success && j.item) {
+        const i = j.item;
+        const mapped = {
+          id: String(i._id || i.id),
+          name: i.ingredientName,
+          category: 'Ingredients',
+          quantity: i.quantity,
+          unit: i.unit,
+          status: i.quantity < (i.minimumLevel || 5) ? (i.quantity < 5 ? 'Low Stock' : 'Medium') : 'Optimal',
+          supplier: i.supplier || '',
+          cost: i.unitCost || ''
+        };
+        setInventoryItems(prev => prev.map(it => (it.id === mapped.id || it._id === mapped.id ? mapped : it)));
+        setEditModalVisible(false);
+      } else {
+        alert('Failed to update item');
+      }
+    } catch (err) {
+      console.error('Update inventory error', err);
+      alert('Failed to update item');
+    }
   };
 
   const filteredItems = inventoryItems.filter(item => {
@@ -240,6 +364,18 @@ export default function InventoryManagementScreen({ navigation }) {
                       >
                         <Text className="text-[10px] font-bold text-[#1F130D]">Details</Text>
                       </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => openEditItem(item)}
+                        className="px-3 h-8 bg-white rounded-xl items-center justify-center border border-gray-200 active:scale-95 ml-1"
+                      >
+                        <Text className="text-[10px] font-bold text-[#1F130D]">Edit</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => confirmDeleteItem(item.id)}
+                        className="px-3 h-8 bg-rose-50 rounded-xl items-center justify-center border border-rose-100 active:scale-95 ml-1"
+                      >
+                        <Text className="text-[10px] font-bold text-rose-600">Delete</Text>
+                      </TouchableOpacity>
                     </View>
                   </View>
                 </View>
@@ -289,6 +425,43 @@ export default function InventoryManagementScreen({ navigation }) {
                   </TouchableOpacity>
                 </View>
               )}
+            </View>
+          </View>
+        </Modal>
+
+        {/* Edit Item Modal */}
+        <Modal animationType="fade" transparent={true} visible={editModalVisible} onRequestClose={() => setEditModalVisible(false)}>
+          <View className="flex-1 bg-black/50 justify-center items-center px-5">
+            <View className="bg-white w-full max-w-[380px] rounded-3xl p-6 shadow-2xl border border-gray-100 max-h-[90%]">
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <Text className="text-lg font-black text-[#1F130D] mb-1">Edit Inventory Item</Text>
+
+                <Text className="text-xs font-bold text-gray-700 mb-1">Item Name</Text>
+                <TextInput value={editName} onChangeText={setEditName} className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D] mb-3" />
+
+                <View className="flex-row space-x-2 mb-3">
+                  <View className="flex-1">
+                    <Text className="text-xs font-bold text-gray-700 mb-1">Quantity</Text>
+                    <TextInput value={editQuantity} onChangeText={setEditQuantity} keyboardType="numeric" className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D]" />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-xs font-bold text-gray-700 mb-1">Unit</Text>
+                    <TextInput value={editUnit} onChangeText={setEditUnit} className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D]" />
+                  </View>
+                </View>
+
+                <Text className="text-xs font-bold text-gray-700 mb-1">Supplier</Text>
+                <TextInput value={editSupplier} onChangeText={setEditSupplier} className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D] mb-4" />
+
+                <View className="flex-row space-x-3">
+                  <TouchableOpacity onPress={() => setEditModalVisible(false)} className="flex-1 bg-gray-100 py-3.5 rounded-2xl items-center">
+                    <Text className="font-bold text-gray-700 text-sm">Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={handleSaveEdit} className="flex-1 bg-[#B8520B] py-3.5 rounded-2xl items-center shadow-md shadow-[#B8520B]/20">
+                    <Text className="font-bold text-white text-sm">Save</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
             </View>
           </View>
         </Modal>

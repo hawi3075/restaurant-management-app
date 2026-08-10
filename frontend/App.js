@@ -1,5 +1,6 @@
 import './src/global.css';
 import React, { useContext } from 'react';
+import { View, ActivityIndicator, Text } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { AuthProvider, AuthContext } from './src/context/AuthContext';
@@ -29,6 +30,7 @@ import ReviewManagementScreen from './src/screens/manager/ReviewManagementScreen
 
 // Staff
 import WaiterDashboardScreen from './src/screens/waiter/WaiterDashboardScreen';
+import WaiterLiveOrdersScreen from './src/screens/waiter/WaiterLiveOrdersScreen';
 import KitchenDashboardScreen from './src/screens/kitchen/KitchenDashboardScreen';
 import DriverDashboardScreen from './src/screens/driver/DriverDashboardScreen';
 
@@ -37,8 +39,16 @@ const Stack = createNativeStackNavigator();
 function AppNavigator() {
   const { user, loading } = useContext(AuthContext);
 
+  if (__DEV__) {
+    console.log('AppNavigator user state:', user);
+  }
+
   if (loading) {
-    return null;
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
   }
 
   // Not logged in
@@ -55,54 +65,18 @@ function AppNavigator() {
     .toLowerCase()
     .trim();
 
-  console.log('============================');
-  console.log('LOGGED IN USER:', user);
-  console.log('USER ROLE:', role);
-  console.log('============================');
-
   // MANAGER / ADMIN
   if (role === 'manager' || role === 'admin') {
     return (
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        <Stack.Screen
-          name="ManagerDashboard"
-          component={ManagerDashboardScreen}
-        />
-
-        <Stack.Screen
-          name="ManagerProfileScreen"
-          component={ManagerProfileScreen}
-        />
-
-        <Stack.Screen
-          name="UserManagementScreen"
-          component={UserManagementScreen}
-        />
-
-        <Stack.Screen
-          name="StaffManagementScreen"
-          component={StaffManagementScreen}
-        />
-
-        <Stack.Screen
-          name="MenuManagementScreen"
-          component={MenuManagementScreen}
-        />
-
-        <Stack.Screen
-          name="InventoryManagementScreen"
-          component={InventoryManagementScreen}
-        />
-
-        <Stack.Screen
-          name="SupportMessageScreen"
-          component={SupportMessageScreen}
-        />
-
-        <Stack.Screen
-          name="ReviewManagementScreen"
-          component={ReviewManagementScreen}
-        />
+        <Stack.Screen name="ManagerDashboard" component={ManagerDashboardScreen} />
+        <Stack.Screen name="ManagerProfileScreen" component={ManagerProfileScreen} />
+        <Stack.Screen name="UserManagementScreen" component={UserManagementScreen} />
+        <Stack.Screen name="StaffManagementScreen" component={StaffManagementScreen} />
+        <Stack.Screen name="MenuManagementScreen" component={MenuManagementScreen} />
+        <Stack.Screen name="InventoryManagementScreen" component={InventoryManagementScreen} />
+        <Stack.Screen name="SupportMessageScreen" component={SupportMessageScreen} />
+        <Stack.Screen name="ReviewManagementScreen" component={ReviewManagementScreen} />
       </Stack.Navigator>
     );
   }
@@ -111,10 +85,7 @@ function AppNavigator() {
   if (role === 'kitchen') {
     return (
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        <Stack.Screen
-          name="KitchenDashboard"
-          component={KitchenDashboardScreen}
-        />
+        <Stack.Screen name="KitchenDashboard" component={KitchenDashboardScreen} />
       </Stack.Navigator>
     );
   }
@@ -123,10 +94,8 @@ function AppNavigator() {
   if (role === 'waiter') {
     return (
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        <Stack.Screen
-          name="WaiterDashboard"
-          component={WaiterDashboardScreen}
-        />
+        <Stack.Screen name="WaiterDashboard" component={WaiterDashboardScreen} />
+        <Stack.Screen name="WaiterLiveOrders" component={WaiterLiveOrdersScreen} />
       </Stack.Navigator>
     );
   }
@@ -135,10 +104,7 @@ function AppNavigator() {
   if (role === 'driver') {
     return (
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        <Stack.Screen
-          name="DriverDashboard"
-          component={DriverDashboardScreen}
-        />
+        <Stack.Screen name="DriverDashboard" component={DriverDashboardScreen} />
       </Stack.Navigator>
     );
   }
@@ -146,40 +112,13 @@ function AppNavigator() {
   // CUSTOMER
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen
-        name="CustomerLanding"
-        component={CustomerLandingScreen}
-      />
-
-      <Stack.Screen
-        name="MenuScreen"
-        component={MenuScreen}
-      />
-
-      <Stack.Screen
-        name="FoodDetailScreen"
-        component={FoodDetailScreen}
-      />
-
-      <Stack.Screen
-        name="CustomerProfileScreen"
-        component={CustomerProfileScreen}
-      />
-
-      <Stack.Screen
-        name="OrderHistoryScreen"
-        component={OrderHistoryScreen}
-      />
-
-      <Stack.Screen
-        name="CartScreen"
-        component={CartScreen}
-      />
-
-      <Stack.Screen
-        name="CheckoutScreen"
-        component={CheckoutScreen}
-      />
+      <Stack.Screen name="CustomerLanding" component={CustomerLandingScreen} />
+      <Stack.Screen name="MenuScreen" component={MenuScreen} />
+      <Stack.Screen name="FoodDetailScreen" component={FoodDetailScreen} />
+      <Stack.Screen name="CustomerProfileScreen" component={CustomerProfileScreen} />
+      <Stack.Screen name="OrderHistoryScreen" component={OrderHistoryScreen} />
+      <Stack.Screen name="CartScreen" component={CartScreen} />
+      <Stack.Screen name="CheckoutScreen" component={CheckoutScreen} />
     </Stack.Navigator>
   );
 }
@@ -189,6 +128,7 @@ export default function App() {
     <AuthProvider>
       <NavigationContainer>
         <AppNavigator />
+        {/* Dev: user state is logged to console from AppNavigator; avoid web Text rendering issues */}
       </NavigationContainer>
     </AuthProvider>
   );

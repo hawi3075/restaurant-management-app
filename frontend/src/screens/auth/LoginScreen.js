@@ -5,6 +5,7 @@ import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthContext } from '../../context/AuthContext';
+import { useNavigation } from '@react-navigation/native';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -12,6 +13,7 @@ const BACKEND_URL = 'http://localhost:5000';
 
 export default function LoginScreen() {
   const authContext = useContext(AuthContext);
+  const navigation = useNavigation();
   // Safely fallback to a no-op function if context is not yet mounted to prevent type errors
   const login = authContext?.login || (() => {
     console.warn("AuthContext is missing or login function is not available.");
@@ -63,10 +65,22 @@ export default function LoginScreen() {
       });
 
       const data = await res.json();
+      console.log('Login response data:', JSON.stringify(data, null, 2));
       if (!res.ok) throw new Error(data.message || 'Google authentication failed');
 
       if (data.token && data.user) {
-        await login(data.token, data.user); 
+        const routeToRole = {
+          ManagerDashboard: 'manager',
+          KitchenDashboard: 'kitchen',
+          WaiterDashboard: 'waiter',
+          DriverDashboard: 'driver',
+          CustomerLanding: 'customer'
+        };
+        const inferredRole = (data.user && data.user.role) ? data.user.role : (routeToRole[data.navigateTo] || 'customer');
+        const userWithRole = Object.assign({}, data.user, { role: inferredRole });
+        console.log('Calling login with user (google):', JSON.stringify(userWithRole, null, 2));
+        await login(data.token, userWithRole);
+        // Do not reset navigation here — AppNavigator will react to auth state change
       }
     } catch (error) {
       Alert.alert('Error', error.message);
@@ -92,6 +106,7 @@ export default function LoginScreen() {
       });
 
       const data = await response.json();
+      console.log('Login response data:', JSON.stringify(data, null, 2));
       setIsLoading(false);
 
       if (!response.ok) {
@@ -100,7 +115,18 @@ export default function LoginScreen() {
       }
 
       if (data.token && data.user) {
-        await login(data.token, data.user); 
+        const routeToRole = {
+          ManagerDashboard: 'manager',
+          KitchenDashboard: 'kitchen',
+          WaiterDashboard: 'waiter',
+          DriverDashboard: 'driver',
+          CustomerLanding: 'customer'
+        };
+        const inferredRole = (data.user && data.user.role) ? data.user.role : (routeToRole[data.navigateTo] || 'customer');
+        const userWithRole = Object.assign({}, data.user, { role: inferredRole });
+        console.log('Calling login with user:', JSON.stringify(userWithRole, null, 2));
+        await login(data.token, userWithRole);
+        // Do not reset navigation here — AppNavigator will react to auth state change
       }
 
     } catch (error) {
@@ -282,11 +308,26 @@ export default function LoginScreen() {
                 {/* Social Login (Google only) */}
                 <TouchableOpacity 
                   disabled={!request || isLoading}
-                  onPress={() => promptAsync()}
+                  onPress={async () => {
+                    try {
+                      const res = await promptAsync();
+                      if (!res || res.type !== 'success') {
+                        Alert.alert('Google Sign-in', 'Google sign-in was cancelled or failed.');
+                      }
+                    } catch (err) {
+                      console.error('Google prompt error', err);
+                      Alert.alert('Google Sign-in Error', err.message || 'An error occurred while attempting Google sign-in.');
+                    }
+                  }}
                   className="bg-[#F8F9FC] border border-[#EAE3DE] py-3.5 rounded-2xl items-center flex-row justify-center"
                 >
                   <Ionicons name="logo-google" size={16} color="#EA4335" />
                   <Text className="text-xs font-bold text-[#1F130D] ml-2">Continue with Google</Text>
+                </TouchableOpacity>
+
+                {/* Sign Up Link for users without an account */}
+                <TouchableOpacity onPress={() => navigation.navigate('Signup')} className="items-center mt-3">
+                  <Text className="text-xs text-gray-500">Don't have an account? <Text className="text-[#B8520B] font-bold">Sign Up</Text></Text>
                 </TouchableOpacity>
               </>
             ) : forgotStep === 'email' ? (

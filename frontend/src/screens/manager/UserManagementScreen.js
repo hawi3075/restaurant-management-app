@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -8,14 +8,43 @@ export default function UserManagementScreen({ navigation }) {
   const [modalVisible, setModalVisible] = useState(false);
 
   const [users, setUsers] = useState([
-    { id: '1', name: 'Hawi Girma', email: 'hawig3521@gmail.com', phone: '+251 91 234 5678', role: 'Customer', status: 'Active' },
-    { id: '2', name: 'Sarah Jenkins', email: 'sarah@example.com', phone: '+1 555 019 2834', role: 'Customer', status: 'Active' },
-    { id: '3', name: 'Daniel Kebede', email: 'daniel@example.com', phone: '+251 92 876 5432', role: 'VIP Customer', status: 'Inactive' },
+    // placeholder while loading
   ]);
 
   const toggleStatus = (id) => {
-    setUsers(users.map(u => u.id === id ? { ...u, status: u.status === 'Active' ? 'Inactive' : 'Active' } : u));
+    const user = users.find(u => u.id === id || u._id === id);
+    if (!user) return;
+    const newActive = !(user.active === true || user.status === 'Active');
+    // optimistic update
+    setUsers(prev => prev.map(u => (u._id === id || u.id === id) ? { ...u, status: newActive ? 'Active' : 'Inactive', active: newActive } : u));
+    fetch(`http://localhost:5000/api/users/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active: newActive })
+    }).then(r => r.json()).then(j => {
+      if (!j.success) console.warn('Failed to update user active', j);
+    }).catch(err => console.error('User update error', err));
   };
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/users');
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          const mapped = data.map(u => ({
+            ...u,
+            id: String(u._id || u.id),
+            status: u.active === false ? 'Inactive' : 'Active'
+          }));
+          setUsers(mapped);
+        }
+      } catch (err) {
+        console.error('Fetch users error', err);
+      }
+    };
+    fetchUsers();
+  }, []);
 
   const filteredUsers = users.filter(u => 
     u.name.toLowerCase().includes(searchQuery.toLowerCase()) || 

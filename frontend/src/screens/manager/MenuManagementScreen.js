@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Image, Modal } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Image, Modal, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -10,6 +10,14 @@ export default function MenuManagementScreen({ navigation }) {
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [selectedDish, setSelectedDish] = useState(null);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [editPrice, setEditPrice] = useState('');
+  const [editRating, setEditRating] = useState('4.9');
+  const [editImage, setEditImage] = useState('');
+  const [editCategory, setEditCategory] = useState('Lunch');
+  const [editStyle, setEditStyle] = useState('Modern');
 
   const categories = ['All', 'Breakfast', 'Lunch', 'Dinner', 'Drinks', 'Desserts', 'Fast Food'];
 
@@ -37,6 +45,33 @@ export default function MenuManagementScreen({ navigation }) {
       image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=400&q=80' 
     },
   ]);
+
+  useEffect(() => {
+    const fetchMenu = async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/menu');
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          const mapped = data.map(i => ({
+            id: String(i._id || i.id),
+            name: i.name,
+            desc: i.description || i.desc || '',
+            price: i.price || 0,
+            category: i.category,
+            style: i.style || 'Modern',
+            rating: String(i.rating || 5),
+            status: i.availabilityStatus ? 'In Stock' : 'Out of Stock',
+            image: i.image || ''
+          }));
+          setMenuItems(mapped);
+        }
+      } catch (err) {
+        console.error('Failed to fetch menu items', err);
+      }
+    };
+
+    fetchMenu();
+  }, []);
 
   // Form states
   const [newName, setNewName] = useState('');
@@ -72,32 +107,143 @@ export default function MenuManagementScreen({ navigation }) {
   };
 
   const toggleStockStatus = (id) => {
-    setMenuItems(menuItems.map(item => 
-      item.id === id ? { ...item, status: item.status === 'In Stock' ? 'Out of Stock' : 'In Stock' } : item
-    ));
+    const item = menuItems.find(m => m.id === id);
+    if (!item) return;
+    const newStatus = item.status === 'In Stock' ? false : true;
+    // Optimistic update
+    setMenuItems(menuItems.map(i => i.id === id ? { ...i, status: newStatus ? 'In Stock' : 'Out of Stock' } : i));
+    fetch(`http://localhost:5000/api/menu/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ availabilityStatus: newStatus })
+    }).then(r => r.json()).then(j => {
+      if (!j.success) console.warn('Failed to update menu item', j);
+    }).catch(err => console.error('Menu update error', err));
   };
 
   const handleAddDish = () => {
     if (!newName || !newPrice) return;
-    const newItem = {
-      id: Date.now().toString(),
+    const payload = {
       name: newName,
-      desc: newDesc || 'Freshly prepared specialty dish',
-      price: parseFloat(newPrice) || 15.00,
       category: newCategory,
-      style: newStyle,
-      rating: newRating || '5.0',
-      status: 'In Stock',
-      image: newImage.trim() !== '' ? newImage : 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=400&q=80'
+      description: newDesc,
+      price: parseFloat(newPrice) || 0,
+      preparationTime: 15,
+      image: newImage.trim() || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=400&q=80',
+      availabilityStatus: true,
+      rating: parseFloat(newRating) || 5
     };
-    setMenuItems([...menuItems, newItem]);
-    setNewName('');
-    setNewDesc('');
-    setNewPrice('');
-    setNewRating('4.9');
-    setNewImage('');
-    setImageSourceType('url');
-    setAddModalVisible(false);
+    fetch('http://localhost:5000/api/menu', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(r => r.json()).then(j => {
+      if (j.success && j.item) {
+        const added = {
+          id: String(j.item._id || j.item.id),
+          name: j.item.name,
+          desc: j.item.description || newDesc,
+          price: j.item.price,
+          category: j.item.category,
+          style: 'Modern',
+          rating: String(j.item.rating || 5),
+          status: j.item.availabilityStatus ? 'In Stock' : 'Out of Stock',
+          image: j.item.image
+        };
+        setMenuItems(prev => [added, ...prev]);
+        setNewName('');
+        setNewDesc('');
+        setNewPrice('');
+        setNewRating('4.9');
+        setNewImage('');
+        setImageSourceType('url');
+        setAddModalVisible(false);
+      } else {
+        alert('Failed to add dish');
+      }
+    }).catch(err => {
+      console.error('Add dish error', err);
+      alert('Failed to add dish');
+    });
+  };
+
+  const openEditModal = (item) => {
+    setSelectedDish(item);
+    setEditName(item.name || '');
+    setEditDesc(item.desc || '');
+    setEditPrice(item.price ? String(item.price) : '');
+    setEditRating(item.rating || '4.9');
+    setEditImage(item.image || '');
+    setEditCategory(item.category || 'Lunch');
+    setEditStyle(item.style || 'Modern');
+    setEditModalVisible(true);
+  };
+
+  const confirmDelete = (id) => {
+    Alert.alert('Delete Dish', 'Are you sure you want to delete this dish?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => handleDeleteDish(id) }
+    ]);
+  };
+
+  const handleDeleteDish = async (id) => {
+    try {
+      console.log('Deleting menu item id=', id);
+      const res = await fetch(`http://localhost:5000/api/menu/${id}`, { method: 'DELETE' });
+      const j = await res.json();
+      console.log('Delete response', j);
+      if (j.success) {
+        setMenuItems(prev => prev.filter(i => String(i.id || i._id) !== String(id)));
+      } else {
+        Alert.alert('Error', j.message || 'Failed to delete dish');
+      }
+    } catch (err) {
+      console.error('Delete error', err);
+      Alert.alert('Error', 'Failed to delete dish');
+    }
+  };
+
+  const handleUpdateDish = async () => {
+    if (!selectedDish) return;
+    const id = selectedDish.id;
+    const payload = {
+      name: editName,
+      description: editDesc,
+      price: parseFloat(editPrice) || 0,
+      image: editImage,
+      category: editCategory,
+      style: editStyle,
+      rating: parseFloat(editRating) || 5
+    };
+    try {
+      const res = await fetch(`http://localhost:5000/api/menu/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const j = await res.json();
+      if (j.success && j.item) {
+        const updated = {
+          id: String(j.item._id || j.item.id),
+          name: j.item.name,
+          desc: j.item.description || editDesc,
+          price: j.item.price,
+          category: j.item.category,
+          style: j.item.style || editStyle,
+          rating: String(j.item.rating || editRating),
+          status: j.item.availabilityStatus ? 'In Stock' : 'Out of Stock',
+          image: j.item.image
+        };
+        setMenuItems(prev => prev.map(m => (m.id === id ? updated : m)));
+        setEditModalVisible(false);
+        setSelectedDish(null);
+      } else {
+        alert('Failed to update dish');
+      }
+    } catch (err) {
+      console.error('Update error', err);
+      alert('Failed to update dish');
+    }
   };
 
   const filteredItems = menuItems.filter(item => {
@@ -235,6 +381,22 @@ export default function MenuManagementScreen({ navigation }) {
                     <Ionicons name="refresh-outline" size={12} color="#B8520B" style={{ marginRight: 3 }} />
                     <Text className="text-[10px] font-bold text-[#B8520B]">Toggle Stock</Text>
                   </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => openEditModal(item)}
+                    className="flex-1 bg-white border border-[#EAE3DE] py-2 rounded-xl items-center flex-row justify-center active:scale-95"
+                  >
+                    <Ionicons name="create-outline" size={12} color="#1F130D" style={{ marginRight: 3 }} />
+                    <Text className="text-[10px] font-bold text-[#1F130D]">Edit</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => confirmDelete(item.id)}
+                    className="flex-1 bg-white border border-rose-100 py-2 rounded-xl items-center flex-row justify-center active:scale-95"
+                  >
+                    <Ionicons name="trash-outline" size={12} color="#E11D48" style={{ marginRight: 3 }} />
+                    <Text className="text-[10px] font-bold text-rose-600">Delete</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
             ))}
@@ -284,6 +446,100 @@ export default function MenuManagementScreen({ navigation }) {
                   </TouchableOpacity>
                 </View>
               )}
+            </View>
+          </View>
+        </Modal>
+
+        {/* Edit Dish Modal */}
+        <Modal animationType="fade" transparent={true} visible={editModalVisible} onRequestClose={() => setEditModalVisible(false)}>
+          <View className="flex-1 bg-black/50 justify-center items-center px-5">
+            <View className="bg-white w-full max-w-[380px] rounded-3xl p-6 shadow-2xl border border-gray-100 max-h-[90%]">
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <Text className="text-lg font-black text-[#1F130D] mb-1">Edit Menu Dish</Text>
+                <Text className="text-xs text-gray-500 mb-4">Update dish details and save changes.</Text>
+
+                <Text className="text-xs font-bold text-gray-700 mb-1">Dish Name</Text>
+                <TextInput 
+                  placeholder="e.g. Grilled Ribeye Steak"
+                  placeholderTextColor="#9CA3AF"
+                  value={editName}
+                  onChangeText={setEditName}
+                  className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D] mb-3"
+                />
+
+                <Text className="text-xs font-bold text-gray-700 mb-1">Description</Text>
+                <TextInput 
+                  placeholder="e.g. Served with garlic butter & herbs"
+                  placeholderTextColor="#9CA3AF"
+                  value={editDesc}
+                  onChangeText={setEditDesc}
+                  className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D] mb-3"
+                />
+
+                <Text className="text-xs font-bold text-gray-700 mb-1">Price ($)</Text>
+                <TextInput 
+                  placeholder="e.g. 22.50"
+                  placeholderTextColor="#9CA3AF"
+                  keyboardType="numeric"
+                  value={editPrice}
+                  onChangeText={setEditPrice}
+                  className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D] mb-3"
+                />
+
+                <Text className="text-xs font-bold text-gray-700 mb-1">Rating Score</Text>
+                <TextInput 
+                  placeholder="e.g. 4.8"
+                  placeholderTextColor="#9CA3AF"
+                  value={editRating}
+                  onChangeText={setEditRating}
+                  className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D] mb-3"
+                />
+
+                <Text className="text-xs font-bold text-gray-700 mb-1">Image URL</Text>
+                <TextInput 
+                  placeholder="https://images.unsplash.com/..."
+                  placeholderTextColor="#9CA3AF"
+                  value={editImage}
+                  onChangeText={setEditImage}
+                  autoCapitalize="none"
+                  className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D] mb-3"
+                />
+
+                <Text className="text-xs font-bold text-gray-700 mb-1">Category</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-3">
+                  {['Breakfast', 'Lunch', 'Dinner', 'Drinks', 'Desserts', 'Fast Food'].map((cat) => (
+                    <TouchableOpacity
+                      key={cat}
+                      onPress={() => setEditCategory(cat)}
+                      className={`px-3.5 py-2 rounded-xl border mr-2 ${editCategory === cat ? 'bg-[#B8520B] border-[#B8520B]' : 'bg-gray-50 border-gray-200'}`}
+                    >
+                      <Text className={`text-xs font-bold ${editCategory === cat ? 'text-white' : 'text-gray-700'}`}>{cat}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+
+                <Text className="text-xs font-bold text-gray-700 mb-1">Style</Text>
+                <View className="flex-row space-x-2 mb-5">
+                  {['Modern', 'Traditional'].map((style) => (
+                    <TouchableOpacity
+                      key={style}
+                      onPress={() => setEditStyle(style)}
+                      className={`flex-1 py-2.5 rounded-xl border items-center ${editStyle === style ? 'bg-[#B8520B] border-[#B8520B]' : 'bg-gray-50 border-gray-200'}`}
+                    >
+                      <Text className={`text-xs font-bold ${editStyle === style ? 'text-white' : 'text-gray-700'}`}>{style}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <View className="flex-row space-x-3">
+                  <TouchableOpacity onPress={() => setEditModalVisible(false)} className="flex-1 bg-gray-100 py-3.5 rounded-2xl items-center">
+                    <Text className="font-bold text-gray-700 text-sm">Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={handleUpdateDish} className="flex-1 bg-[#B8520B] py-3.5 rounded-2xl items-center shadow-md shadow-[#B8520B]/20">
+                    <Text className="font-bold text-white text-sm">Save Changes</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
             </View>
           </View>
         </Modal>

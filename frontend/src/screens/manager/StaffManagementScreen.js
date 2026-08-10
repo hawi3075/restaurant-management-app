@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -51,6 +51,33 @@ export default function StaffManagementScreen({ navigation }) {
     },
   ]);
 
+  // Load real staff from backend
+  useEffect(() => {
+    const fetchStaff = async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/staff');
+        const json = await res.json();
+        if (json.success && Array.isArray(json.staff)) {
+          // Map backend fields to UI model
+          const mapped = json.staff.map(u => ({
+            id: String(u._id || u.id),
+            name: u.name,
+            role: u.role || 'Staff',
+            email: u.email || '',
+            phone: u.phone || '',
+            shift: u.shift || '09:00 AM - 05:00 PM',
+            status: u.active ? 'Active' : 'Inactive'
+          }));
+          setStaffList(mapped);
+        }
+      } catch (err) {
+        console.error('Failed to fetch staff:', err);
+      }
+    };
+
+    fetchStaff();
+  }, []);
+
   const categories = ['All', 'Head Chef', 'Cashier', 'Delivery Driver', 'Waiter'];
 
   const presetShifts = [
@@ -61,27 +88,62 @@ export default function StaffManagementScreen({ navigation }) {
   ];
 
   const toggleDutyStatus = (id) => {
-    setStaffList(staffList.map(s => s.id === id ? { ...s, status: s.status === 'On Duty' ? 'Off Duty' : 'On Duty' } : s));
+    // Toggle active/inactive and call backend
+    const member = staffList.find(s => s.id === id);
+    if (!member) return;
+    const newActive = member.status !== 'Active';
+    // Optimistic update
+    setStaffList(staffList.map(s => s.id === id ? { ...s, status: newActive ? 'Active' : 'Inactive' } : s));
+    // API call
+    fetch(`http://localhost:5000/api/staff/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active: newActive })
+    }).then(res => res.json()).then(j => {
+      if (!j.success) console.warn('Failed to update staff active state', j);
+    }).catch(err => {
+      console.error('Update active error', err);
+    });
   };
 
   const handleAddStaff = () => {
     if (!newName || !newRole || !newEmail || !newPhone) return;
     const assignedShift = shiftMode === 'custom' ? `${startTime} - ${endTime}` : newShift;
-    const newMember = {
-      id: Date.now().toString(),
+    const payload = {
       name: newName,
       role: newRole,
       email: newEmail,
       phone: newPhone,
-      shift: assignedShift,
-      status: 'On Duty',
+      password: 'Password123!',
     };
-    setStaffList([...staffList, newMember]);
-    setNewName('');
-    setNewRole('');
-    setNewEmail('');
-    setNewPhone('');
-    setAddModalVisible(false);
+    fetch('http://localhost:5000/api/staff', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(res => res.json()).then(j => {
+      if (j.success && j.user) {
+        const added = {
+          id: String(j.user.id || j.user._id),
+          name: j.user.name,
+          role: j.user.role,
+          email: j.user.email,
+          phone: j.user.phone,
+          shift: assignedShift,
+          status: j.user.active ? 'Active' : 'Inactive'
+        };
+        setStaffList(prev => [added, ...prev]);
+        setNewName('');
+        setNewRole('');
+        setNewEmail('');
+        setNewPhone('');
+        setAddModalVisible(false);
+      } else {
+        alert(j.message || 'Failed to add staff');
+      }
+    }).catch(err => {
+      console.error('Add staff error', err);
+      alert('Failed to add staff');
+    });
   };
 
   const handleUpdateShift = () => {

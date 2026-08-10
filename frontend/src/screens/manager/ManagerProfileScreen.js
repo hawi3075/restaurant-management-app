@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Alert, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { AuthContext } from '../../context/AuthContext';
 
 export default function ManagerProfileScreen({ navigation }) {
   const [isEditing, setIsEditing] = useState(false);
-  const [name, setName] = useState('Hawi Girma');
-  const [email, setEmail] = useState('manager@restaurant.com');
-  const [phone, setPhone] = useState('+251 91 234 5678');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [profileImage, setProfileImage] = useState(null);
+  const authContext = useContext(AuthContext);
 
   const handlePickImage = async () => {
     if (!isEditing) return; // Only allow picking image when in edit mode
@@ -34,9 +36,36 @@ export default function ManagerProfileScreen({ navigation }) {
   };
 
   const handleSave = () => {
-    setIsEditing(false);
-    Alert.alert('Success', 'Profile updated successfully!');
+    // save to backend
+    fetch('http://localhost:5000/api/auth/profile', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, phone })
+    }).then(r => r.json()).then(j => {
+      setIsEditing(false);
+      Alert.alert('Success', 'Profile updated successfully!');
+    }).catch(err => {
+      console.error('Profile update error', err);
+      Alert.alert('Error', 'Failed to update profile');
+    });
   };
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/auth/profile');
+        const j = await res.json();
+        if (j.success && j.user) {
+          setName(j.user.name || '');
+          setEmail(j.user.email || '');
+          setPhone(j.user.phone || '');
+        }
+      } catch (err) {
+        console.error('Fetch profile error', err);
+      }
+    };
+    fetchProfile();
+  }, []);
 
   return (
     <View className="flex-1 bg-[#F8FAFC] items-center justify-center">
@@ -127,7 +156,15 @@ export default function ManagerProfileScreen({ navigation }) {
 
           {/* Logout Option */}
           <TouchableOpacity
-            onPress={() => navigation.navigate('Login')}
+            onPress={async () => {
+              try {
+                await authContext.logout();
+                navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+              } catch (err) {
+                console.error('Logout navigation error', err);
+                navigation.navigate('Login');
+              }
+            }}
             className="bg-red-50 p-4 rounded-3xl border-2 border-red-100 flex-row items-center justify-between shadow-md active:scale-95"
           >
             <View className="flex-row items-center space-x-3.5">

@@ -40,11 +40,21 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ message: 'Invalid credentials - incorrect password.' });
     }
 
+    // Normalize role and determine redirect route
+    const userRole = user.role ? user.role.toLowerCase() : 'customer';
+    const redirectRoutes = {
+      manager: 'ManagerDashboard',
+      kitchen: 'KitchenDashboard',
+      waiter: 'WaiterDashboard',
+      driver: 'DriverDashboard',
+      customer: 'CustomerLanding'
+    };
+
     return res.status(200).json({
       success: true,
       token: 'sample-jwt-token-xyz',
-      user: { id: user._id, email: user.email, name: user.name },
-      navigateTo: 'CustomerLanding'
+      user: { id: user._id, email: user.email, name: user.name, role: userRole },
+      navigateTo: redirectRoutes[userRole] || 'CustomerLanding'
     });
   } catch (error) {
     console.error('Login Route Error:', error);
@@ -153,13 +163,8 @@ router.post('/reset-password/:token', async (req, res) => {
 // --- GET USER PROFILE (GET /api/auth/profile) ---
 router.get('/profile', async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      return res.status(401).json({ message: 'No token provided.' });
-    }
-
-    // Fetches the active profile user document
-    let user = await User.findOne(); 
+    // Fetches the active profile user document (no auth required for now)
+    let user = await User.findOne();
     if (!user) {
       return res.status(404).json({ message: 'User not found.' });
     }
