@@ -16,7 +16,6 @@ export default function OrderHistoryScreen({ route, navigation }) {
   useEffect(() => {
     fetchUserOrders();
 
-    // Connect to Socket.io for real-time order status updates
     const socket = io(BACKEND_URL);
 
     socket.on('order_status_updated', () => {
@@ -50,9 +49,15 @@ export default function OrderHistoryScreen({ route, navigation }) {
 
       const allOrders = data.orders || [];
       
-      // Separate active vs delivered/completed history items directly from database results
-      const active = allOrders.filter(o => o.status !== 'Delivered' && o.status !== 'Cancelled' && o.status !== 'Served');
-      const past = allOrders.filter(o => o.status === 'Delivered' || o.status === 'Cancelled' || o.status === 'Served');
+      const active = allOrders.filter(o => {
+        const status = o.status || 'Pending';
+        return status !== 'Delivered' && status !== 'Cancelled' && status !== 'Served';
+      });
+      
+      const past = allOrders.filter(o => {
+        const status = o.status || 'Pending';
+        return status === 'Delivered' || status === 'Cancelled' || status === 'Served';
+      });
 
       setActiveOrders(active);
       setPastOrders(past);
@@ -121,22 +126,42 @@ export default function OrderHistoryScreen({ route, navigation }) {
               </Text>
             </View>
           ) : (
-            displayedOrders.map((order) => {
-              // Extract and map item names cleanly from orderItems array
-              const itemNames = order.orderItems?.map(i => `${i.quantity}x ${i.name || i.menuItem?.name || 'Item'}`).join(', ') || 'Custom Order';
-              const orderIdDisplay = `#${order._id ? order._id.slice(-6).toUpperCase() : '000000'}`;
-              const orderDate = new Date(order.createdAt).toLocaleDateString() + ' ' + new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            displayedOrders.map((order, index) => {
+              const uniqueKey = order._id || order.id || index.toString();
               
+              // Safe Item Name extraction
+              let itemNames = 'Order Item';
+              if (order.orderItems && order.orderItems.length > 0) {
+                itemNames = order.orderItems.map(i => `${i.quantity || 1}x ${i.name || i.menuItem?.name || 'Dish'}`).join(', ');
+              } else if (order.items) {
+                itemNames = order.items;
+              }
+
+              const orderIdDisplay = `#${order._id ? order._id.slice(-6).toUpperCase() : '000000'}`;
+              
+              // Safe Date Parsing
+              let orderDate = 'Recent Order';
+              const rawDate = order.createdAt || order.date;
+              if (rawDate) {
+                const parsed = new Date(rawDate);
+                if (!isNaN(parsed.getTime())) {
+                  orderDate = parsed.toLocaleDateString() + ' ' + parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                }
+              }
+
+              const totalVal = order.totalAmount ?? order.total ?? 0;
+              const orderStatus = order.status || 'Pending';
+
               return (
-                <View key={order._id} className="bg-white rounded-2xl border border-[#EAE3DE] p-4 mb-3 shadow-xs">
+                <View key={uniqueKey} className="bg-white rounded-2xl border border-[#EAE3DE] p-4 mb-3 shadow-xs">
                   <View className="flex-row justify-between items-center mb-3 border-b border-[#F8F9FC] pb-2.5">
                     <View>
                       <Text className="text-xs font-black text-[#1F130D]">{orderIdDisplay}</Text>
                       <Text className="text-[9px] text-gray-400">{orderDate}</Text>
                     </View>
-                    <View className={`px-2.5 py-1 rounded-full ${order.status === 'Preparing' || order.status === 'Pending' ? 'bg-[#FEF7F3] border border-[#B8520B]/30' : 'bg-green-50 border border-green-200'}`}>
-                      <Text className={`text-[9px] font-bold ${order.status === 'Preparing' || order.status === 'Pending' ? 'text-[#B8520B]' : 'text-green-600'}`}>
-                        {order.status}
+                    <View className={`px-2.5 py-1 rounded-full ${orderStatus === 'Preparing' || orderStatus === 'Pending' ? 'bg-[#FEF7F3] border border-[#B8520B]/30' : 'bg-green-50 border border-green-200'}`}>
+                      <Text className={`text-[9px] font-bold ${orderStatus === 'Preparing' || orderStatus === 'Pending' ? 'text-[#B8520B]' : 'text-green-600'}`}>
+                        {orderStatus}
                       </Text>
                     </View>
                   </View>
@@ -147,7 +172,7 @@ export default function OrderHistoryScreen({ route, navigation }) {
                     </View>
                     <View className="flex-1">
                       <Text className="text-[11px] font-bold text-[#1F130D] mb-1" numberOfLines={2}>{itemNames}</Text>
-                      <Text className="text-xs font-black text-[#B8520B]">ETB {order.totalAmount?.toFixed(2)}</Text>
+                      <Text className="text-xs font-black text-[#B8520B]">ETB {Number(totalVal).toFixed(2)}</Text>
                     </View>
                   </View>
 
