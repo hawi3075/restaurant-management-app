@@ -1,5 +1,5 @@
-import React, { useState, useContext, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Image, ImageBackground, ActivityIndicator } from 'react-native';
+import React, { useState, useContext, useEffect, useRef } from 'react';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Image, ImageBackground, ActivityIndicator, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../../context/AuthContext';
 import { BACKEND_URL } from '../../api/backend';
@@ -8,9 +8,12 @@ export default function CustomerLandingScreen({ navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [menuItems, setMenuItems] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const { user } = useContext(AuthContext); // Consume global auth state
+  const { user, token } = useContext(AuthContext);
   
-  const isLoggedIn = !!user; // Automatically true if a user object exists
+  const isLoggedIn = !!user;
+
+  const [activeDeliveryAlert, setActiveDeliveryAlert] = useState(null);
+  const alertAnim = useRef(new Animated.Value(-100)).current;
 
   const categories = [
     { name: 'Breakfast', image: 'https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?auto=format&fit=crop&w=400&q=80' },
@@ -54,15 +57,26 @@ export default function CustomerLandingScreen({ navigation }) {
 
         const items = menuJson.items || menuJson || [];
         if (items && items.length > 0) {
-          setMenuItems(items.map((it, idx) => ({
-            id: it._id || it.id || idx,
-            name: it.name || it.title || 'Menu Item',
-            desc: it.description || it.desc || '',
-            price: Number(it.price || 0),
-            rating: Number(it.rating || 4.8).toFixed(1),
-            image: it.image || 'https://images.unsplash.com/photo-1541544741938-0af808871cc0?auto=format&fit=crop&w=400&q=80',
-            category: it.category || 'Uncategorized'
-          })));
+          setMenuItems(items.map((it, idx) => {
+            let imageUrl = it.image || it.img;
+            
+            // Reject empty values, non-strings, or broken local browser blob URLs
+            if (!imageUrl || typeof imageUrl !== 'string' || imageUrl.trim() === '' || imageUrl.startsWith('blob:')) {
+              imageUrl = 'https://images.unsplash.com/photo-1541544741938-0af808871cc0?auto=format&fit=crop&w=400&q=80';
+            } else if (imageUrl.startsWith('/')) {
+              imageUrl = `${BACKEND_URL}${imageUrl}`;
+            }
+
+            return {
+              id: it._id || it.id || idx,
+              name: it.name || it.title || 'Menu Item',
+              desc: it.description || it.desc || '',
+              price: Number(it.price || 0),
+              rating: Number(it.rating || 4.8).toFixed(1),
+              image: imageUrl,
+              category: it.category || 'Uncategorized'
+            };
+          }));
         } else {
           setMenuItems([]);
         }
@@ -80,27 +94,97 @@ export default function CustomerLandingScreen({ navigation }) {
     loadData();
   }, []);
 
+  useEffect(() => {
+    if (!isLoggedIn) return;
+
+    const checkLiveDeliveries = async () => {
+      try {
+        const authToken = token || user?.token || '';
+        const response = await fetch(`${BACKEND_URL}/api/orders`, {
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        const contentType = response.headers.get("content-type");
+        if (!response.ok || !contentType || !contentType.includes("application/json")) {
+          return;
+        }
+
+        const data = await response.json();
+        const ordersList = data.orders || (Array.isArray(data) ? data : []);
+        
+        const onTheWayOrder = ordersList.find(o => 
+          o.status === 'Ready' || o.deliveryStatus === 'On the Way' || o.deliveryStatus === 'Ready for Pickup'
+        );
+
+        if (onTheWayOrder) {
+          setActiveDeliveryAlert({
+            id: onTheWayOrder._id || onTheWayOrder.id,
+            text: '🛵 Your delicious food is On the Way from the driver!'
+          });
+          
+          Animated.timing(alertAnim, {
+            toValue: 0,
+            duration: 350,
+            useNativeDriver: true,
+          }).start();
+        } else {
+          Animated.timing(alertAnim, {
+            toValue: -100,
+            duration: 300,
+            useNativeDriver: true,
+          }).start(() => setActiveDeliveryAlert(null));
+        }
+      } catch (error) {
+        // Suppress network poll errors
+      }
+    };
+
+    checkLiveDeliveries();
+    const interval = setInterval(checkLiveDeliveries, 10000); 
+    return () => clearInterval(interval);
+  }, [isLoggedIn, token, user]);
+
   return (
     <View className="flex-1 bg-[#F8F9FC] items-center">
       <View className="w-full max-w-[440px] flex-1 bg-[#F8F9FC] relative shadow-2xl">
         <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
+        {activeDeliveryAlert && (
+          <Animated.View 
+            style={{ transform: [{ translateY: alertAnim }] }}
+            className="absolute top-12 left-5 right-5 z-50 bg-[#B8520B] p-3.5 rounded-2xl shadow-xl flex-row items-center justify-between border border-white/30"
+          >
+            <TouchableOpacity 
+              onPress={() => navigation.navigate('OrderHistoryScreen')}
+              className="flex-row items-center flex-1 pr-2"
+            >
+              <View className="w-7 h-7 bg-white/20 rounded-full items-center justify-center mr-2.5">
+                <Ionicons name="bicycle" size={15} color="white" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-white text-[11px] font-black tracking-wide">Live Delivery Update</Text>
+                <Text className="text-white/90 text-[10px] font-medium">{activeDeliveryAlert.text}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={14} color="white" />
+            </TouchableOpacity>
+          </Animated.View>
+        )}
+
         <ScrollView showsVerticalScrollIndicator={false} className="flex-1 pb-24">
-          {/* Top Hero Banner */}
           <ImageBackground 
             source={{ uri: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?auto=format&fit=crop&w=900&q=80' }}
             className="pt-12 pb-6 px-5 justify-end"
             style={{ height: 410 }}
           >
-            {/* Rich gradient overlay for premium depth */}
             <View className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/20" />
 
-            {/* Floating Glassmorphism Header Bar with Premium Pill Button */}
             <View className="absolute top-10 left-5 right-5 flex-row justify-end items-center z-10">
               <TouchableOpacity 
                 onPress={() => {
                   if (isLoggedIn) {
-                    // Check if manager trying to access dashboard/profile
                     const role = user?.role?.toLowerCase()?.trim();
                     if (role === 'manager' || role === 'admin') {
                       navigation.navigate('ManagerDashboard');
@@ -118,7 +202,6 @@ export default function CustomerLandingScreen({ navigation }) {
               </TouchableOpacity>
             </View>
 
-            {/* Hero Content */}
             <View className="z-10 mb-2">
               <Text className="text-2xl font-black text-white leading-tight mb-1 shadow-sm">
                 Taste the <Text className="text-[#FF9F43]">Masterpiece</Text> in Every Bite
@@ -134,7 +217,6 @@ export default function CustomerLandingScreen({ navigation }) {
                 <Text className="text-white font-black text-xs tracking-wider uppercase">Order Now</Text>
               </TouchableOpacity>
 
-              {/* Redesigned Sleek Pill Search Bar */}
               <View className="bg-white/95 backdrop-blur-lg rounded-2xl px-4 py-3 flex-row items-center shadow-xl border border-white/40">
                 <Ionicons name="search" size={16} color="#B8520B" style={{ marginRight: 10 }} />
                 <TextInput 
@@ -153,7 +235,6 @@ export default function CustomerLandingScreen({ navigation }) {
             </View>
           </ImageBackground>
 
-          {/* Categories Grid Section */}
           <View className="px-5 mt-5">
             <View className="flex-row justify-between items-center mb-3">
               <Text className="text-base font-black text-[#1F130D]">Categories</Text>
@@ -181,7 +262,6 @@ export default function CustomerLandingScreen({ navigation }) {
             </View>
           </View>
 
-          {/* Special Promotional Promo Banner - Sunday 10% Discount Offer */}
           <View className="px-5 mt-2">
             <TouchableOpacity 
               onPress={() => navigation.navigate('MenuScreen')}
@@ -198,7 +278,6 @@ export default function CustomerLandingScreen({ navigation }) {
             </TouchableOpacity>
           </View>
 
-          {/* Trending Now Horizontal Carousel */}
           <View className="px-5 mt-5 mb-10">
             <View className="flex-row justify-between items-center mb-3">
               <Text className="text-base font-black text-[#1F130D]">Trending Now</Text>
@@ -226,7 +305,11 @@ export default function CustomerLandingScreen({ navigation }) {
                 <View key={item.id} className="bg-white w-64 rounded-2xl border border-[#EAE3DE] overflow-hidden mr-3 shadow-xs">
                   
                   <View className="relative h-32 w-full">
-                    <Image source={{ uri: item.image }} className="w-full h-full" />
+                    <Image 
+                      source={{ uri: item.image }} 
+                      className="w-full h-full" 
+                      resizeMode="cover"
+                    />
                     <View className="absolute inset-0 bg-black/10" />
                   </View>
 
@@ -278,7 +361,6 @@ export default function CustomerLandingScreen({ navigation }) {
           </View>
         </ScrollView>
 
-        {/* Bottom Mobile Navigation Bar */}
         <View className="absolute bottom-0 left-0 right-0 bg-white border-t border-[#EAE3DE] px-6 py-2.5 flex-row justify-between items-center shadow-lg">
           <TouchableOpacity onPress={() => navigation.navigate('CustomerLanding')} className="items-center">
             <Ionicons name="home" size={18} color="#B8520B" />
@@ -297,7 +379,6 @@ export default function CustomerLandingScreen({ navigation }) {
             <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Cart</Text>
           </TouchableOpacity>
           
-          {/* Dynamic Profile / Sign Up Bottom Tab */}
           <TouchableOpacity 
             onPress={() => {
               if (isLoggedIn) {
@@ -326,4 +407,4 @@ export default function CustomerLandingScreen({ navigation }) {
       </View>
     </View>
   );
-} 
+}

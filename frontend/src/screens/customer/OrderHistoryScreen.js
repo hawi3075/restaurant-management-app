@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StatusBar, Image, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StatusBar, Image, ActivityIndicator, TextInput, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { io } from 'socket.io-client';
@@ -10,6 +10,13 @@ export default function OrderHistoryScreen({ route, navigation }) {
   const [isLoading, setIsLoading] = useState(true);
   const [activeOrders, setActiveOrders] = useState([]);
   const [pastOrders, setPastOrders] = useState([]);
+
+  // Review Modal State
+  const [isReviewModalVisible, setIsReviewModalVisible] = useState(false);
+  const [selectedOrderForReview, setSelectedOrderForReview] = useState(null);
+  const [rating, setRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState('');
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   
   const isLoggedIn = route?.params?.isLoggedIn ?? true;
 
@@ -47,7 +54,7 @@ export default function OrderHistoryScreen({ route, navigation }) {
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Failed to fetch orders.');
 
-      const allOrders = data.orders || [];
+      const allOrders = data.orders || (Array.isArray(data) ? data : []);
       
       const active = allOrders.filter(o => {
         const status = o.status || 'Pending';
@@ -71,6 +78,51 @@ export default function OrderHistoryScreen({ route, navigation }) {
     }
   };
 
+  const handleOpenReviewModal = (order) => {
+    setSelectedOrderForReview(order);
+    setRating(5);
+    setReviewComment('');
+    setIsReviewModalVisible(true);
+  };
+
+  const handleSubmitReview = async () => {
+    if (!selectedOrderForReview) return;
+    try {
+      setIsSubmittingReview(true);
+      const token = await AsyncStorage.getItem('token');
+      
+      const firstItem = selectedOrderForReview.orderItems?.[0] || {};
+      const menuItemId = firstItem.menuItem?._id || firstItem.menuItem || firstItem._id;
+
+      const response = await fetch(`${BACKEND_URL}/api/reviews`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          orderId: selectedOrderForReview._id || selectedOrderForReview.id,
+          menuItemId: menuItemId,
+          rating: rating,
+          comment: reviewComment
+        })
+      });
+
+      if (response.ok) {
+        alert('Thank you! Your review has been submitted successfully.');
+        setIsReviewModalVisible(false);
+      } else {
+        const errData = await response.json();
+        alert(errData.message || 'Failed to submit review.');
+      }
+    } catch (err) {
+      console.error('Submit review error:', err);
+      alert('Network error submitting review.');
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  };
+
   const displayedOrders = activeTab === 'active' ? activeOrders : pastOrders;
 
   return (
@@ -79,10 +131,10 @@ export default function OrderHistoryScreen({ route, navigation }) {
         <StatusBar barStyle="dark-content" backgroundColor="#F8F9FC" />
 
         {/* Top Header */}
-        <View className="pt-12 px-5 pb-4 bg-white border-b border-[#EAE3DE] flex-row justify-between items-center">
+        <View className="pt-12 px-5 pb-4 bg-white border-b border-[#EAE3DE] flex-row justify-between items-center shadow-xs">
           <Text className="text-xl font-black text-[#1F130D]">My Orders</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('CartScreen')} className="relative">
-            <Ionicons name="cart-outline" size={22} color="#1F130D" />
+          <TouchableOpacity onPress={() => navigation.navigate('CartScreen')} className="w-9 h-9 bg-[#FEF7F3] rounded-full items-center justify-center border border-[#B8520B]/20">
+            <Ionicons name="cart-outline" size={18} color="#B8520B" />
           </TouchableOpacity>
         </View>
 
@@ -94,7 +146,7 @@ export default function OrderHistoryScreen({ route, navigation }) {
               className={`flex-1 py-2.5 rounded-xl items-center ${activeTab === 'active' ? 'bg-white shadow-xs' : ''}`}
             >
               <Text className={`text-xs font-bold ${activeTab === 'active' ? 'text-[#B8520B]' : 'text-gray-500'}`}>
-                Active Orders
+                Active Orders ({activeOrders.length})
               </Text>
             </TouchableOpacity>
 
@@ -103,7 +155,7 @@ export default function OrderHistoryScreen({ route, navigation }) {
               className={`flex-1 py-2.5 rounded-xl items-center ${activeTab === 'history' ? 'bg-white shadow-xs' : ''}`}
             >
               <Text className={`text-xs font-bold ${activeTab === 'history' ? 'text-[#B8520B]' : 'text-gray-500'}`}>
-                Order History
+                Order History ({pastOrders.length})
               </Text>
             </TouchableOpacity>
           </View>
@@ -129,10 +181,13 @@ export default function OrderHistoryScreen({ route, navigation }) {
             displayedOrders.map((order, index) => {
               const uniqueKey = order._id || order.id || index.toString();
               
-              // Safe Item Name extraction
+              // Safe Item extraction & details
               let itemNames = 'Order Item';
+              let firstItemImage = 'https://images.unsplash.com/photo-1541544741938-0af808871cc0?auto=format&fit=crop&w=400&q=80';
+              
               if (order.orderItems && order.orderItems.length > 0) {
                 itemNames = order.orderItems.map(i => `${i.quantity || 1}x ${i.name || i.menuItem?.name || 'Dish'}`).join(', ');
+                firstItemImage = order.orderItems[0].image || order.orderItems[0].menuItem?.image || firstItemImage;
               } else if (order.items) {
                 itemNames = order.items;
               }
@@ -149,7 +204,7 @@ export default function OrderHistoryScreen({ route, navigation }) {
                 }
               }
 
-              const totalVal = order.totalAmount ?? order.total ?? 0;
+              const totalVal = Number(order.totalAmount ?? order.total ?? 0);
               const orderStatus = order.status || 'Pending';
 
               return (
@@ -167,29 +222,102 @@ export default function OrderHistoryScreen({ route, navigation }) {
                   </View>
 
                   <View className="flex-row items-center mb-3">
-                    <View className="w-14 h-14 bg-[#FEF7F3] rounded-xl mr-3 items-center justify-center border border-[#B8520B]/20">
-                      <Ionicons name="fast-food-outline" size={24} color="#B8520B" />
-                    </View>
+                    {/* Fetch Real Thumbnail Image instead of generic icon box */}
+                    <Image 
+                      source={{ uri: firstItemImage }} 
+                      className="w-14 h-14 rounded-xl mr-3 bg-gray-100 border border-[#EAE3DE]" 
+                    />
                     <View className="flex-1">
                       <Text className="text-[11px] font-bold text-[#1F130D] mb-1" numberOfLines={2}>{itemNames}</Text>
-                      <Text className="text-xs font-black text-[#B8520B]">ETB {Number(totalVal).toFixed(2)}</Text>
+                      <Text className="text-xs font-black text-[#B8520B]">ETB {totalVal.toFixed(2)}</Text>
                     </View>
                   </View>
 
                   <View className="flex-row justify-between items-center pt-2 border-t border-[#F8F9FC]">
                     <Text className="text-[10px] text-gray-400 uppercase font-semibold">Payment: {order.paymentMethod || 'Cash'}</Text>
-                    <TouchableOpacity 
-                      onPress={() => navigation.navigate('MenuScreen')}
-                      className="bg-[#FEF7F3] border border-[#B8520B]/30 px-3 py-1.5 rounded-xl"
-                    >
-                      <Text className="text-[10px] font-bold text-[#B8520B]">Reorder</Text>
-                    </TouchableOpacity>
+                    
+                    <View className="flex-row space-x-2">
+                      {/* Review Button for Delivered/Served Orders */}
+                      {activeTab === 'history' && (
+                        <TouchableOpacity 
+                          onPress={() => handleOpenReviewModal(order)}
+                          className="bg-[#FEF7F3] border border-[#B8520B]/40 px-3 py-1.5 rounded-xl flex-row items-center"
+                        >
+                          <Ionicons name="star-outline" size={11} color="#B8520B" style={{ marginRight: 3 }} />
+                          <Text className="text-[10px] font-bold text-[#B8520B]">Write Review</Text>
+                        </TouchableOpacity>
+                      )}
+
+                      <TouchableOpacity 
+                        onPress={() => navigation.navigate('MenuScreen')}
+                        className="bg-[#B8520B] px-3.5 py-1.5 rounded-xl"
+                      >
+                        <Text className="text-[10px] font-bold text-white">Reorder</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
               );
             })
           )}
         </ScrollView>
+
+        {/* Review & Rating Modal */}
+        <Modal
+          visible={isReviewModalVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setIsReviewModalVisible(false)}
+        >
+          <View className="flex-1 bg-black/60 justify-center items-center px-5">
+            <View className="bg-white w-full max-w-[360px] rounded-3xl p-5 shadow-2xl border border-[#EAE3DE]">
+              <View className="flex-row justify-between items-center mb-3">
+                <Text className="text-base font-black text-[#1F130D]">Rate Your Order</Text>
+                <TouchableOpacity onPress={() => setIsReviewModalVisible(false)}>
+                  <Ionicons name="close" size={20} color="#757575" />
+                </TouchableOpacity>
+              </View>
+
+              <Text className="text-xs text-gray-500 mb-4">How was your meal? Tap stars to rate.</Text>
+
+              {/* Star Rating Picker */}
+              <View className="flex-row justify-center space-x-2 mb-4">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <TouchableOpacity key={star} onPress={() => setRating(star)} className="p-1">
+                    <Ionicons 
+                      name={star <= rating ? "star" : "star-outline"} 
+                      size={28} 
+                      color="#E67E22" 
+                    />
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Review Comment Input */}
+              <TextInput
+                placeholder="Write your review or feedback here..."
+                placeholderTextColor="#888888"
+                multiline={true}
+                numberOfLines={4}
+                value={reviewComment}
+                onChangeText={setReviewComment}
+                className="bg-[#F8F9FC] border border-[#EAE3DE] rounded-2xl p-3 text-xs text-[#1F130D] h-24 mb-4 text-top"
+              />
+
+              <TouchableOpacity 
+                onPress={handleSubmitReview}
+                disabled={isSubmittingReview}
+                className="bg-[#B8520B] py-3.5 rounded-2xl items-center shadow-md"
+              >
+                {isSubmittingReview ? (
+                  <ActivityIndicator size="small" color="white" />
+                ) : (
+                  <Text className="text-white font-black text-xs uppercase tracking-wide">Submit Review</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
 
         {/* Bottom Mobile Navigation Bar */}
         <View className="absolute bottom-0 left-0 right-0 bg-white border-t border-[#EAE3DE] px-6 py-2.5 flex-row justify-between items-center shadow-lg">

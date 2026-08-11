@@ -5,7 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BACKEND_URL } from '../../api/backend';
 
 export default function CheckoutScreen({ route, navigation }) {
-  const totalAmount = route?.params?.total ?? 40.99;
+  const initialTotal = route?.params?.total ?? 40.99;
 
   const [serviceType, setServiceType] = useState('delivery'); // 'delivery' or 'dine-in'
   
@@ -39,7 +39,15 @@ export default function CheckoutScreen({ route, navigation }) {
           const storedCart = await AsyncStorage.getItem('cart');
           items = storedCart ? JSON.parse(storedCart) : [];
         }
-        setCartItems(items);
+        
+        // Ensure each item has a numeric quantity and price
+        const formattedItems = items.map(i => ({
+          ...i,
+          quantity: Number(i.quantity) || 1,
+          price: Number(i.price) || 0
+        }));
+
+        setCartItems(formattedItems);
       } catch (error) {
         console.error('Load checkout data error', error);
       }
@@ -47,6 +55,27 @@ export default function CheckoutScreen({ route, navigation }) {
 
     loadUserDataAndCart();
   }, []);
+
+  // Calculate total amount dynamically based on cart items quantities
+  const totalAmount = cartItems.length > 0 
+    ? cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+    : initialTotal;
+
+  // Handle quantity changes (+, -, or direct text input)
+  const updateItemQuantity = (index, newQuantity) => {
+    const updated = [...cartItems];
+    const parsedQty = parseInt(newQuantity, 10);
+    
+    if (isNaN(parsedQty) || parsedQty <= 0) {
+      // Remove item or set to 1 minimum
+      updated[index].quantity = 1;
+    } else {
+      updated[index].quantity = parsedQty;
+    }
+
+    setCartItems(updated);
+    AsyncStorage.setItem('cart', JSON.stringify(updated)).catch(err => console.error(err));
+  };
 
   // Listen for deep link callback when returning from Chapa web view/browser
   useEffect(() => {
@@ -109,12 +138,7 @@ export default function CheckoutScreen({ route, navigation }) {
     (async () => {
       try {
         const token = await AsyncStorage.getItem('token');
-        let items = route?.params?.cartItems || [];
-        if ((!items || items.length === 0)) {
-          const stored = await AsyncStorage.getItem('cart');
-          items = stored ? JSON.parse(stored) : [];
-        }
-        const orderItems = items.map(i => ({ name: i.name, quantity: i.quantity, unitPrice: i.price, menuItem: i.id }));
+        const orderItems = cartItems.map(i => ({ name: i.name, quantity: i.quantity, unitPrice: i.price, menuItem: i.id }));
         const txRef = paymentReference || `CHAPA-${Date.now()}`;
         setPaymentReference(txRef);
 
@@ -297,21 +321,51 @@ export default function CheckoutScreen({ route, navigation }) {
             </View>
           </View>
 
-          {/* Order Amount Breakdown Form / Summary */}
+          {/* Order Amount Summary & Quantity Controls */}
           <Text className="text-xs font-bold text-gray-400 uppercase mb-2 ml-1 tracking-wider">Order Amount Summary</Text>
           <View className="bg-white rounded-2xl border border-[#EAE3DE] p-4 mb-5 shadow-xs">
             {cartItems.length > 0 ? (
               cartItems.map((item, index) => (
-                <View key={index} className="flex-row justify-between items-center py-2 border-b border-gray-100">
-                  <View className="flex-1 pr-2">
-                    <Text className="text-xs font-bold text-[#1F130D]" numberOfLines={1}>{item.name}</Text>
-                    <Text className="text-[10px] text-gray-400">Qty: {item.quantity}</Text>
+                <View key={index} className="py-3 border-b border-gray-100">
+                  <View className="flex-row justify-between items-center mb-2">
+                    <Text className="text-xs font-bold text-[#1F130D] flex-1 pr-2" numberOfLines={1}>{item.name}</Text>
+                    <Text className="text-xs font-bold text-[#B8520B]">${(item.price * item.quantity).toFixed(2)}</Text>
                   </View>
-                  <Text className="text-xs font-bold text-gray-700">${(item.price * item.quantity).toFixed(2)}</Text>
+
+                  <View className="flex-row justify-between items-center">
+                    <Text className="text-[10px] text-gray-400">Unit Price: ${item.price?.toFixed(2)}</Text>
+                    
+                    {/* Quantity Control Buttons & Input */}
+                    <View className="flex-row items-center space-x-2">
+                      <TouchableOpacity 
+                        onPress={() => updateItemQuantity(index, item.quantity - 1)}
+                        className="w-7 h-7 bg-gray-100 rounded-lg items-center justify-center border border-gray-200"
+                      >
+                        <Ionicons name="remove" size={14} color="#757575" />
+                      </TouchableOpacity>
+
+                      <TextInput
+                        className="w-10 h-7 bg-[#F8F9FC] border border-[#EAE3DE] rounded-lg text-center text-xs font-bold text-[#1F130D]"
+                        keyboardType="numeric"
+                        value={String(item.quantity)}
+                        onChangeText={(val) => updateItemQuantity(index, val)}
+                      />
+
+                      <TouchableOpacity 
+                        onPress={() => updateItemQuantity(index, item.quantity + 1)}
+                        className="w-7 h-7 bg-[#FEF7F3] rounded-lg items-center justify-center border border-[#B8520B]/30"
+                      >
+                        <Ionicons name="add" size={14} color="#B8520B" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
                 </View>
               ))
             ) : (
-              <Text className="text-xs text-gray-400 italic py-1">Standard Order Package</Text>
+              <View className="py-2">
+                <Text className="text-xs text-gray-400 italic mb-2">Standard Package</Text>
+                <Text className="text-xs font-bold text-[#1F130D]">Default Item</Text>
+              </View>
             )}
 
             <View className="flex-row justify-between items-center pt-3 mt-1">
@@ -319,7 +373,7 @@ export default function CheckoutScreen({ route, navigation }) {
               <Text className="text-xs font-bold text-gray-700">Free</Text>
             </View>
 
-            <View className="flex-row justify-between items-center pt-2 mt-2 border-t border-[#EAE3DE]">
+            <View className="flex-row justify-between items-center pt-3 mt-2 border-t border-[#EAE3DE]">
               <Text className="text-xs font-black text-[#1F130D]">Total Amount</Text>
               <Text className="text-sm font-black text-[#B8520B]">${totalAmount.toFixed(2)}</Text>
             </View>
