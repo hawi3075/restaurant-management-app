@@ -159,9 +159,12 @@ router.put('/:id/status', async (req, res) => {
     order.status = statusMap[normalizedStatus] || order.status;
     await order.save();
 
-    // Emit status update
+    // Emit status updates to sync customer and kitchen real-time views
     const io = req.app.get('io');
-    if (io) io.emit('order_status_updated', { id: order._id, status: order.status });
+    if (io) {
+      io.emit('order_status_updated', { id: order._id, status: order.status, order });
+      io.emit('new_kitchen_order', order);
+    }
 
     return res.status(200).json({ success: true, order });
   } catch (err) {

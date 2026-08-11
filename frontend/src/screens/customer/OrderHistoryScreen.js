@@ -181,7 +181,6 @@ export default function OrderHistoryScreen({ route, navigation }) {
             displayedOrders.map((order, index) => {
               const uniqueKey = order._id || order.id || index.toString();
               
-              // Safe Item extraction & details
               let itemNames = 'Order Item';
               let firstItemImage = 'https://images.unsplash.com/photo-1541544741938-0af808871cc0?auto=format&fit=crop&w=400&q=80';
               
@@ -192,19 +191,24 @@ export default function OrderHistoryScreen({ route, navigation }) {
                 itemNames = order.items;
               }
 
-              const orderIdDisplay = `#${order._id ? order._id.slice(-6).toUpperCase() : '000000'}`;
+              if (order.image) {
+                firstItemImage = order.image;
+              }
+
+              const orderIdDisplay = `#${order._id ? String(order._id).slice(-6).toUpperCase() : (order.id || '000000')}`;
               
-              // Safe Date Parsing
               let orderDate = 'Recent Order';
               const rawDate = order.createdAt || order.date;
               if (rawDate) {
                 const parsed = new Date(rawDate);
                 if (!isNaN(parsed.getTime())) {
                   orderDate = parsed.toLocaleDateString() + ' ' + parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                } else if (typeof order.date === 'string') {
+                  orderDate = order.date;
                 }
               }
 
-              const totalVal = Number(order.totalAmount ?? order.total ?? 0);
+              const totalVal = Number(order.totalAmount ?? (typeof order.total === 'string' ? order.total.replace('$', '') : order.total) ?? 0);
               const orderStatus = order.status || 'Pending';
 
               return (
@@ -222,7 +226,6 @@ export default function OrderHistoryScreen({ route, navigation }) {
                   </View>
 
                   <View className="flex-row items-center mb-3">
-                    {/* Fetch Real Thumbnail Image instead of generic icon box */}
                     <Image 
                       source={{ uri: firstItemImage }} 
                       className="w-14 h-14 rounded-xl mr-3 bg-gray-100 border border-[#EAE3DE]" 
@@ -237,7 +240,6 @@ export default function OrderHistoryScreen({ route, navigation }) {
                     <Text className="text-[10px] text-gray-400 uppercase font-semibold">Payment: {order.paymentMethod || 'Cash'}</Text>
                     
                     <View className="flex-row space-x-2">
-                      {/* Review Button for Delivered/Served Orders */}
                       {activeTab === 'history' && (
                         <TouchableOpacity 
                           onPress={() => handleOpenReviewModal(order)}
@@ -280,7 +282,6 @@ export default function OrderHistoryScreen({ route, navigation }) {
 
               <Text className="text-xs text-gray-500 mb-4">How was your meal? Tap stars to rate.</Text>
 
-              {/* Star Rating Picker */}
               <View className="flex-row justify-center space-x-2 mb-4">
                 {[1, 2, 3, 4, 5].map((star) => (
                   <TouchableOpacity key={star} onPress={() => setRating(star)} className="p-1">
@@ -293,7 +294,6 @@ export default function OrderHistoryScreen({ route, navigation }) {
                 ))}
               </View>
 
-              {/* Review Comment Input */}
               <TextInput
                 placeholder="Write your review or feedback here..."
                 placeholderTextColor="#888888"

@@ -1,13 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext, useCallback } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StatusBar, Image, Modal, TextInput, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
+import io from 'socket.io-client';
+import { AuthContext } from '../../context/AuthContext';
 
-// Define your backend URL directly here if you don't have a backend.js file
 const BACKEND_URL = 'http://localhost:5000'; 
+const SOCKET_URL = BACKEND_URL;
 
 export default function KitchenDashboardScreen({ route, navigation }) {
+  const authContext = useContext(AuthContext);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [chefName, setChefName] = useState('Chef Alex');
   const [chefEmail, setChefEmail] = useState('kitchen@restaurant.com');
@@ -18,10 +21,93 @@ export default function KitchenDashboardScreen({ route, navigation }) {
   const [activeTab, setActiveTab] = useState('All');
   const [kitchenOrders, setKitchenOrders] = useState([]);
 
+  const formatOrderData = (ordersList) => {
+    return (ordersList || []).map((order, index) => {
+      let formattedAddress = null;
+      if (order.deliveryAddress) {
+        if (typeof order.deliveryAddress === 'object') {
+          const { street, city } = order.deliveryAddress;
+          formattedAddress = [street, city].filter(Boolean).join(', ') || 'GPS Location Coordinates';
+        } else {
+          formattedAddress = String(order.deliveryAddress);
+        }
+      }
+
+      return {
+        id: order._id || order.id || `k${index + 1}`,
+        table: order.table?.tableNumber ? `Table ${String(order.table.tableNumber).padStart(2, '0')}` : (order.table || 'Walk-in'),
+        time: order.createdAt ? new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Now',
+        status: order.status === 'Pending' ? 'Pending' : order.status === 'Confirmed' || order.status === 'Preparing' || order.status === 'Cooking' ? 'Cooking' : order.status === 'Ready' ? 'Ready' : order.status,
+        source: order.paymentMethod === 'telebirr' ? 'Telebirr Order' : (order.serviceType || 'Customer App'),
+        deliveryAddress: formattedAddress,
+        phone: order.phone || order.customerPhone || null,
+        items: (order.orderItems || order.items || []).map((item) => ({
+          name: `${item.quantity || 1}x ${item.name || item.menuItem?.name || item.title || 'Item'}`,
+          note: item.note ? `Note: ${item.note}` : (item.unitPrice ? `ETB ${item.unitPrice.toFixed(2)}` : 'Regular')
+        })),
+        image: null
+      };
+    });
+  };
+
+  const fetchKitchenOrders = useCallback(async () => {
+    try {
+      setIsLoadingOrders(true);
+      const token = authContext?.token || await AsyncStorage.getItem('token');
+      const response = await fetch(`${BACKEND_URL}/api/orders/incoming`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to fetch kitchen orders');
+
+      const rawOrders = data.success ? (data.orders || []) : (Array.isArray(data) ? data : (data.orders || []));
+      const activeOrders = rawOrders.filter(o => {
+        const st = (o.status || 'Pending').toLowerCase();
+        return st !== 'served' && st !== 'delivered' && st !== 'cancelled';
+      });
+
+      setKitchenOrders(formatOrderData(activeOrders));
+    } catch (error) {
+      console.error('Fetch Kitchen Orders Error:', error);
+      setKitchenOrders([]);
+    } finally {
+      setIsLoadingOrders(false);
+    }
+  }, [authContext?.token]);
+
   useEffect(() => {
     loadChefProfile();
     fetchKitchenOrders();
-  }, []);
+
+    const token = authContext?.token;
+    const socket = io(SOCKET_URL, {
+      transports: ['websocket'],
+      auth: { token }
+    });
+
+    socket.on('new_order_placed', (newOrder) => {
+      setKitchenOrders(prev => [formatOrderData([newOrder])[0], ...prev]);
+    });
+
+    socket.on('order_status_updated', (data) => {
+      const targetId = data.id || data._id;
+      const updatedStatus = data.status === 'Preparing' || data.status === 'Cooking' ? 'Cooking' : data.status;
+      
+      setKitchenOrders(prev => prev.map(o => {
+        if (String(o.id) === String(targetId)) {
+          return { ...o, status: updatedStatus };
+        }
+        return o;
+      }));
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [fetchKitchenOrders, authContext?.token]);
 
   const loadChefProfile = async () => {
     try {
@@ -38,41 +124,15 @@ export default function KitchenDashboardScreen({ route, navigation }) {
     }
   };
 
-  const fetchKitchenOrders = async () => {
-    try {
-      setIsLoadingOrders(true);
-      const response = await fetch(`${BACKEND_URL}/api/orders/incoming`);
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message || 'Failed to fetch kitchen orders');
-
-      const incoming = (data.orders || []).map((order, index) => ({
-        id: order._id || order.id || `k${index + 1}`,
-        table: order.table?.tableNumber ? `Table ${String(order.table.tableNumber).padStart(2, '0')}` : 'Walk-in',
-        time: order.createdAt ? new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Now',
-        status: order.status === 'Pending' ? 'Pending' : order.status === 'Confirmed' || order.status === 'Preparing' ? 'Cooking' : order.status === 'Ready' ? 'Ready' : order.status,
-        source: order.paymentMethod === 'telebirr' ? 'Telebirr Order' : 'Customer App',
-        items: (order.orderItems || []).map((item) => ({
-          name: `${item.quantity || 1}x ${item.name || item.menuItem?.name || 'Item'}`,
-          note: item.unitPrice ? `ETB ${item.unitPrice.toFixed(2)}` : 'Regular'
-        })),
-        image: null
-      }));
-
-      setKitchenOrders(incoming);
-    } catch (error) {
-      console.error('Fetch Kitchen Orders Error:', error);
-      setKitchenOrders([]);
-    } finally {
-      setIsLoadingOrders(false);
-    }
-  };
-
   const handleLogout = async () => {
     try {
       await AsyncStorage.removeItem('token');
       await AsyncStorage.removeItem('user');
       await AsyncStorage.clear();
       setProfileModalVisible(false);
+      if (navigation?.replace) {
+        navigation.replace('CustomerLanding');
+      }
     } catch (error) {
       console.error('Logout Error:', error);
       Alert.alert('Error', 'Failed to log out properly.');
@@ -113,17 +173,22 @@ export default function KitchenDashboardScreen({ route, navigation }) {
 
   const updateOrderStatus = async (id, newStatus) => {
     try {
+      const token = authContext?.token || await AsyncStorage.getItem('token');
       const response = await fetch(`${BACKEND_URL}/api/orders/${id}/status`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json' 
+        },
         body: JSON.stringify({ status: newStatus })
       });
 
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Failed to update order');
 
-      const localStatus = newStatus === 'Preparing' ? 'Cooking' : newStatus;
+      const localStatus = newStatus === 'Preparing' || newStatus === 'Cooking' ? 'Cooking' : newStatus;
       setKitchenOrders((prev) => prev.map((order) => (order.id === id ? { ...order, status: localStatus } : order)));
+      Alert.alert('Success', `Order status updated to ${newStatus}`);
     } catch (error) {
       console.error('Update Kitchen Order Error:', error);
       Alert.alert('Error', error.message || 'Unable to update order status');
@@ -159,10 +224,10 @@ export default function KitchenDashboardScreen({ route, navigation }) {
             </View>
           </TouchableOpacity>
           
-          <View className="bg-[#FEF7F3] px-3 py-1.5 rounded-xl border border-[#B8520B]/20 flex-row items-center">
+          <TouchableOpacity onPress={fetchKitchenOrders} className="bg-[#FEF7F3] px-3 py-1.5 rounded-xl border border-[#B8520B]/20 flex-row items-center">
             <View className="w-2 h-2 rounded-full bg-emerald-500 mr-1.5 animate-pulse" />
-            <Text className="text-[11px] font-bold text-[#B8520B]">Live Feed</Text>
-          </View>
+            <Text className="text-[11px] font-bold text-[#B8520B]">Sync Live</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Main Content Scrollable */}
@@ -180,7 +245,7 @@ export default function KitchenDashboardScreen({ route, navigation }) {
             <View className="flex-1 bg-white rounded-3xl p-4 border border-[#EAE3DE] shadow-xs">
               <View className="flex-row justify-between items-center mb-2">
                 <Text className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Cooking Now</Text>
-                <Ionicons name="flame-outline" size={16} color="amber" />
+                <Ionicons name="flame-outline" size={16} color="#E67E22" />
               </View>
               <Text className="text-2xl font-black text-[#1F130D]">{cookingCount}</Text>
             </View>
@@ -210,8 +275,10 @@ export default function KitchenDashboardScreen({ route, navigation }) {
               <ActivityIndicator size="large" color="#B8520B" />
             </View>
           ) : filteredOrders.length === 0 ? (
-            <View className="py-16 items-center justify-center">
-              <Text className="text-sm text-gray-500">No kitchen orders yet.</Text>
+            <View className="py-16 items-center justify-center bg-white rounded-3xl border border-[#EAE3DE] p-6">
+              <Ionicons name="restaurant-outline" size={36} color="#9E9E9E" style={{ marginBottom: 8 }} />
+              <Text className="text-sm font-bold text-gray-600">No active kitchen orders</Text>
+              <Text className="text-xs text-gray-400 mt-1 text-center">New orders from customer checkouts will appear here instantly.</Text>
             </View>
           ) : filteredOrders.map((order) => (
             <View key={order.id} className={`bg-white rounded-3xl p-4 border mb-3 shadow-xs ${order.status === 'Pending' ? 'border-[#B8520B]' : 'border-[#EAE3DE]'}`}>
@@ -230,15 +297,26 @@ export default function KitchenDashboardScreen({ route, navigation }) {
                 </View>
               </View>
 
+              {/* Checkout Delivery & Contact Meta Data */}
+              {(order.deliveryAddress || order.phone) && (
+                <View className="bg-[#F8F9FC] p-2.5 rounded-2xl mb-3 border border-[#EAE3DE]">
+                  <Text className="text-[10px] font-bold text-[#1F130D] mb-0.5">Checkout Info for Driver Coordination:</Text>
+                  {order.deliveryAddress && <Text className="text-[10px] text-gray-600">📍 {order.deliveryAddress}</Text>}
+                  {order.phone && <Text className="text-[10px] text-gray-600 mt-0.5">📞 {order.phone}</Text>}
+                </View>
+              )}
+
+              {/* Order Items */}
               <View className="mb-3">
                 {order.items.map((item, idx) => (
-                  <View key={idx} className="flex-row justify-between py-1 border-b border-gray-50 last:border-b-0">
+                  <View key={idx} className="flex-row justify-between py-1 border-b border-gray-50">
                     <Text className="text-xs font-bold text-[#1F130D]">{item.name}</Text>
                     <Text className="text-[10px] text-[#B8520B] font-semibold">{item.note}</Text>
                   </View>
                 ))}
               </View>
 
+              {/* Action Buttons */}
               <View className="flex-row justify-end items-center pt-2.5 border-t border-[#F8F9FC] gap-2">
                 {order.status === 'Pending' && (
                   <TouchableOpacity 
@@ -246,7 +324,7 @@ export default function KitchenDashboardScreen({ route, navigation }) {
                     className="bg-[#B8520B] px-4 py-2 rounded-xl flex-row items-center"
                   >
                     <Ionicons name="flame" size={14} color="white" style={{ marginRight: 4 }} />
-                    <Text className="text-xs font-bold text-white">Start Cooking</Text>
+                    <Text className="text-xs font-bold text-white">Accept & Cook</Text>
                   </TouchableOpacity>
                 )}
                 {order.status === 'Cooking' && (
@@ -255,12 +333,12 @@ export default function KitchenDashboardScreen({ route, navigation }) {
                     className="bg-green-600 px-4 py-2 rounded-xl flex-row items-center"
                   >
                     <Ionicons name="checkmark-circle" size={14} color="white" style={{ marginRight: 4 }} />
-                    <Text className="text-xs font-bold text-white">Mark Ready to Serve</Text>
+                    <Text className="text-xs font-bold text-white">Mark as Ready</Text>
                   </TouchableOpacity>
                 )}
                 {order.status === 'Ready' && (
-                  <View className="bg-gray-100 px-3 py-1.5 rounded-xl">
-                    <Text className="text-[10px] font-bold text-gray-500">Dispatched to Waiter</Text>
+                  <View className="bg-green-50 px-3 py-1.5 rounded-xl border border-green-200">
+                    <Text className="text-[10px] font-bold text-green-700">Ready for Waiter / Driver Pickup</Text>
                   </View>
                 )}
               </View>

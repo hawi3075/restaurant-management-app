@@ -25,7 +25,10 @@ export default function WaiterLiveOrdersScreen({ navigation }) {
       });
       const j = await res.json();
       if (res.ok) {
-        setOrders(j.success ? (j.orders || []) : (Array.isArray(j) ? j : []));
+        const fetchedOrders = j.success ? (j.orders || []) : (Array.isArray(j) ? j : []);
+        // Filter out orders that are already served or delivered so they leave the live feed
+        const activeLiveOrders = fetchedOrders.filter(o => o.status !== 'Served' && o.status !== 'Delivered');
+        setOrders(activeLiveOrders);
       } else {
         console.error('Failed to fetch incoming orders:', j.message);
       }
@@ -45,11 +48,18 @@ export default function WaiterLiveOrdersScreen({ navigation }) {
     });
 
     socket.on('new_order_placed', (o) => {
-      setOrders(prev => [o, ...prev]);
+      if (o.status !== 'Served' && o.status !== 'Delivered') {
+        setOrders(prev => [o, ...prev]);
+      }
     });
 
     socket.on('order_status_updated', (data) => {
-      setOrders(prev => prev.map(o => (String(o._id || o.id) === String(data.id) ? { ...o, status: data.status } : o)));
+      if (data.status === 'Served' || data.status === 'Delivered') {
+        // Remove from live stream if it's completed/served
+        setOrders(prev => prev.filter(o => String(o._id || o.id) !== String(data.id)));
+      } else {
+        setOrders(prev => prev.map(o => (String(o._id || o.id) === String(data.id) ? { ...o, status: data.status } : o)));
+      }
     });
 
     return () => {
@@ -71,8 +81,14 @@ export default function WaiterLiveOrdersScreen({ navigation }) {
       const j = await res.json();
       if (!res.ok) throw new Error(j.message || 'Failed to update');
       
-      // Update local state immediately for snappy UI feel
-      setOrders(prev => prev.map(o => (String(o._id || o.id) === String(id) ? { ...o, status } : o)));
+      // If status is 'Served', filter it out of the active live feed entirely.
+      // Otherwise, update its status in place.
+      if (status === 'Served' || status === 'Delivered') {
+        setOrders(prev => prev.filter(o => String(o._id || o.id) !== String(id)));
+      } else {
+        setOrders(prev => prev.map(o => (String(o._id || o.id) === String(id) ? { ...o, status } : o)));
+      }
+
       Alert.alert('Success', 'Order status updated');
     } catch (err) {
       console.error('Update status error', err);
@@ -130,7 +146,7 @@ export default function WaiterLiveOrdersScreen({ navigation }) {
                   <View className="flex-row justify-between items-center mb-2.5 pb-2.5 border-b border-[#F8F9FC]">
                     <View className="flex-row items-center">
                       <Text className="text-xs font-black text-[#1F130D] bg-[#FEF7F3] px-2.5 py-1 rounded-lg border border-[#B8520B]/20 mr-2">
-                        {o.table || `Order #${orderId.slice(-6)}`}
+                        {o.table || `Order #${String(orderId).slice(-6)}`}
                       </Text>
                       <Text className="text-[11px] text-gray-400">{o.time || 'Just now'}</Text>
                     </View>
