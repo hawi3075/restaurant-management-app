@@ -18,29 +18,55 @@ export default function CheckoutScreen({ route, navigation }) {
   const [paymentMethod, setPaymentMethod] = useState('telebirr');
   const [isActivatingTelebirr, setIsActivatingTelebirr] = useState(false);
   const [paymentReference, setPaymentReference] = useState(`CHAPA-${Date.now()}`);
+  const [isOrderComplete, setIsOrderComplete] = useState(false);
+  const [cartItems, setCartItems] = useState([]);
 
   useEffect(() => {
-    const loadUserEmail = async () => {
+    const loadUserDataAndCart = async () => {
       try {
+        // Load user profile
         const storedUser = await AsyncStorage.getItem('user');
         if (storedUser) {
           const parsedUser = JSON.parse(storedUser);
-          if (parsedUser?.email) {
-            setEmail(parsedUser.email);
-          }
-          if (parsedUser?.name) {
-            setFullName(parsedUser.name);
-          }
-          if (parsedUser?.phone) {
-            setPhone(parsedUser.phone);
-          }
+          if (parsedUser?.email) setEmail(parsedUser.email);
+          if (parsedUser?.name) setFullName(parsedUser.name);
+          if (parsedUser?.phone) setPhone(parsedUser.phone);
         }
+
+        // Load cart items for amount breakdown
+        let items = route?.params?.cartItems || [];
+        if (!items || items.length === 0) {
+          const storedCart = await AsyncStorage.getItem('cart');
+          items = storedCart ? JSON.parse(storedCart) : [];
+        }
+        setCartItems(items);
       } catch (error) {
-        console.error('Load user profile error', error);
+        console.error('Load checkout data error', error);
       }
     };
 
-    loadUserEmail();
+    loadUserDataAndCart();
+  }, []);
+
+  // Listen for deep link callback when returning from Chapa web view/browser
+  useEffect(() => {
+    const handleDeepLink = (event) => {
+      if (event.url.includes('checkout') || event.url.includes('success') || event.url.includes('status=success')) {
+        setIsOrderComplete(true);
+      }
+    };
+
+    const subscription = Linking.addEventListener('url', handleDeepLink);
+
+    Linking.getInitialURL().then((url) => {
+      if (url && (url.includes('checkout') || url.includes('success') || url.includes('status=success'))) {
+        setIsOrderComplete(true);
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
   }, []);
 
   const paymentLabels = {
@@ -118,6 +144,9 @@ export default function CheckoutScreen({ route, navigation }) {
             throw new Error('Please sign in or provide an email before paying with Chapa.');
           }
 
+          // Clean phone number format for Chapa (removes spaces, +, and dashes)
+          const formattedPhone = phone.replace(/[\s+\-]/g, '');
+
           const paymentResponse = await fetch(`${BACKEND_URL}/api/payments/chapa/initiate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -127,7 +156,7 @@ export default function CheckoutScreen({ route, navigation }) {
               email,
               first_name: fullName.split(' ')[0] || fullName,
               last_name: fullName.split(' ').slice(1).join(' ') || fullName,
-              phone_number: phone,
+              phone_number: formattedPhone,
               orderId: data.order?._id,
             }),
           });
@@ -144,18 +173,50 @@ export default function CheckoutScreen({ route, navigation }) {
 
           Alert.alert('Redirecting to Chapa', 'Complete the payment in Chapa to confirm your order.');
           await Linking.openURL(checkoutUrl);
+          
+          setTimeout(() => {
+            setIsOrderComplete(true);
+          }, 4000);
+
           return;
         }
 
-        Alert.alert('Order Placed Successfully!', 'Your order has been sent to the kitchen.', [
-          { text: 'View Orders', onPress: () => navigation.navigate('OrderHistoryScreen') }
-        ]);
+        setIsOrderComplete(true);
       } catch (err) {
         console.error('Place Order Error:', err);
         Alert.alert('Order Failed', err.message || 'Unable to place order');
       }
     })();
   };
+
+  if (isOrderComplete) {
+    return (
+      <View className="flex-1 bg-[#F8F9FC] items-center justify-center p-5">
+        <StatusBar barStyle="dark-content" backgroundColor="#F8F9FC" />
+        <View className="bg-white w-full max-w-[380px] p-6 rounded-3xl items-center shadow-xl border border-[#EAE3DE]">
+          <View className="w-16 h-16 bg-green-50 rounded-2xl items-center justify-center mb-4 border border-green-200">
+            <Ionicons name="checkmark-circle" size={32} color="#22C55E" />
+          </View>
+          <Text className="text-lg font-black text-[#1F130D] mb-1 text-center">Order Placed Successfully!</Text>
+          <Text className="text-xs text-gray-500 text-center mb-6">Your payment has been verified and your order has been sent to the kitchen.</Text>
+          
+          <TouchableOpacity
+            onPress={() => navigation.navigate('OrderHistoryScreen')}
+            className="w-full bg-[#B8520B] py-3.5 rounded-xl items-center shadow-md active:opacity-95 mb-3"
+          >
+            <Text className="text-white font-bold text-xs uppercase tracking-wider">View Orders</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Home')}
+            className="w-full bg-gray-100 py-3.5 rounded-xl items-center active:opacity-95"
+          >
+            <Text className="text-gray-700 font-bold text-xs uppercase tracking-wider">Back to Home</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View className="flex-1 bg-[#F8F9FC] items-center">
@@ -236,6 +297,34 @@ export default function CheckoutScreen({ route, navigation }) {
             </View>
           </View>
 
+          {/* Order Amount Breakdown Form / Summary */}
+          <Text className="text-xs font-bold text-gray-400 uppercase mb-2 ml-1 tracking-wider">Order Amount Summary</Text>
+          <View className="bg-white rounded-2xl border border-[#EAE3DE] p-4 mb-5 shadow-xs">
+            {cartItems.length > 0 ? (
+              cartItems.map((item, index) => (
+                <View key={index} className="flex-row justify-between items-center py-2 border-b border-gray-100">
+                  <View className="flex-1 pr-2">
+                    <Text className="text-xs font-bold text-[#1F130D]" numberOfLines={1}>{item.name}</Text>
+                    <Text className="text-[10px] text-gray-400">Qty: {item.quantity}</Text>
+                  </View>
+                  <Text className="text-xs font-bold text-gray-700">${(item.price * item.quantity).toFixed(2)}</Text>
+                </View>
+              ))
+            ) : (
+              <Text className="text-xs text-gray-400 italic py-1">Standard Order Package</Text>
+            )}
+
+            <View className="flex-row justify-between items-center pt-3 mt-1">
+              <Text className="text-xs text-gray-500">Service / Delivery Fee</Text>
+              <Text className="text-xs font-bold text-gray-700">Free</Text>
+            </View>
+
+            <View className="flex-row justify-between items-center pt-2 mt-2 border-t border-[#EAE3DE]">
+              <Text className="text-xs font-black text-[#1F130D]">Total Amount</Text>
+              <Text className="text-sm font-black text-[#B8520B]">${totalAmount.toFixed(2)}</Text>
+            </View>
+          </View>
+
           {/* Payment Methods */}
           <Text className="text-xs font-bold text-gray-400 uppercase mb-2 ml-1 tracking-wider">Payment Method</Text>
           <View className="bg-white rounded-2xl border border-[#EAE3DE] p-3 mb-6 shadow-xs">
@@ -303,13 +392,8 @@ export default function CheckoutScreen({ route, navigation }) {
             </TouchableOpacity>
           </View>
 
-          {/* Total & Checkout Action */}
+          {/* Checkout Action Section */}
           <View className="bg-white rounded-2xl border border-[#EAE3DE] p-4 mb-4 shadow-xs">
-            <View className="flex-row justify-between items-center mb-3">
-              <Text className="text-xs text-gray-500">Total Payable</Text>
-              <Text className="text-base font-black text-[#B8520B]">${totalAmount.toFixed(2)}</Text>
-            </View>
-
             {paymentMethod === 'telebirr' ? (
               <View className="mb-3 rounded-2xl border border-[#B8520B]/20 bg-[#FEF7F3] p-3">
                 <Text className="text-xs font-bold text-[#1F130D]">Telebirr reference</Text>

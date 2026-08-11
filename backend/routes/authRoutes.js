@@ -1,4 +1,3 @@
-// backend/routes/authRoutes.js
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
@@ -62,31 +61,91 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// --- REGISTER ROUTE (POST /api/auth/register) ---
-router.post('/register', async (req, res) => {
+// --- REGISTER / SIGNUP ROUTE (POST /api/auth/signup & /api/auth/register) ---
+const handleRegister = async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, phone, role } = req.body;
     
     let user = await User.findOne({ email });
     if (user) {
-      return res.status(400).json({ message: 'User already exists.' });
+      return res.status(400).json({ message: 'This user already exists.' });
     }
 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
+    const userRole = role ? role.toLowerCase() : 'customer';
+
     user = new User({
       name,
       email,
       password: hashedPassword,
+      phone: phone || '',
+      role: userRole,
     });
 
     await user.save();
 
-    return res.status(201).json({ success: true, message: 'User registered successfully.' });
+    const redirectRoutes = {
+      manager: 'ManagerDashboard',
+      kitchen: 'KitchenDashboard',
+      waiter: 'WaiterDashboard',
+      driver: 'DriverDashboard',
+      customer: 'CustomerLanding'
+    };
+
+    return res.status(201).json({ 
+      success: true, 
+      message: 'User registered successfully.',
+      token: 'sample-jwt-token-xyz',
+      user: { id: user._id, email: user.email, name: user.name, role: userRole },
+      navigateTo: redirectRoutes[userRole] || 'CustomerLanding'
+    });
   } catch (error) {
     console.error('Register Route Error:', error);
     return res.status(500).json({ message: 'Server error during registration.' });
+  }
+};
+
+// Supporting both /signup and /register to prevent endpoint mismatches
+router.post('/signup', handleRegister);
+router.post('/register', handleRegister);
+
+// --- GOOGLE OAUTH BACKEND (POST /api/auth/google) ---
+router.post('/google', async (req, res) => {
+  try {
+    const { email, name, googleId, profileImage } = req.body;
+    if (!email) return res.status(400).json({ message: 'Google email is required.' });
+
+    let user = await User.findOne({ email });
+    if (!user) {
+      user = new User({ 
+        name: name || 'Google User', 
+        email, 
+        password: googleId || crypto.randomBytes(16).toString('hex'), 
+        role: 'customer' 
+      });
+      await user.save();
+    }
+
+    const userRole = user.role ? user.role.toLowerCase() : 'customer';
+    const redirectRoutes = {
+      manager: 'ManagerDashboard',
+      kitchen: 'KitchenDashboard',
+      waiter: 'WaiterDashboard',
+      driver: 'DriverDashboard',
+      customer: 'CustomerLanding'
+    };
+
+    return res.status(200).json({ 
+      success: true, 
+      token: 'sample-jwt-token-xyz', 
+      user: { id: user._id, name: user.name, email: user.email, role: userRole }, 
+      navigateTo: redirectRoutes[userRole] || 'CustomerLanding' 
+    });
+  } catch (error) {
+    console.error('Google auth backend error:', error);
+    return res.status(500).json({ message: 'Server error during Google authentication.' });
   }
 });
 
@@ -163,13 +222,11 @@ router.post('/reset-password/:token', async (req, res) => {
 // --- GET USER PROFILE (GET /api/auth/profile) ---
 router.get('/profile', async (req, res) => {
   try {
-    // Attempt to locate the user by email passed in header (used for demo tokens)
     const headerEmail = req.header('x-user-email');
     let user;
     if (headerEmail) {
       user = await User.findOne({ email: headerEmail });
     } else {
-      // Fallback: return the first user (legacy behavior)
       user = await User.findOne();
     }
     if (!user) {
@@ -240,23 +297,5 @@ router.put('/address', async (req, res) => {
   }
 });
 
+// Always keep module.exports at the very bottom
 module.exports = router;
-
-// --- GOOGLE OAUTH BACKEND (POST /api/auth/google) ---
-router.post('/google', async (req, res) => {
-  try {
-    const { email, name, googleId, profileImage } = req.body;
-    if (!email) return res.status(400).json({ message: 'Google email is required.' });
-
-    let user = await User.findOne({ email });
-    if (!user) {
-      user = new User({ name: name || 'Google User', email, password: googleId || crypto.randomBytes(16).toString('hex'), role: 'customer' });
-      await user.save();
-    }
-
-    return res.status(200).json({ success: true, token: 'sample-jwt-token-xyz', user: { id: user._id, name: user.name, email: user.email, role: user.role }, navigateTo: 'CustomerLanding' });
-  } catch (error) {
-    console.error('Google auth backend error:', error);
-    return res.status(500).json({ message: 'Server error during Google authentication.' });
-  }
-});

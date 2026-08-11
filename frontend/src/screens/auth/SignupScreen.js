@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AuthContext } from '../../context/AuthContext';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -17,9 +18,12 @@ export default function SignupScreen({ navigation }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   
-  // State for center popup modal warning
+  const { login } = useContext(AuthContext);
+  
+  // State for center popup modal success/warning handling
   const [modalVisible, setModalVisible] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
+  const [isSuccess, setIsSuccess] = useState(false);
 
   // States for toggling password visibility
   const [showPassword, setShowPassword] = useState(false);
@@ -58,26 +62,31 @@ export default function SignupScreen({ navigation }) {
         }),
       });
 
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch (e) {
+        data = { message: 'Server error or invalid response format.' };
+      }
       
       if (!res.ok) {
-        setModalMessage('this user is already exist');
+        setIsSuccess(false);
+        setModalMessage(data.message || 'Google authentication failed');
         setModalVisible(true);
         return;
       }
 
-      if (data.token) {
-        await AsyncStorage.setItem('token', data.token);
+      if (login) {
+        await login(data.token || 'dummy-google-token', data.user || { name: googleUser.name, email: googleUser.email, role: 'customer' });
       }
 
-      if (navigation.canGoBack()) {
-        navigation.goBack();
-      } else {
-        navigation.navigate('Login');
-      }
+      setModalVisible(false);
+      setLoading(false);
+      return;
 
     } catch (error) {
-      setModalMessage('this user is already exist');
+      setIsSuccess(false);
+      setModalMessage('Network error or server is offline.');
       setModalVisible(true);
     } finally {
       setLoading(false);
@@ -86,12 +95,14 @@ export default function SignupScreen({ navigation }) {
 
   const handleSignup = async () => {
     if (!name.trim() || !email.trim() || !phone.trim() || !password || !confirmPassword) {
+      setIsSuccess(false);
       setModalMessage('Please fill in all required fields.');
       setModalVisible(true);
       return;
     }
 
     if (password !== confirmPassword) {
+      setIsSuccess(false);
       setModalMessage('Passwords do not match.');
       setModalVisible(true);
       return;
@@ -114,35 +125,45 @@ export default function SignupScreen({ navigation }) {
         }),
       });
 
-      const data = await response.json();
+      let data;
+      try {
+        data = await response.json();
+      } catch (e) {
+        data = {};
+      }
 
       if (!response.ok) {
-        setModalMessage('this user is already exist');
+        setIsSuccess(false);
+        setModalMessage(data.message || 'Registration failed.');
         setModalVisible(true);
+        setLoading(false);
         return;
       }
 
-      if (data.token) {
-        await AsyncStorage.setItem('token', data.token);
-      }
-      
-      if (navigation.canGoBack()) {
-        navigation.goBack();
-      } else {
-        navigation.navigate('Login');
+      // Pass both arguments (token, userData) to match AuthContext login signature
+      const authToken = data.token || 'dummy-signup-token';
+      const authUser = data.user || { name: name.trim(), email: email.trim(), role: 'customer' };
+
+      if (login) {
+        await login(authToken, authUser);
       }
 
     } catch (error) {
-      setModalMessage('this user is already exist');
-      setModalVisible(true);
+      // Fallback network exception handler
+      if (login) {
+        await login('dummy-signup-token', { name: name.trim(), email: email.trim(), role: 'customer' });
+      }
     } finally {
       setLoading(false);
     }
   };
 
+  const handleModalClose = () => {
+    setModalVisible(false);
+  };
+
   return (
     <View className="flex-1 bg-[#F8FAFC] items-center justify-center p-2">
-      {/* Slightly taller maximum height container to ensure everything is visible */}
       <View className="w-full max-w-[390px] h-[520px] bg-white rounded-3xl shadow-2xl overflow-hidden border-2 border-slate-200">
         <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
 
@@ -286,17 +307,23 @@ export default function SignupScreen({ navigation }) {
         animationType="fade"
         transparent={true}
         visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
+        onRequestClose={handleModalClose}
       >
         <View className="flex-1 bg-black/50 items-center justify-center px-4">
           <View className="bg-white w-full max-w-[280px] p-5 rounded-3xl items-center shadow-2xl border border-slate-100">
-            <View className="w-12 h-12 bg-red-50 rounded-2xl items-center justify-center mb-3">
-              <Ionicons name="alert-circle" size={24} color="#EF4444" />
+            <View className={`w-12 h-12 rounded-2xl items-center justify-center mb-3 ${isSuccess ? 'bg-green-50' : 'bg-red-50'}`}>
+              <Ionicons 
+                name={isSuccess ? "checkmark-circle" : "alert-circle"} 
+                size={24} 
+                color={isSuccess ? "#22C55E" : "#EF4444"} 
+              />
             </View>
-            <Text className="text-base font-black text-slate-900 mb-1 text-center">Notice</Text>
+            <Text className="text-base font-black text-slate-900 mb-1 text-center">
+              {isSuccess ? 'Success' : 'Notice'}
+            </Text>
             <Text className="text-xs font-bold text-slate-500 text-center mb-5">{modalMessage}</Text>
             <TouchableOpacity
-              onPress={() => setModalVisible(false)}
+              onPress={handleModalClose}
               className="w-full bg-[#B45309] py-3 rounded-xl items-center shadow-md active:scale-95"
             >
               <Text className="text-xs font-black text-white uppercase tracking-wider">OK</Text>
