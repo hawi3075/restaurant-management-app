@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Modal, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { BACKEND_URL } from '../api/backend';
+import { BACKEND_URL } from '../../api/backend';
 
 export default function StaffManagementScreen({ navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
