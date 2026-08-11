@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StatusBar, Modal, TextInput, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StatusBar, Modal, TextInput, Alert, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+
+// Centralized API URL configuration (switches automatically between local development and Render production)
+const API_URL = __DEV__ 
+  ? (Platform.OS === 'android' ? 'http://10.0.2.2:5000' : 'http://localhost:5000')
+  : 'https://your-render-app-name.onrender.com'; // Replace with your actual Render backend URL
 
 export default function ReviewManagementScreen({ navigation }) {
   const [reviews, setReviews] = useState([]);
@@ -11,7 +16,7 @@ export default function ReviewManagementScreen({ navigation }) {
   useEffect(() => {
     const fetchReviews = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/reviews');
+        const res = await fetch(`${API_URL}/api/reviews`);
         const data = await res.json();
         if (Array.isArray(data)) setReviews(data);
       } catch (err) {
@@ -29,7 +34,7 @@ export default function ReviewManagementScreen({ navigation }) {
 
   const changeStatus = async (id, status) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/reviews/${id}`, {
+      const res = await fetch(`${API_URL}/api/reviews/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status })
@@ -46,7 +51,7 @@ export default function ReviewManagementScreen({ navigation }) {
   const saveComment = async () => {
     if (!selected) return;
     try {
-      const res = await fetch(`http://localhost:5000/api/reviews/${selected._id}`, {
+      const res = await fetch(`${API_URL}/api/reviews/${selected._id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ comment: replyText })
@@ -67,7 +72,7 @@ export default function ReviewManagementScreen({ navigation }) {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
         try {
-          const res = await fetch(`http://localhost:5000/api/reviews/${id}`, { method: 'DELETE' });
+          const res = await fetch(`${API_URL}/api/reviews/${id}`, { method: 'DELETE' });
           const j = await res.json();
           if (j.success) setReviews(prev => prev.filter(r => r._id !== id));
         } catch (err) { console.error('Delete review error', err); }
@@ -76,43 +81,46 @@ export default function ReviewManagementScreen({ navigation }) {
   };
 
   return (
-    <View className="flex-1 bg-[#F8FAFC] items-center justify-center">
-      <View className="w-full max-w-[440px] flex-1 bg-white relative shadow-2xl overflow-hidden border-x-2 border-slate-200">
-        <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
+    <View className="flex-1 bg-[#F8F9FC] items-center justify-center">
+      <View className="w-full max-w-[440px] flex-1 bg-white relative shadow-2xl overflow-hidden border-x border-[#EAE3DE]">
+        <StatusBar barStyle="dark-content" backgroundColor="#F8F9FC" />
 
-        <ScrollView showsVerticalScrollIndicator={false} className="flex-1 pt-10 pb-24 px-5">
+        <ScrollView showsVerticalScrollIndicator={false} className="flex-1 pt-12 pb-24 px-5">
           <View className="flex-row justify-between items-center mb-6">
-            <TouchableOpacity onPress={() => navigation.goBack()} className="w-11 h-11 bg-slate-50 rounded-2xl border-2 border-slate-200 items-center justify-center shadow-md active:scale-95">
-              <Ionicons name="arrow-back" size={20} color="#0F172A" />
+            <TouchableOpacity onPress={() => navigation.goBack()} className="w-11 h-11 bg-white rounded-2xl border border-[#EAE3DE] items-center justify-center shadow-xs active:scale-95">
+              <Ionicons name="arrow-back" size={20} color="#1F130D" />
             </TouchableOpacity>
-            <Text className="text-xl font-black text-slate-900">Review Management</Text>
+            <Text className="text-xl font-black text-[#1F130D]">Review Management</Text>
             <View className="w-11" />
           </View>
 
-          <Text className="text-xs font-black text-slate-400 uppercase tracking-wider mb-3">Customer Feedback</Text>
+          <Text className="text-xs font-black text-gray-400 uppercase tracking-wider mb-3">Customer Feedback</Text>
           <View className="space-y-3.5 pb-6">
             {reviews.map((r) => (
-              <View key={r._id} className="bg-white p-4 rounded-3xl border-2 border-slate-100 shadow-md">
+              <View key={r._id} className="bg-white p-4 rounded-3xl border border-[#EAE3DE] shadow-xs mb-3">
                 <View className="flex-row justify-between items-center mb-2">
-                  <View>
-                    <Text className="text-base font-black text-slate-900">{r.user?.name || r.user?.email || 'Guest'}</Text>
-                    <Text className="text-xs text-slate-500">{r.menuItem?.name || 'Menu Item'}</Text>
+                  <View className="flex-1 mr-2">
+                    <Text className="text-base font-black text-[#1F130D]" numberOfLines={1}>{r.user?.name || r.user?.email || 'Guest'}</Text>
+                    <Text className="text-xs text-gray-500" numberOfLines={1}>{r.menuItem?.name || 'Menu Item'}</Text>
                   </View>
-                  <Text className="text-[12px] font-bold">{r.rating} ★</Text>
+                  <View className="flex-row items-center bg-[#FEF7F3] px-2.5 py-0.5 rounded-full border border-[#B8520B]/30">
+                    <Ionicons name="star" size={10} color="#B8520B" />
+                    <Text className="text-xs font-bold text-[#B8520B] ml-1">{r.rating}</Text>
+                  </View>
                 </View>
-                <Text className="text-sm text-slate-700 mb-3">{r.comment}</Text>
-                <View className="flex-row items-center justify-between">
-                  <Text className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full ${r.status === 'Pending' ? 'bg-orange-100 text-orange-600' : r.status === 'Approved' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
+                <Text className="text-sm text-gray-700 mb-3">{r.comment}</Text>
+                <View className="flex-row items-center justify-between border-t border-gray-100 pt-3">
+                  <Text className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full border ${r.status === 'Pending' ? 'bg-orange-50 border-orange-200 text-orange-600' : r.status === 'Approved' ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-rose-50 border-rose-200 text-rose-600'}`}>
                     {r.status}
                   </Text>
                   <View className="flex-row items-center space-x-2">
-                    <TouchableOpacity onPress={() => open(r)} className="px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-100">
-                      <Text className="text-xs font-bold">Edit</Text>
+                    <TouchableOpacity onPress={() => open(r)} className="px-3 py-1.5 rounded-xl bg-gray-50 border border-gray-200 active:scale-95">
+                      <Text className="text-xs font-bold text-[#1F130D]">Edit</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => changeStatus(r._id, r.status === 'Approved' ? 'Rejected' : 'Approved')} className="px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-100">
-                      <Text className="text-xs font-bold">Toggle Approve</Text>
+                    <TouchableOpacity onPress={() => changeStatus(r._id, r.status === 'Approved' ? 'Rejected' : 'Approved')} className="px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 active:scale-95">
+                      <Text className="text-xs font-bold text-emerald-600">Toggle</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => handleDelete(r._id)} className="px-3 py-1.5 rounded-xl bg-rose-50 border border-rose-100">
+                    <TouchableOpacity onPress={() => handleDelete(r._id)} className="px-3 py-1.5 rounded-xl bg-rose-50 border border-rose-200 active:scale-95">
                       <Text className="text-xs font-bold text-rose-600">Delete</Text>
                     </TouchableOpacity>
                   </View>
@@ -124,14 +132,14 @@ export default function ReviewManagementScreen({ navigation }) {
 
         <Modal visible={modalVisible} animationType="slide" transparent={true} onRequestClose={() => setModalVisible(false)}>
           <View className="flex-1 bg-black/50 justify-end items-center">
-            <View className="w-full max-w-[440px] bg-white rounded-t-[32px] p-6 border-t-2 border-slate-200 shadow-2xl">
-              <Text className="text-base font-black text-slate-900 mb-3">Edit Review</Text>
-              <TextInput value={replyText} onChangeText={setReplyText} multiline className="w-full bg-slate-50 p-4 rounded-2xl border-2 border-slate-200 text-slate-900 font-medium text-sm mb-4 h-28" />
+            <View className="w-full max-w-[440px] bg-white rounded-t-[32px] p-6 border-t border-[#EAE3DE] shadow-2xl">
+              <Text className="text-base font-black text-[#1F130D] mb-3">Edit Review Comment</Text>
+              <TextInput value={replyText} onChangeText={setReplyText} multiline className="w-full bg-gray-50 p-4 rounded-2xl border border-gray-200 text-[#1F130D] font-medium text-sm mb-4 h-28" />
               <View className="flex-row space-x-3">
-                <TouchableOpacity onPress={() => setModalVisible(false)} className="flex-1 bg-gray-100 py-3.5 rounded-2xl items-center">
+                <TouchableOpacity onPress={() => setModalVisible(false)} className="flex-1 bg-gray-100 py-3.5 rounded-2xl items-center active:scale-95">
                   <Text className="font-bold text-gray-700 text-sm">Cancel</Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={saveComment} className="flex-1 bg-[#B8520B] py-3.5 rounded-2xl items-center">
+                <TouchableOpacity onPress={saveComment} className="flex-1 bg-[#B8520B] py-3.5 rounded-2xl items-center shadow-md shadow-[#B8520B]/20 active:scale-95">
                   <Text className="font-bold text-white text-sm">Save</Text>
                 </TouchableOpacity>
               </View>

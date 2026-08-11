@@ -46,13 +46,13 @@ function AppNavigator() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8F9FC' }}>
         <ActivityIndicator size="large" color="#B8520B" />
       </View>
     );
   }
 
-  // Not logged in
+  // Not logged in (Auth Stack)
   if (!user) {
     return (
       <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -111,7 +111,7 @@ function AppNavigator() {
     );
   }
 
-  // CUSTOMER
+  // CUSTOMER (Default fallback stack)
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="CustomerLanding" component={CustomerLandingScreen} />

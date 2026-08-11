@@ -3,6 +3,8 @@ import { View, Text, TouchableOpacity, ScrollView, StatusBar, Image, TextInput }
 import { Ionicons } from '@expo/vector-icons';
 import { BACKEND_URL } from '../../api/backend';
 
+const API_URL = BACKEND_URL;
+
 export default function FoodDetailScreen({ route, navigation }) {
   const foodItem = route?.params?.foodItem || null;
 
@@ -18,7 +20,7 @@ export default function FoodDetailScreen({ route, navigation }) {
     const loadReviews = async () => {
       try {
         setIsLoadingReviews(true);
-        const response = await fetch(`${BACKEND_URL}/api/reviews`);
+        const response = await fetch(`${API_URL}/api/reviews`);
         const data = await response.json();
         const items = Array.isArray(data) ? data : data.reviews || [];
         setReviews(

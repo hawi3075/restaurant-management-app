@@ -144,7 +144,10 @@ export default function WaiterDashboardScreen({ route, navigation }) {
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        setWaiterImage(result.assets[0].uri);
+        const selectedUri = result.assets[0].uri;
+        
+        // If it's a remote URL or needs direct upload, handle it. If local URI on mobile, upload to cloud/server if required, or preview directly:
+        setWaiterImage(selectedUri);
       }
     } catch (error) {
       console.error('Image Picker Error:', error);
@@ -154,6 +157,10 @@ export default function WaiterDashboardScreen({ route, navigation }) {
   const handleSaveProfile = async () => {
     try {
       const token = authContext?.token || '';
+      
+      // If waiterImage is a local file URI (e.g. file:///... from image picker), you may need to upload it via FormData 
+      // to your Render backend storage endpoint first, or pass it if your backend accepts base64/URI strings.
+      // Below handles standard JSON payload update:
       const response = await fetch(`${BACKEND_URL}/api/users/profile`, {
         method: 'PUT',
         headers: {

@@ -1,8 +1,8 @@
 import axios from 'axios';
 
-// Use your computer's local IP address or emulator loopback
+// Live production URL on Render
 const API = axios.create({
-  baseURL: 'http://10.0.2.2:5000/api', // Use http://localhost:5000 if running on iOS simulator
+  baseURL: 'https://restaurant-management-app-wqmp.onrender.com/api',
   headers: {
     'Content-Type': 'application/json',
   },

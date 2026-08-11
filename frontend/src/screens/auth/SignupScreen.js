@@ -5,10 +5,9 @@ import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthContext } from '../../context/AuthContext';
+import { BACKEND_URL } from '../../api/backend';
 
 WebBrowser.maybeCompleteAuthSession();
-
-const API_BASE_URL = 'http://localhost:5000';
 
 export default function SignupScreen({ navigation }) {
   const [name, setName] = useState('');
@@ -51,7 +50,7 @@ export default function SignupScreen({ navigation }) {
       });
       const googleUser = await userInfoResponse.json();
 
-      const res = await fetch(`${API_BASE_URL}/api/auth/google`, {
+      const res = await fetch(`${BACKEND_URL}/api/auth/google`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -76,8 +75,17 @@ export default function SignupScreen({ navigation }) {
         return;
       }
 
-      if (login) {
-        await login(data.token || 'dummy-google-token', data.user || { name: googleUser.name, email: googleUser.email, role: 'customer' });
+      if (data.token && data.user) {
+        const routeToRole = {
+          ManagerDashboard: 'manager',
+          KitchenDashboard: 'kitchen',
+          WaiterDashboard: 'waiter',
+          DriverDashboard: 'driver',
+          CustomerLanding: 'customer'
+        };
+        const inferredRole = (data.user && data.user.role) ? data.user.role : (routeToRole[data.navigateTo] || 'customer');
+        const userWithRole = Object.assign({}, data.user, { role: inferredRole });
+        await login(data.token, userWithRole);
       }
 
       setModalVisible(false);
@@ -111,7 +119,7 @@ export default function SignupScreen({ navigation }) {
     try {
       setLoading(true);
 
-      const response = await fetch(`${API_BASE_URL}/api/auth/signup`, {
+      const response = await fetch(`${BACKEND_URL}/api/auth/signup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -140,19 +148,23 @@ export default function SignupScreen({ navigation }) {
         return;
       }
 
-      // Pass both arguments (token, userData) to match AuthContext login signature
-      const authToken = data.token || 'dummy-signup-token';
-      const authUser = data.user || { name: name.trim(), email: email.trim(), role: 'customer' };
-
-      if (login) {
-        await login(authToken, authUser);
+      if (data.token && data.user) {
+        const routeToRole = {
+          ManagerDashboard: 'manager',
+          KitchenDashboard: 'kitchen',
+          WaiterDashboard: 'waiter',
+          DriverDashboard: 'driver',
+          CustomerLanding: 'customer'
+        };
+        const inferredRole = (data.user && data.user.role) ? data.user.role : (routeToRole[data.navigateTo] || 'customer');
+        const userWithRole = Object.assign({}, data.user, { role: inferredRole });
+        await login(data.token, userWithRole);
       }
 
     } catch (error) {
-      // Fallback network exception handler
-      if (login) {
-        await login('dummy-signup-token', { name: name.trim(), email: email.trim(), role: 'customer' });
-      }
+      setIsSuccess(false);
+      setModalMessage('Network error or server is offline.');
+      setModalVisible(true);
     } finally {
       setLoading(false);
     }

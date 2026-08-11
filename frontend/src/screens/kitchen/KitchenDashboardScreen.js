@@ -5,9 +5,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import io from 'socket.io-client';
 import { AuthContext } from '../../context/AuthContext';
+import { BACKEND_URL } from '../../api/backend';
 
-const BACKEND_URL = 'http://localhost:5000'; 
-const SOCKET_URL = BACKEND_URL;
+// Replace 'https://your-live-backend-url.com' with your actual deployed production URL (e.g., Render, Railway, Heroku)
+const LIVE_BACKEND_URL = 'https://your-live-backend-url.com';
+
+const API_URL = BACKEND_URL || (__DEV__ ? 'http://localhost:5000' : LIVE_BACKEND_URL);
+const SOCKET_URL = API_URL;
 
 export default function KitchenDashboardScreen({ route, navigation }) {
   const authContext = useContext(AuthContext);
@@ -55,7 +59,7 @@ export default function KitchenDashboardScreen({ route, navigation }) {
     try {
       setIsLoadingOrders(true);
       const token = authContext?.token || await AsyncStorage.getItem('token');
-      const response = await fetch(`${BACKEND_URL}/api/orders/incoming`, {
+      const response = await fetch(`${API_URL}/api/orders/incoming`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -175,7 +179,7 @@ export default function KitchenDashboardScreen({ route, navigation }) {
   const updateOrderStatus = async (id, newStatus) => {
     try {
       const token = authContext?.token || await AsyncStorage.getItem('token');
-      const response = await fetch(`${BACKEND_URL}/api/orders/${id}/status`, {
+      const response = await fetch(`${API_URL}/api/orders/${id}/status`, {
         method: 'PUT',
         headers: { 
           'Authorization': `Bearer ${token}`,

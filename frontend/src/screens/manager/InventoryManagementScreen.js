@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Modal, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
+// Updated with your actual Render backend URL
+const API_URL = 'https://restaurant-management-app-wqmp.onrender.com';
+
 export default function InventoryManagementScreen({ navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -72,7 +75,7 @@ export default function InventoryManagementScreen({ navigation }) {
   useEffect(() => {
     const fetchInventory = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/inventory');
+        const res = await fetch(`${API_URL}/api/inventory`);
         const data = await res.json();
         if (Array.isArray(data)) {
           const mapped = data.map(i => ({
@@ -124,7 +127,7 @@ export default function InventoryManagementScreen({ navigation }) {
       supplier: newSupplier,
       minimumLevel: 5
     };
-    fetch('http://localhost:5000/api/inventory', {
+    fetch(`${API_URL}/api/inventory`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -169,7 +172,7 @@ export default function InventoryManagementScreen({ navigation }) {
       return item;
     }));
 
-    fetch(`http://localhost:5000/api/inventory/${id}/adjust`, {
+    fetch(`${API_URL}/api/inventory/${id}/adjust`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ amount })
@@ -197,7 +200,7 @@ export default function InventoryManagementScreen({ navigation }) {
   const handleDeleteItem = async (id) => {
     try {
       console.log('Deleting inventory id=', id);
-      const res = await fetch(`http://localhost:5000/api/inventory/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${API_URL}/api/inventory/${id}`, { method: 'DELETE' });
       const j = await res.json();
       console.log('Delete response', j);
       if (j.success) setInventoryItems(prev => prev.filter(i => String(i.id || i._id) !== String(id)));
@@ -218,7 +221,7 @@ export default function InventoryManagementScreen({ navigation }) {
         supplier: editSupplier
       };
       const id = selectedItem.id || selectedItem._id;
-      const res = await fetch(`http://localhost:5000/api/inventory/${id}`, {
+      const res = await fetch(`${API_URL}/api/inventory/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -502,7 +505,7 @@ export default function InventoryManagementScreen({ navigation }) {
                     <TextInput 
                       placeholder="e.g. 10"
                       placeholderTextColor="#9CA3AF"
-                      keyboardDataType="numeric"
+                      keyboardType="numeric"
                       value={newQuantity}
                       onChangeText={setNewQuantity}
                       className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D]"

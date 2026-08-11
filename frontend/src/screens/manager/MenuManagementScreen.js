@@ -1,7 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Image, Modal, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Image, Modal, Alert, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+
+// Centralized API URL configuration using your Render live backend
+const API_URL = __DEV__ 
+  ? (Platform.OS === 'android' ? 'http://10.0.2.2:5000' : 'http://localhost:5000')
+  : 'https://restaurant-management-app-wqmp.onrender.com';
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=400&q=80';
 
@@ -59,7 +64,7 @@ export default function MenuManagementScreen({ navigation }) {
   useEffect(() => {
     const fetchMenu = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/menu');
+        const res = await fetch(`${API_URL}/api/menu`);
         const data = await res.json();
         if (Array.isArray(data)) {
           const mapped = data.map(i => ({
@@ -76,7 +81,7 @@ export default function MenuManagementScreen({ navigation }) {
           setMenuItems(mapped);
         }
       } catch (err) {
-        console.error('Failed to fetch menu items', err);
+        console.error('Failed to fetch menu items from live server', err);
       }
     };
 
@@ -127,12 +132,12 @@ export default function MenuManagementScreen({ navigation }) {
     if (!item) return;
     const newStatus = item.status === 'In Stock' ? false : true;
     setMenuItems(menuItems.map(i => i.id === id ? { ...i, status: newStatus ? 'In Stock' : 'Out of Stock' } : i));
-    fetch(`http://localhost:5000/api/menu/${id}`, {
+    fetch(`${API_URL}/api/menu/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ availabilityStatus: newStatus })
     }).then(r => r.json()).then(j => {
-      if (!j.success) console.warn('Failed to update menu item', j);
+      if (!j.success) console.warn('Failed to update stock status on live server', j);
     }).catch(err => console.error('Menu update error', err));
   };
 
@@ -148,7 +153,7 @@ export default function MenuManagementScreen({ navigation }) {
       availabilityStatus: true,
       rating: parseFloat(newRating) || 5
     };
-    fetch('http://localhost:5000/api/menu', {
+    fetch(`${API_URL}/api/menu`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -174,11 +179,11 @@ export default function MenuManagementScreen({ navigation }) {
         setImageSourceType('url');
         setAddModalVisible(false);
       } else {
-        alert('Failed to add dish');
+        alert('Failed to add dish to live server');
       }
     }).catch(err => {
       console.error('Add dish error', err);
-      alert('Failed to add dish');
+      alert('Failed to connect to live backend');
     });
   };
 
@@ -203,7 +208,7 @@ export default function MenuManagementScreen({ navigation }) {
 
   const handleDeleteDish = async (id) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/menu/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${API_URL}/api/menu/${id}`, { method: 'DELETE' });
       const j = await res.json();
       if (j.success) {
         setMenuItems(prev => prev.filter(i => String(i.id || i._id) !== String(id)));
@@ -212,7 +217,7 @@ export default function MenuManagementScreen({ navigation }) {
       }
     } catch (err) {
       console.error('Delete error', err);
-      Alert.alert('Error', 'Failed to delete dish');
+      Alert.alert('Error', 'Failed to connect to live server');
     }
   };
 
@@ -229,7 +234,7 @@ export default function MenuManagementScreen({ navigation }) {
       rating: parseFloat(editRating) || 5
     };
     try {
-      const res = await fetch(`http://localhost:5000/api/menu/${id}`, {
+      const res = await fetch(`${API_URL}/api/menu/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -251,11 +256,11 @@ export default function MenuManagementScreen({ navigation }) {
         setEditModalVisible(false);
         setSelectedDish(null);
       } else {
-        alert('Failed to update dish');
+        alert('Failed to update dish on live server');
       }
     } catch (err) {
       console.error('Update error', err);
-      alert('Failed to update dish');
+      alert('Failed to connect to live backend');
     }
   };
 
@@ -285,7 +290,7 @@ export default function MenuManagementScreen({ navigation }) {
               </TouchableOpacity>
               <View className="flex-1">
                 <Text className="text-2xl font-black text-[#1F130D]">Menu Management</Text>
-                <Text className="text-xs text-gray-500">Manage dishes, categories & availability</Text>
+                <Text className="text-xs text-gray-500">Live Render Server Connected</Text>
               </View>
             </View>
 
@@ -469,7 +474,7 @@ export default function MenuManagementScreen({ navigation }) {
             <View className="bg-white w-full max-w-[380px] rounded-3xl p-6 shadow-2xl border border-gray-100 max-h-[90%]">
               <ScrollView showsVerticalScrollIndicator={false}>
                 <Text className="text-lg font-black text-[#1F130D] mb-1">Edit Menu Dish</Text>
-                <Text className="text-xs text-gray-500 mb-4">Update dish details and save changes.</Text>
+                <Text className="text-xs text-gray-500 mb-4">Update dish details on the live database.</Text>
 
                 <Text className="text-xs font-bold text-gray-700 mb-1">Dish Name</Text>
                 <TextInput 
@@ -563,7 +568,7 @@ export default function MenuManagementScreen({ navigation }) {
             <View className="bg-white w-full max-w-[380px] rounded-3xl p-6 shadow-2xl border border-gray-100 max-h-[90%]">
               <ScrollView showsVerticalScrollIndicator={false}>
                 <Text className="text-lg font-black text-[#1F130D] mb-1">Add New Menu Dish</Text>
-                <Text className="text-xs text-gray-500 mb-4">Enter dish details to list on the customer menu.</Text>
+                <Text className="text-xs text-gray-500 mb-4">Sync item directly to your live Render backend.</Text>
 
                 <Text className="text-xs font-bold text-gray-700 mb-1">Dish Name</Text>
                 <TextInput 

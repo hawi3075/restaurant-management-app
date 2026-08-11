@@ -5,6 +5,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthContext } from '../../context/AuthContext';
 import { BACKEND_URL } from '../../api/backend';
 
+// Replace 'https://your-live-backend-url.com' with your actual deployed production URL (e.g., Render, Railway, Heroku)
+const LIVE_BACKEND_URL = 'https://your-live-backend-url.com';
+
+const API_URL = BACKEND_URL || (__DEV__ ? 'http://localhost:5000' : LIVE_BACKEND_URL);
+
 export default function CustomerProfileScreen({ route, navigation }) {
   const isLoggedIn = route?.params?.isLoggedIn ?? true;
   const authContext = useContext(AuthContext);
@@ -66,7 +71,7 @@ export default function CustomerProfileScreen({ route, navigation }) {
         throw new Error('No authentication token found.');
       }
 
-      const response = await fetch(`${BACKEND_URL}/api/auth/profile`, {
+      const response = await fetch(`${API_URL}/api/auth/profile`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -97,7 +102,7 @@ export default function CustomerProfileScreen({ route, navigation }) {
       const token = await AsyncStorage.getItem('token');
       if (!token) return;
 
-      const response = await fetch(`${BACKEND_URL}/api/support/my-tickets`, {
+      const response = await fetch(`${API_URL}/api/support/my-tickets`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -131,7 +136,7 @@ export default function CustomerProfileScreen({ route, navigation }) {
       setIsLoading(true);
       const token = await AsyncStorage.getItem('token');
 
-      const response = await fetch(`${BACKEND_URL}/api/auth/profile`, {
+      const response = await fetch(`${API_URL}/api/auth/profile`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -168,7 +173,7 @@ export default function CustomerProfileScreen({ route, navigation }) {
       setIsLoading(true);
       const token = await AsyncStorage.getItem('token');
 
-      const response = await fetch(`${BACKEND_URL}/api/auth/address`, {
+      const response = await fetch(`${API_URL}/api/auth/address`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -201,7 +206,7 @@ export default function CustomerProfileScreen({ route, navigation }) {
       setSupportSuccessMsg('');
       const token = await AsyncStorage.getItem('token');
 
-      const response = await fetch(`${BACKEND_URL}/api/support`, {
+      const response = await fetch(`${API_URL}/api/support`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

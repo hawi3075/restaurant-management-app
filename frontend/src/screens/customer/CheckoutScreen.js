@@ -700,143 +700,70 @@ export default function CheckoutScreen({ route, navigation }) {
             </TouchableOpacity>
           </View>
 
-          {/* Checkout Action Section */}
-          <View className="bg-white rounded-2xl border border-[#EAE3DE] p-4 mb-4 shadow-xs">
-            {paymentMethod === 'chapa' ? (
-              <View className="mb-3 rounded-2xl border border-[#B8520B]/20 bg-[#FEF7F3] p-3">
-                <Text className="text-xs font-bold text-[#1F130D]">Chapa Reference</Text>
-                <Text className="text-[11px] text-gray-600 mt-1">{paymentReference}</Text>
-                <Text className="text-[10px] text-gray-500 mt-2">Tapping place order will redirect you securely to Chapa payment.</Text>
-              </View>
-            ) : null}
-
-            {paymentMethod === 'telebirr' ? (
-              <View className="mb-3 rounded-2xl border border-[#B8520B]/20 bg-[#FEF7F3] p-3">
-                <Text className="text-xs font-bold text-[#1F130D]">Telebirr reference</Text>
-                <Text className="text-[11px] text-gray-600 mt-1">{paymentReference}</Text>
-                <TouchableOpacity
-                  onPress={activateTelebirr}
-                  disabled={isActivatingTelebirr}
-                  className="bg-[#0052CC] py-3 rounded-xl items-center shadow-md active:opacity-95 mt-3"
-                >
-                  <Text className="text-white font-bold text-xs uppercase tracking-wider">
-                    {isActivatingTelebirr ? 'Activating Telebirr...' : 'Activate Telebirr Payment'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            ) : null}
-
-            <TouchableOpacity 
-              onPress={handlePlaceOrder}
-              className="bg-[#B8520B] py-4 rounded-xl items-center shadow-md active:opacity-95"
-            >
-              <Text className="text-white font-bold text-xs uppercase tracking-wider">
-                Place Order & Pay {paymentLabels[paymentMethod] ? `with ${paymentLabels[paymentMethod]}` : ''}
-              </Text>
-            </TouchableOpacity>
-          </View>
+          {/* Place Order Button */}
+          <TouchableOpacity
+            onPress={handlePlaceOrder}
+            className="w-full bg-[#B8520B] py-4 rounded-2xl items-center shadow-lg active:opacity-95 mb-6 flex-row justify-center space-x-2"
+          >
+            <Ionicons name="bag-check-outline" size={18} color="#FFFFFF" />
+            <Text className="text-white font-black text-xs uppercase tracking-wider">
+              {paymentMethod === 'chapa' ? 'Proceed to Chapa Payment' : 'Place Order Now'}
+            </Text>
+          </TouchableOpacity>
 
         </ScrollView>
-      </View>
 
-      {/* Embedded Map Picker Modal with Share Link Parse Support */}
-      <Modal
-        visible={isMapModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setIsMapModalVisible(false)}
-      >
-        <View className="flex-1 bg-black/60 justify-end items-center">
-          <View className="w-full max-w-[440px] bg-white rounded-t-3xl overflow-hidden shadow-2xl h-[90%] flex-col">
-            
-            {/* Modal Header */}
-            <View className="p-4 bg-white border-b border-gray-100 flex-row justify-between items-center">
-              <TouchableOpacity onPress={() => setIsMapModalVisible(false)} className="p-1">
-                <Ionicons name="close" size={22} color="#1F130D" />
-              </TouchableOpacity>
-              <Text className="text-sm font-black text-[#1F130D]">Paste Google Maps Share Link</Text>
-              <TouchableOpacity onPress={confirmMapSelection} className="bg-[#B8520B] px-3.5 py-1.5 rounded-xl">
-                <Text className="text-white font-bold text-xs">Confirm</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Paste Share Link Input Box */}
-            <View className="p-4 bg-[#FEF7F3] border-b border-[#B8520B]/20">
-              <Text className="text-[10px] font-bold text-[#B8520B] uppercase tracking-wider mb-1">🔗 Paste Google Maps Share Link</Text>
-              <View className="flex-row items-center space-x-2">
-                <TextInput
-                  className="flex-1 bg-white border border-[#EAE3DE] p-3 rounded-xl text-xs text-[#1F130D]"
-                  value={mapLinkInput}
-                  onChangeText={handleParseGoogleMapsLink}
-                  placeholder="Paste copied share link here..."
-                />
-                <TouchableOpacity 
-                  onPress={() => handleParseGoogleMapsLink(mapLinkInput)}
-                  className="bg-[#B8520B] px-4 py-3 rounded-xl items-center justify-center"
-                >
-                  <Text className="text-white font-bold text-xs">Parse</Text>
+        {/* Map Modal */}
+        <Modal
+          visible={isMapModalVisible}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setIsMapModalVisible(false)}
+        >
+          <View className="flex-1 justify-end bg-black/50">
+            <View className="bg-white rounded-t-3xl p-5 max-h-[85%]">
+              <View className="flex-row justify-between items-center mb-4">
+                <Text className="text-sm font-black text-[#1F130D]">Select Delivery Location</Text>
+                <TouchableOpacity onPress={() => setIsMapModalVisible(false)}>
+                  <Ionicons name="close" size={20} color="#757575" />
                 </TouchableOpacity>
               </View>
-            </View>
 
-            {/* Address Input & Saved Pins Bar */}
-            <View className="p-4 bg-[#F8F9FC] border-b border-gray-200">
-              <Text className="text-[10px] font-bold text-gray-500 mb-1">Extracted Place / Landmark Name</Text>
+              <Text className="text-[10px] text-gray-500 mb-1 font-bold">Paste Google Maps Link / Share URL</Text>
               <TextInput
-                className="bg-white border border-[#EAE3DE] p-3 rounded-xl text-xs text-[#1F130D] font-bold mb-3 shadow-xs"
+                className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs text-[#1F130D] mb-3"
+                placeholder="Paste full map link here..."
+                value={mapLinkInput}
+                onChangeText={handleParseGoogleMapsLink}
+                autoCapitalize="none"
+              />
+
+              <View className="h-60 rounded-2xl overflow-hidden mb-4 border border-[#EAE3DE]">
+                <CustomMap
+                  region={mapRegion}
+                  onRegionChangeComplete={(reg) => setMapRegion(reg)}
+                />
+              </View>
+
+              <Text className="text-[10px] text-gray-500 mb-1 font-bold">Selected Location Name</Text>
+              <TextInput
+                className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs text-[#1F130D] mb-4 font-bold"
                 value={tempAddress}
                 onChangeText={setTempAddress}
-                placeholder="Enter location name..."
+                placeholder="Location name or landmark"
               />
 
-              <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Saved Pins (Tap to reuse)</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row space-x-2">
-                {savedPins.map((pin, idx) => (
-                  <View key={idx} className="flex-row items-center bg-white border border-[#EAE3DE] rounded-xl pl-3 pr-2 py-1.5 mr-2 shadow-xs">
-                    <TouchableOpacity onPress={() => handleSelectSavedPin(pin)} className="flex-row items-center mr-2">
-                      <Ionicons name="location" size={12} color="#B8520B" style={{ marginRight: 4 }} />
-                      <Text className="text-[11px] font-bold text-[#1F130D] max-w-[140px]" numberOfLines={1}>{pin.name}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => handleDeletePin(pin.name)} className="p-1">
-                      <Ionicons name="close-circle" size={14} color="#9CA3AF" />
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </ScrollView>
-            </View>
-
-            {/* Map View Area */}
-            <View className="flex-1 relative bg-gray-100">
-              <CustomMap 
-                mapRegion={mapRegion}
-                onRegionChangeComplete={setMapRegion}
-                streetAddress={tempAddress}
-              />
-              
-              <View className="absolute top-3 left-3 right-3 items-center pointer-events-none">
-                <View className="bg-white/95 px-3 py-1.5 rounded-full shadow-md flex-row items-center border border-gray-200">
-                  <Ionicons name="pin" size={14} color="#B8520B" style={{ marginRight: 4 }} />
-                  <Text className="text-[10px] font-black text-[#1F130D]" numberOfLines={1}>
-                    Lat: {mapRegion.latitude.toFixed(4)}, Lng: {mapRegion.longitude.toFixed(4)}
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            {/* Footer Confirm Action */}
-            <View className="p-4 bg-white border-t border-gray-100">
               <TouchableOpacity
                 onPress={confirmMapSelection}
-                className="w-full bg-[#B8520B] py-3.5 rounded-xl items-center shadow-md active:opacity-95"
+                className="bg-[#B8520B] py-3.5 rounded-xl items-center shadow-md active:opacity-95 mb-2"
               >
-                <Text className="text-white font-bold text-xs uppercase tracking-wider">Use This Location</Text>
+                <Text className="text-white font-bold text-xs uppercase tracking-wider">Confirm Location</Text>
               </TouchableOpacity>
             </View>
-
           </View>
-        </View>
-      </Modal>
+        </Modal>
 
+      </View>
     </View>
   );
 }

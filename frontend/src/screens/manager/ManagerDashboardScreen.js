@@ -2,6 +2,9 @@ import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StatusBar } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
+// Updated with your actual Render backend URL
+const API_URL = 'https://restaurant-management-app-wqmp.onrender.com';
+
 export default function ManagerDashboardScreen({ navigation }) {
   const [stats, setStats] = React.useState([
     { title: "Today's Revenue", value: '$0.00', icon: 'cash-outline', color: '#F97316', bg: 'bg-orange-500/10' },
@@ -13,7 +16,7 @@ export default function ManagerDashboardScreen({ navigation }) {
   React.useEffect(() => {
     const fetchMetrics = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/admin/metrics');
+        const res = await fetch(`${API_URL}/api/admin/metrics`);
         const j = await res.json();
         if (j) {
           setStats([
@@ -33,7 +36,7 @@ export default function ManagerDashboardScreen({ navigation }) {
   // Allow manual refresh
   const refreshMetrics = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/admin/metrics');
+      const res = await fetch(`${API_URL}/api/admin/metrics`);
       const j = await res.json();
       if (j) {
         setStats([

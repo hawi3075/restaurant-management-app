@@ -1,488 +1,778 @@
-import React, { useState, useContext, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Image, ImageBackground, ActivityIndicator, Animated, Modal } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StatusBar, TextInput, Alert, Linking, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { AuthContext } from '../../context/AuthContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import CustomMap from '../../components/CustomMap';
 import { BACKEND_URL } from '../../api/backend';
 
-export default function CustomerLandingScreen({ navigation }) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [menuItems, setMenuItems] = useState([]);
-  const [reviews, setReviews] = useState([]);
-  const [selectedItemReviews, setSelectedItemReviews] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const { user, token } = useContext(AuthContext);
+export default function CheckoutScreen({ route, navigation }) {
+  const initialTotal = route?.params?.total ?? 40.99;
+  const scrollViewRef = useRef(null);
+
+  const [serviceType, setServiceType] = useState('delivery'); // 'delivery' or 'dine-in'
   
-  const isLoggedIn = !!user;
+  // Customer Form State
+  const [fullName, setFullName] = useState('Hawi Girma');
+  const [streetAddress, setStreetAddress] = useState('ASTU Freshman Programs');
+  const [city, setCity] = useState('Adama');
+  const [phone, setPhone] = useState('0911223344');
+  const [email, setEmail] = useState('hawig3521@gmail.com');
+  const [tableNumber, setTableNumber] = useState(route?.params?.selectedTableId || '5');
+  const [paymentMethod, setPaymentMethod] = useState('chapa');
+  const [isActivatingTelebirr, setIsActivatingTelebirr] = useState(false);
+  const [paymentReference, setPaymentReference] = useState(`CHAPA-${Date.now()}`);
+  const [isOrderComplete, setIsOrderComplete] = useState(false);
+  const [cartItems, setCartItems] = useState([]);
 
-  const [activeDeliveryAlert, setActiveDeliveryAlert] = useState(null);
-  const alertAnim = useRef(new Animated.Value(-100)).current;
+  // Inline Validation Error State
+  const [errors, setErrors] = useState({});
 
-  const categories = [
-    { name: 'Breakfast', image: 'https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?auto=format&fit=crop&w=400&q=80' },
-    { name: 'Lunch', image: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=400&q=80' },
-    { name: 'Dinner', image: 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=400&q=80' },
-    { name: 'Drinks', image: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=400&q=80' },
-    { name: 'Desserts', image: 'https://images.unsplash.com/photo-1551024601-bec78aea704b?auto=format&fit=crop&w=400&q=80' },
-    { name: 'Fast Food', image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=400&q=80' },
-  ];
+  // Map Modal & Saved Pins State
+  const [isMapModalVisible, setIsMapModalVisible] = useState(false);
+  const [mapLinkInput, setMapLinkInput] = useState(''); 
+  const [savedPins, setSavedPins] = useState([
+    { name: 'ASTU Freshman Programs', lat: 8.5638545, lng: 39.2824094, mapUrl: 'https://maps.google.com/?q=8.5638545,39.2824094' },
+    { name: 'ASTU stadium', lat: 8.5647086, lng: 39.2923275, mapUrl: 'https://maps.google.com/?q=8.5647086,39.2923275' }
+  ]);
+  
+  // Temporary map selection state inside modal
+  const [tempAddress, setTempAddress] = useState('ASTU Freshman Programs');
+  const [mapRegion, setMapRegion] = useState({
+    latitude: 8.5638545,
+    longitude: 39.2824094,
+    latitudeDelta: 0.005,
+    longitudeDelta: 0.005,
+  });
 
-  const trendingItems = menuItems.slice(0, 4);
-  const categoryCounts = categories.reduce((counts, category) => {
-    counts[category.name] = menuItems.filter((item) => item.category === category.name).length;
-    return counts;
-  }, {});
-
-  const handleAddToCart = (item) => {
-    navigation.navigate('CartScreen', { 
-      addedItem: { ...item, quantity: 1, options: 'Regular' } 
-    });
-  };
-
-  const handleQuickCheckout = (item) => {
-    const total = item.price + 3.99;
-    navigation.navigate('CheckoutScreen', { 
-      total: total, 
-      cartItems: [{ ...item, quantity: 1, options: 'Regular' }] 
-    });
-  };
-
+  // Load saved pins from AsyncStorage on mount
   useEffect(() => {
-    const loadData = async () => {
+    const loadSavedPins = async () => {
       try {
-        setIsLoading(true);
-        const [menuRes, tablesRes, reviewsRes] = await Promise.all([
-          fetch(`${BACKEND_URL}/api/menu`),
-          fetch(`${BACKEND_URL}/api/tables`),
-          fetch(`${BACKEND_URL}/api/reviews`).catch(() => null)
-        ]);
-        const menuJson = await menuRes.json();
-        const tablesJson = await tablesRes.json();
-        
-        let reviewsData = [];
-        if (reviewsRes && reviewsRes.ok) {
-          const revJson = await reviewsRes.json();
-          reviewsData = revJson.reviews || revJson || [];
+        const storedPins = await AsyncStorage.getItem('saved_delivery_pins');
+        if (storedPins) {
+          setSavedPins(JSON.parse(storedPins));
         }
-
-        if (!reviewsData || reviewsData.length === 0) {
-          reviewsData = [
-            { id: 1, name: 'Abebe Kebede', rating: 5, comment: 'The absolute best burger and fast delivery! Highly recommended.', date: 'Yesterday' },
-            { id: 2, name: 'Sara Tadesse', rating: 5, comment: 'Amazing food quality and very warm customer service. Will order again!', date: '2 days ago' },
-            { id: 3, name: 'Dawit Mekonnen', rating: 4, comment: 'Fresh ingredients and great taste. Packaging was very neat.', date: '3 days ago' }
-          ];
-        }
-        
-        // Reverse reviews so the last/newest order review appears first
-        setReviews([...reviewsData].reverse());
-
-        const items = menuJson.items || menuJson || [];
-        if (items && items.length > 0) {
-          setMenuItems(items.map((it, idx) => {
-            let imageUrl = it.image || it.img;
-            
-            if (!imageUrl || typeof imageUrl !== 'string' || imageUrl.trim() === '' || imageUrl.startsWith('blob:')) {
-              imageUrl = 'https://images.unsplash.com/photo-1541544741938-0af808871cc0?auto=format&fit=crop&w=400&q=80';
-            } else if (imageUrl.startsWith('/')) {
-              imageUrl = `${BACKEND_URL}${imageUrl}`;
-            }
-
-            return {
-              id: it._id || it.id || idx,
-              name: it.name || it.title || 'Menu Item',
-              desc: it.description || it.desc || '',
-              price: Number(it.price || 0),
-              rating: Number(it.rating || 4.8).toFixed(1),
-              image: imageUrl,
-              category: it.category || 'Uncategorized'
-            };
-          }));
-        } else {
-          setMenuItems([]);
-        }
-      } catch (err) {
-        console.error('CustomerLanding loadData error', err);
-        setMenuItems([]);
-      } finally {
-        setIsLoading(false);
+      } catch (e) {
+        console.error('Failed to load saved pins', e);
       }
     };
-    loadData();
+    loadSavedPins();
   }, []);
 
-  useEffect(() => {
-    if (!isLoggedIn) return;
+  const savePinToStorage = async (newPins) => {
+    setSavedPins(newPins);
+    try {
+      await AsyncStorage.setItem('saved_delivery_pins', JSON.stringify(newPins));
+    } catch (e) {
+      console.error('Failed to save pins', e);
+    }
+  };
 
-    const checkLiveDeliveries = async () => {
-      try {
-        const authToken = token || user?.token || '';
-        const response = await fetch(`${BACKEND_URL}/api/orders`, {
-          headers: {
-            'Authorization': `Bearer ${authToken}`,
-            'Content-Type': 'application/json'
-          }
+  // Upgraded parser handling Google Maps Share Links (!3d / !4d) and browser URLs
+  const handleParseGoogleMapsLink = async (url) => {
+    setMapLinkInput(url);
+    if (!url) return;
+
+    try {
+      let targetUrl = url;
+
+      let lat = null;
+      let lng = null;
+
+      // 1. Check for standard @lat,lng pattern (from browser URL bar)
+      const coordMatch = targetUrl.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/) || targetUrl.match(/q=(-?\d+\.\d+),\s*(-?\d+\.\d+)/);
+      if (coordMatch) {
+        lat = parseFloat(coordMatch[1]);
+        lng = parseFloat(coordMatch[2]);
+      }
+
+      // 2. Check for Google Maps Share link format containing data coordinates (!3dLat!4dLng)
+      if (!lat || !lng) {
+        const latMatch = targetUrl.match(/!3d(-?\d+\.\d+)/);
+        const lngMatch = targetUrl.match(/!4d(-?\d+\.\d+)/);
+        if (latMatch && lngMatch) {
+          lat = parseFloat(latMatch[1]);
+          lng = parseFloat(lngMatch[1]);
+        }
+      }
+
+      let placeName = lat && lng ? `Location (${lat.toFixed(4)}, ${lng.toFixed(4)})` : 'Custom Pinned Location';
+      
+      const placeMatch = targetUrl.match(/\/place\/([^/@]+)/);
+      if (placeMatch && placeMatch[1]) {
+        const decoded = decodeURIComponent(placeMatch[1].replace(/\+/g, ' '));
+        if (!decoded.includes('°') && !decoded.startsWith('data=')) {
+          placeName = decoded;
+        }
+      }
+
+      if (lat && lng) {
+        setMapRegion({
+          latitude: lat,
+          longitude: lng,
+          latitudeDelta: 0.005,
+          longitudeDelta: 0.005,
         });
+        setTempAddress(placeName);
+        setStreetAddress(placeName);
         
-        const contentType = response.headers.get("content-type");
-        if (!response.ok || !contentType || !contentType.includes("application/json")) {
+        Alert.alert('Success! 📍', `Updated location to:\n${placeName}`);
+      } else {
+        Alert.alert('Note', 'Could not read coordinates from this link. Please make sure you copy the full link shared from Google Maps.');
+      }
+    } catch (error) {
+      console.error('Error parsing map link:', error);
+    }
+  };
+
+  const handleAddPin = () => {
+    if (!tempAddress) return;
+    const existing = savedPins.find(p => p.name.toLowerCase() === tempAddress.toLowerCase());
+    const mapUrl = `https://maps.google.com/?q=${mapRegion.latitude},${mapRegion.longitude}`;
+    
+    if (!existing) {
+      const updated = [{ name: tempAddress, lat: mapRegion.latitude, lng: mapRegion.longitude, mapUrl }, ...savedPins];
+      savePinToStorage(updated);
+    }
+  };
+
+  const handleDeletePin = (pinName) => {
+    const updated = savedPins.filter(p => p.name !== pinName);
+    savePinToStorage(updated);
+  };
+
+  const handleSelectSavedPin = (pin) => {
+    setTempAddress(pin.name);
+    setStreetAddress(pin.name);
+    setMapRegion({
+      latitude: pin.lat,
+      longitude: pin.lng,
+      latitudeDelta: 0.005,
+      longitudeDelta: 0.005,
+    });
+  };
+
+  const confirmMapSelection = () => {
+    setStreetAddress(tempAddress);
+    handleAddPin();
+    setIsMapModalVisible(false);
+  };
+
+  useEffect(() => {
+    const loadUserDataAndCart = async () => {
+      try {
+        const storedUser = await AsyncStorage.getItem('user');
+        if (storedUser) {
+          const parsedUser = JSON.parse(storedUser);
+          if (parsedUser?.email) setEmail(parsedUser.email);
+          if (parsedUser?.name) setFullName(parsedUser.name);
+          if (parsedUser?.phone) setPhone(parsedUser.phone);
+        }
+
+        let items = route?.params?.cartItems || [];
+        if (!items || items.length === 0) {
+          const storedCart = await AsyncStorage.getItem('cart');
+          items = storedCart ? JSON.parse(storedCart) : [];
+        }
+        
+        const formattedItems = items.map(i => ({
+          ...i,
+          quantity: Number(i.quantity) || 1,
+          price: Number(i.price) || 0
+        }));
+
+        setCartItems(formattedItems);
+      } catch (error) {
+        console.error('Load checkout data error', error);
+      }
+    };
+
+    loadUserDataAndCart();
+  }, []);
+
+  const totalAmount = cartItems.length > 0 
+    ? cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+    : initialTotal;
+
+  const updateItemQuantity = (index, newQuantity) => {
+    const updated = [...cartItems];
+    const parsedQty = parseInt(newQuantity, 10);
+    
+    if (isNaN(parsedQty) || parsedQty <= 0) {
+      updated[index].quantity = 1;
+    } else {
+      updated[index].quantity = parsedQty;
+    }
+
+    setCartItems(updated);
+    AsyncStorage.setItem('cart', JSON.stringify(updated)).catch(err => console.error(err));
+  };
+
+  useEffect(() => {
+    const handleDeepLink = (event) => {
+      if (event.url.includes('checkout') || event.url.includes('success') || event.url.includes('status=success')) {
+        setIsOrderComplete(true);
+      }
+    };
+
+    const subscription = Linking.addEventListener('url', handleDeepLink);
+
+    Linking.getInitialURL().then((url) => {
+      if (url && (url.includes('checkout') || url.includes('success') || url.includes('status=success'))) {
+        setIsOrderComplete(true);
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  const paymentLabels = {
+    telebirr: 'Telebirr',
+    chapa: 'Chapa',
+    card: 'Credit / Debit Card',
+    cash: 'Cash on Delivery'
+  };
+
+  const activateTelebirr = async () => {
+    setIsActivatingTelebirr(true);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      Alert.alert(
+        'Telebirr Prompt Sent 📱',
+        `A payment request for $${Number(totalAmount).toFixed(2)} has been sent to your phone (${phone}). Please enter your Telebirr PIN on your device to authorize.`,
+        [
+          { 
+            text: 'Simulate Success ✅', 
+            onPress: () => {
+              Alert.alert('Payment Verified!', 'Telebirr payment successful. You can now tap "Place Order Now".');
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      Alert.alert('Telebirr Failed', 'Unable to reach Telebirr service.');
+    } finally {
+      setIsActivatingTelebirr(false);
+    }
+  };
+
+  const handleValidationFailed = (fieldKey, message) => {
+    setErrors({ [fieldKey]: message });
+    scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+  };
+
+  const handlePlaceOrder = () => {
+    setErrors({}); // Clear previous errors
+
+    if (!fullName || fullName.trim() === '') {
+      handleValidationFailed('fullName', 'plese fill the name');
+      return;
+    }
+
+    if (!phone || phone.trim() === '') {
+      handleValidationFailed('phone', 'plese insert the phone');
+      return;
+    }
+
+    let cleanPhone = phone.replace(/[^\d]/g, '');
+    if (cleanPhone.startsWith('251')) {
+      cleanPhone = '0' + cleanPhone.slice(3);
+    }
+
+    const phoneRegex = /^(09|07)\d{8}$/;
+    if (!phoneRegex.test(cleanPhone)) {
+      handleValidationFailed('phone', 'plese insert a valid phone');
+      return;
+    }
+
+    if (!email || email.trim() === '') {
+      handleValidationFailed('email', 'invalide email');
+      return;
+    }
+
+    if (serviceType === 'delivery') {
+      if (!streetAddress || streetAddress.trim() === '') {
+        handleValidationFailed('streetAddress', 'plese fill the street address');
+        return;
+      }
+      if (!city || city.trim() === '') {
+        handleValidationFailed('city', 'plese fill the city');
+        return;
+      }
+    }
+
+    if (serviceType === 'dine-in' && (!tableNumber || tableNumber.trim() === '')) {
+      handleValidationFailed('tableNumber', 'plese fill the table number');
+      return;
+    }
+    
+    (async () => {
+      try {
+        const token = await AsyncStorage.getItem('token');
+        const orderItems = cartItems.map(i => ({ name: i.name, quantity: i.quantity, unitPrice: i.price, menuItem: i.id }));
+        const txRef = paymentReference || `CHAPA-${Date.now()}`;
+        setPaymentReference(txRef);
+
+        const currentMapUrl = `https://maps.google.com/?q=${mapRegion.latitude},${mapRegion.longitude}`;
+        const locationDetails = `Delivery Address: ${streetAddress}, ${city} | GPS Coordinates -> Latitude: ${mapRegion.latitude.toFixed(5)}, Longitude: ${mapRegion.longitude.toFixed(5)} | Google Maps Link: ${currentMapUrl}`;
+
+        const payload = {
+          customer: null,
+          table: serviceType === 'dine-in' ? tableNumber : null,
+          waiter: null,
+          orderItems,
+          totalAmount,
+          specialInstructions: serviceType === 'delivery' ? locationDetails : `Dine-in Table: ${tableNumber}`,
+          paymentMethod,
+          paymentReference: ['telebirr', 'chapa'].includes(paymentMethod) ? txRef : '',
+          paymentStatus: paymentMethod === 'chapa' ? 'Pending' : 'Pending'
+        };
+
+        const res = await fetch(`${BACKEND_URL}/api/orders`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: token ? `Bearer ${token}` : '' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Failed to place order');
+
+        if (paymentMethod === 'chapa') {
+          const paymentResponse = await fetch(`${BACKEND_URL}/api/payments/chapa/initiate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              amount: totalAmount,
+              tx_ref: txRef,
+              email,
+              first_name: fullName.split(' ')[0] || fullName,
+              last_name: fullName.split(' ').slice(1).join(' ') || fullName,
+              phone_number: cleanPhone,
+              orderId: data.order?._id || data._id,
+            }),
+          });
+
+          const paymentData = await paymentResponse.json();
+          if (!paymentResponse.ok) {
+            throw new Error(paymentData.message || 'Unable to initialize Chapa payment.');
+          }
+
+          const checkoutUrl = paymentData.checkout_url || paymentData.data?.checkout_url;
+          if (!checkoutUrl) {
+            throw new Error('Chapa did not return a checkout URL.');
+          }
+
+          Alert.alert('Redirecting to Chapa', 'Complete the payment in Chapa to confirm your order.');
+          await Linking.openURL(checkoutUrl);
+          
+          setTimeout(() => {
+            setIsOrderComplete(true);
+          }, 4000);
+
           return;
         }
 
-        const data = await response.json();
-        const ordersList = data.orders || (Array.isArray(data) ? data : []);
-        
-        const onTheWayOrder = ordersList.find(o => 
-          o.status === 'Ready' || o.deliveryStatus === 'On the Way' || o.deliveryStatus === 'Ready for Pickup'
-        );
-
-        if (onTheWayOrder) {
-          setActiveDeliveryAlert({
-            id: onTheWayOrder._id || onTheWayOrder.id,
-            text: '🛵 Your delicious food is On the Way from the driver!'
-          });
-          
-          Animated.timing(alertAnim, {
-            toValue: 0,
-            duration: 350,
-            useNativeDriver: true,
-          }).start();
-        } else {
-          Animated.timing(alertAnim, {
-            toValue: -100,
-            duration: 300,
-            useNativeDriver: true,
-          }).start(() => setActiveDeliveryAlert(null));
-        }
-      } catch (error) {
-        // Suppress network poll errors
+        setIsOrderComplete(true);
+      } catch (err) {
+        console.error('Place Order Error:', err);
+        Alert.alert('Order Failed', err.message || 'Unable to place order');
       }
-    };
+    })();
+  };
 
-    checkLiveDeliveries();
-    const interval = setInterval(checkLiveDeliveries, 10000); 
-    return () => clearInterval(interval);
-  }, [isLoggedIn, token, user]);
+  if (isOrderComplete) {
+    return (
+      <View className="flex-1 bg-[#F8F9FC] items-center justify-center p-5">
+        <StatusBar barStyle="dark-content" backgroundColor="#F8F9FC" />
+        <View className="bg-white w-full max-w-[380px] p-6 rounded-3xl items-center shadow-xl border border-[#EAE3DE]">
+          <View className="w-16 h-16 bg-green-50 rounded-2xl items-center justify-center mb-4 border border-green-200">
+            <Ionicons name="checkmark-circle" size={32} color="#22C55E" />
+          </View>
+          <Text className="text-lg font-black text-[#1F130D] mb-1 text-center">Order Placed Successfully!</Text>
+          <Text className="text-xs text-gray-500 text-center mb-6">Your payment has been verified and your order has been sent to the kitchen & driver.</Text>
+          
+          <TouchableOpacity
+            onPress={() => navigation.navigate('OrderHistoryScreen')}
+            className="w-full bg-[#B8520B] py-3.5 rounded-xl items-center shadow-md active:opacity-95 mb-3"
+          >
+            <Text className="text-white font-bold text-xs uppercase tracking-wider">View Orders</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Home')}
+            className="w-full bg-gray-100 py-3.5 rounded-xl items-center active:opacity-95"
+          >
+            <Text className="text-gray-700 font-bold text-xs uppercase tracking-wider">Back to Home</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View className="flex-1 bg-[#F8F9FC] items-center">
       <View className="w-full max-w-[440px] flex-1 bg-[#F8F9FC] relative shadow-2xl">
-        <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+        <StatusBar barStyle="dark-content" backgroundColor="#F8F9FC" />
 
-        {activeDeliveryAlert && (
-          <Animated.View 
-            style={{ transform: [{ translateY: alertAnim }] }}
-            className="absolute top-12 left-5 right-5 z-50 bg-[#B8520B] p-3.5 rounded-2xl shadow-xl flex-row items-center justify-between border border-white/30"
-          >
+        {/* Top Header */}
+        <View className="pt-12 px-5 pb-4 bg-white border-b border-[#EAE3DE] flex-row justify-between items-center">
+          <TouchableOpacity onPress={() => navigation.goBack()} className="flex-row items-center">
+            <Text className="text-xs font-bold text-[#B8520B]">Close</Text>
+          </TouchableOpacity>
+          <Text className="text-base font-black text-[#1F130D]">Checkout</Text>
+          <View style={{ width: 35 }} />
+        </View>
+
+        {/* Form Content */}
+        <ScrollView ref={scrollViewRef} showsVerticalScrollIndicator={false} className="px-5 pt-4 pb-32">
+          
+          {/* Service Type Selection */}
+          <Text className="text-xs font-bold text-gray-400 uppercase mb-2 ml-1 tracking-wider">Service Type</Text>
+          <View className="flex-row space-x-3 mb-5">
             <TouchableOpacity 
-              onPress={() => navigation.navigate('OrderHistoryScreen')}
-              className="flex-row items-center flex-1 pr-2"
+              onPress={() => setServiceType('delivery')}
+              className={`flex-1 flex-row items-center justify-center p-3.5 rounded-2xl border ${serviceType === 'delivery' ? 'bg-[#FEF7F3] border-[#B8520B]' : 'bg-white border-[#EAE3DE]'}`}
             >
-              <View className="w-7 h-7 bg-white/20 rounded-full items-center justify-center mr-2.5">
-                <Ionicons name="bicycle" size={15} color="white" />
-              </View>
-              <View className="flex-1">
-                <Text className="text-white text-[11px] font-black tracking-wide">Live Delivery Update</Text>
-                <Text className="text-white/90 text-[10px] font-medium">{activeDeliveryAlert.text}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={14} color="white" />
+              <Ionicons name="car-outline" size={18} color={serviceType === 'delivery' ? '#B8520B' : '#757575'} />
+              <Text className={`text-xs font-bold ml-2 ${serviceType === 'delivery' ? 'text-[#B8520B]' : 'text-gray-500'}`}>Delivery</Text>
             </TouchableOpacity>
-          </Animated.View>
-        )}
 
-        <ScrollView showsVerticalScrollIndicator={false} className="flex-1 pb-24">
-          <ImageBackground 
-            source={{ uri: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?auto=format&fit=crop&w=900&q=80' }}
-            className="pt-12 pb-6 px-5 justify-end"
-            style={{ height: 410 }}
-          >
-            <View className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/20" />
+            <TouchableOpacity 
+              onPress={() => setServiceType('dine-in')}
+              className={`flex-1 flex-row items-center justify-center p-3.5 rounded-2xl border ${serviceType === 'dine-in' ? 'bg-[#FEF7F3] border-[#B8520B]' : 'bg-white border-[#EAE3DE]'}`}
+            >
+              <Ionicons name="restaurant-outline" size={18} color={serviceType === 'dine-in' ? '#B8520B' : '#757575'} />
+              <Text className={`text-xs font-bold ml-2 ${serviceType === 'dine-in' ? 'text-[#B8520B]' : 'text-gray-500'}`}>Dine-in</Text>
+            </TouchableOpacity>
+          </View>
 
-            <View className="absolute top-10 left-5 right-5 flex-row justify-end items-center z-10">
-              <TouchableOpacity 
-                onPress={() => {
-                  if (isLoggedIn) {
-                    const role = user?.role?.toLowerCase()?.trim();
-                    if (role === 'manager' || role === 'admin') {
-                      navigation.navigate('ManagerDashboard');
-                    } else {
-                      navigation.navigate('CustomerProfileScreen');
-                    }
-                  } else {
-                    navigation.navigate('Signup');
-                  }
-                }} 
-                className="bg-gradient-to-r from-[#B8520B] to-[#D35400] px-4 py-2 rounded-full shadow-lg border border-white/20 flex-row items-center active:opacity-90"
-              >
-                <Ionicons name={isLoggedIn ? "person" : "sparkles"} size={11} color="white" style={{ marginRight: 4 }} />
-                <Text className="text-white font-black text-[10px] tracking-wide">{isLoggedIn ? 'My Profile' : 'Sign Up'}</Text>
-              </TouchableOpacity>
-            </View>
+          {/* Customer Form Inputs */}
+          <Text className="text-xs font-bold text-gray-400 uppercase mb-2 ml-1 tracking-wider">
+            {serviceType === 'delivery' ? 'Delivery Details & Location Pin' : 'Reservation & Guest Details'}
+          </Text>
+          
+          <View className="bg-white rounded-2xl border border-[#EAE3DE] p-4 mb-5 shadow-xs">
+            
+            {/* Full Name Input */}
+            <Text className="text-[10px] font-bold text-gray-500 mb-1">Full Name</Text>
+            <TextInput 
+              className={`bg-[#F8F9FC] border p-3 rounded-xl text-xs text-[#1F130D] ${errors.fullName ? 'border-red-500' : 'border-[#EAE3DE]'}`} 
+              value={fullName} 
+              onChangeText={(text) => { setFullName(text); if(errors.fullName) setErrors({...errors, fullName: null}); }} 
+              placeholder="Enter full name"
+            />
+            {errors.fullName ? <Text className="text-[10px] text-red-500 font-bold mt-1 mb-2">{errors.fullName}</Text> : <View className="mb-3" />}
 
-            <View className="z-10 mb-2">
-              <Text className="text-2xl font-black text-white leading-tight mb-1 shadow-sm">
-                Taste the <Text className="text-[#FF9F43]">Masterpiece</Text> in Every Bite
-              </Text>
-              <Text className="text-[11px] text-gray-200 mb-4 leading-relaxed font-medium">
-                Freshly prepared, mouth-watering dishes crafted by expert chefs to satisfy your deepest cravings.
-              </Text>
+            {/* Email Input */}
+            <Text className="text-[10px] font-bold text-gray-500 mb-1">Email Address (Required for Chapa)</Text>
+            <TextInput 
+              className={`bg-[#F8F9FC] border p-3 rounded-xl text-xs text-[#1F130D] ${errors.email ? 'border-red-500' : 'border-[#EAE3DE]'}`} 
+              value={email} 
+              onChangeText={(text) => { setEmail(text); if(errors.email) setErrors({...errors, email: null}); }} 
+              placeholder="Enter email address"
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+            {errors.email ? <Text className="text-[10px] text-red-500 font-bold mt-1 mb-2">{errors.email}</Text> : <View className="mb-3" />}
 
-              <TouchableOpacity 
-                onPress={() => navigation.navigate('MenuScreen')}
-                className="bg-[#B8520B] py-3.5 rounded-2xl items-center shadow-lg shadow-[#B8520B]/40 mb-3.5 active:opacity-95 border border-white/10"
-              >
-                <Text className="text-white font-black text-xs tracking-wider uppercase">Order Now</Text>
-              </TouchableOpacity>
-
-              <View className="bg-white/95 backdrop-blur-lg rounded-2xl px-4 py-3 flex-row items-center shadow-xl border border-white/40">
-                <Ionicons name="search" size={16} color="#B8520B" style={{ marginRight: 10 }} />
+            {serviceType === 'delivery' ? (
+              <>
+                {/* Street Address Input */}
+                <Text className="text-[10px] font-bold text-gray-500 mb-1">Street Address / Landmark</Text>
                 <TextInput 
-                  placeholder="Search burgers, pizza, sushi, drinks..."
-                  placeholderTextColor="#888888"
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  className="flex-1 text-xs text-[#1F130D] font-semibold"
+                  className={`bg-[#F8F9FC] border p-3 rounded-xl text-xs text-[#1F130D] ${errors.streetAddress ? 'border-red-500' : 'border-[#EAE3DE]'}`} 
+                  value={streetAddress} 
+                  onChangeText={(text) => { setStreetAddress(text); if(errors.streetAddress) setErrors({...errors, streetAddress: null}); }} 
+                  placeholder="e.g., ASTU stadium"
                 />
-                {searchQuery.length > 0 && (
-                  <TouchableOpacity onPress={() => setSearchQuery('')}>
-                    <Ionicons name="close-circle" size={16} color="#B8520B" />
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-          </ImageBackground>
+                {errors.streetAddress ? <Text className="text-[10px] text-red-500 font-bold mt-1 mb-2">{errors.streetAddress}</Text> : <View className="mb-3" />}
 
-          <View className="px-5 mt-5">
-            <View className="flex-row justify-between items-center mb-3">
-              <Text className="text-base font-black text-[#1F130D]">Categories</Text>
-              <TouchableOpacity onPress={() => navigation.navigate('MenuScreen')} className="flex-row items-center">
-                <Text className="text-xs font-bold text-[#B8520B]">View All</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View className="flex-row flex-wrap justify-between">
-              {categories.map((cat, idx) => (
-                <TouchableOpacity 
-                  key={idx}
-                  onPress={() => navigation.navigate('MenuScreen')}
-                  className="w-[31%] h-28 rounded-2xl overflow-hidden mb-3 relative shadow-xs"
-                >
-                  <Image source={{ uri: cat.image }} className="w-full h-full absolute" />
-                  <View className="absolute inset-0 bg-black/40" />
-
-                  <View className="absolute bottom-2 left-2 right-2">
-                    <Text className="text-white font-black text-[11px]" numberOfLines={1}>{cat.name}</Text>
-                    <Text className="text-gray-200 text-[8px] font-semibold">{categoryCounts[cat.name] || 0} Items</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          <View className="px-5 mt-2">
-            <TouchableOpacity 
-              onPress={() => navigation.navigate('MenuScreen')}
-              className="bg-[#1F130D] rounded-2xl p-4 flex-row justify-between items-center shadow-md border border-[#B8520B]/40"
-            >
-              <View className="flex-1 pr-2">
-                <View className="bg-[#B8520B] self-start px-2 py-0.5 rounded-md mb-1">
-                  <Text className="text-[9px] font-bold text-white uppercase tracking-wider">Weekly Special Offer</Text>
-                </View>
-                <Text className="text-white font-black text-sm mb-0.5">Every Sunday 10% Discount</Text>
-                <Text className="text-gray-300 text-[10px]">Enjoy your family favorites with special weekend savings!</Text>
-              </View>
-              <Ionicons name="gift-outline" size={32} color="#E67E22" />
-            </TouchableOpacity>
-          </View>
-
-          <View className="px-5 mt-5 mb-10">
-            <View className="flex-row justify-between items-center mb-3">
-              <Text className="text-base font-black text-[#1F130D]">Trending Now</Text>
-              <View className="flex-row space-x-1.5">
-                <TouchableOpacity className="w-7 h-7 bg-gray-200 rounded-full items-center justify-center">
-                  <Ionicons name="chevron-back" size={12} color="#1F130D" />
-                </TouchableOpacity>
-                <TouchableOpacity className="w-7 h-7 bg-gray-200 rounded-full items-center justify-center">
-                  <Ionicons name="chevron-forward" size={12} color="#1F130D" />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {isLoading ? (
-              <View className="py-8 items-center">
-                <ActivityIndicator size="small" color="#B8520B" />
-              </View>
-            ) : trendingItems.length === 0 ? (
-              <View className="py-8 items-center">
-                <Text className="text-xs text-gray-500">No menu items available yet.</Text>
-              </View>
-            ) : (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} className="space-x-3">
-                {trendingItems.map((item) => (
-                <View key={item.id} className="bg-white w-64 rounded-2xl border border-[#EAE3DE] overflow-hidden mr-3 shadow-xs">
-                  
-                  <View className="relative h-32 w-full">
-                    <Image 
-                      source={{ uri: item.image }} 
-                      className="w-full h-full" 
-                      resizeMode="cover"
+                <View className="flex-row space-x-2 mb-3">
+                  <View className="flex-1">
+                    <Text className="text-[10px] font-bold text-gray-500 mb-1">City</Text>
+                    <TextInput 
+                      className={`bg-[#F8F9FC] border p-3 rounded-xl text-xs text-[#1F130D] ${errors.city ? 'border-red-500' : 'border-[#EAE3DE]'}`} 
+                      value={city} 
+                      onChangeText={(text) => { setCity(text); if(errors.city) setErrors({...errors, city: null}); }} 
                     />
-                    <View className="absolute inset-0 bg-black/10" />
+                    {errors.city ? <Text className="text-[10px] text-red-500 font-bold mt-1">{errors.city}</Text> : null}
                   </View>
-
-                  <View className="p-3">
-                    <View className="flex-row justify-between items-start mb-0.5">
-                      <Text className="font-bold text-xs text-[#1F130D] w-36" numberOfLines={1}>{item.name}</Text>
-                      <View className="flex-row items-center bg-[#FEF7F3] px-1.5 py-0.5 rounded-full border border-[#B8520B]/30">
-                        <Ionicons name="star" size={8} color="#B8520B" />
-                        <Text className="text-[9px] font-bold text-[#B8520B] ml-0.5">{item.rating}</Text>
-                      </View>
-                    </View>
-                    <Text className="text-[10px] text-gray-400 mb-2" numberOfLines={2}>{item.desc}</Text>
-                    
-                    <View className="flex-row justify-between items-center mb-2.5">
-                      <Text className="font-black text-xs text-[#1F130D]">${item.price.toFixed(2)}</Text>
-                    </View>
-
-                    {/* Action buttons row with Review button placed right next to Detail button */}
-                    <View className="flex-row space-x-1 mb-1.5">
-                      <TouchableOpacity 
-                        onPress={() => navigation.navigate('FoodDetailScreen', { foodItem: item })} 
-                        className="flex-1 bg-gray-100 py-1.5 rounded-xl items-center flex-row justify-center"
-                      >
-                        <Ionicons name="information-circle-outline" size={10} color="#1F130D" style={{ marginRight: 2 }} />
-                        <Text className="text-[8px] font-bold text-[#1F130D]">Detail</Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity 
-                        onPress={() => setSelectedItemReviews(item)} 
-                        className="flex-1 bg-[#FEF7F3] border border-[#B8520B]/40 py-1.5 rounded-xl items-center flex-row justify-center"
-                      >
-                        <Ionicons name="chatbubble-ellipses-outline" size={10} color="#B8520B" style={{ marginRight: 2 }} />
-                        <Text className="text-[8px] font-bold text-[#B8520B]">Reviews</Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity 
-                        onPress={() => handleAddToCart(item)} 
-                        className="flex-1 bg-gray-100 py-1.5 rounded-xl items-center flex-row justify-center"
-                      >
-                        <Ionicons name="cart-outline" size={10} color="#1F130D" style={{ marginRight: 2 }} />
-                        <Text className="text-[8px] font-bold text-[#1F130D]">Cart</Text>
-                      </TouchableOpacity>
-                    </View>
-
-                    <TouchableOpacity 
-                      onPress={() => handleQuickCheckout(item)} 
-                      className="w-full bg-[#B8520B] py-2 rounded-xl items-center flex-row justify-center shadow-xs"
-                    >
-                      <Ionicons name="flash-outline" size={11} color="white" style={{ marginRight: 3 }} />
-                      <Text className="text-[9px] font-bold text-white uppercase">Checkout</Text>
-                    </TouchableOpacity>
-
+                  <View className="flex-1">
+                    <Text className="text-[10px] font-bold text-gray-500 mb-1">Phone Number</Text>
+                    <TextInput 
+                      className={`bg-[#F8F9FC] border p-3 rounded-xl text-xs text-[#1F130D] ${errors.phone ? 'border-red-500' : 'border-[#EAE3DE]'}`} 
+                      value={phone} 
+                      onChangeText={(text) => { setPhone(text); if(errors.phone) setErrors({...errors, phone: null}); }} 
+                      placeholder="0911223344"
+                      keyboardType="phone-pad"
+                    />
+                    {errors.phone ? <Text className="text-[10px] text-red-500 font-bold mt-1">{errors.phone}</Text> : null}
                   </View>
                 </View>
-                ))}
-              </ScrollView>
+
+                {/* Trigger Button to Open Embedded Map Modal */}
+                <TouchableOpacity
+                  onPress={() => {
+                    setTempAddress(streetAddress);
+                    setIsMapModalVisible(true);
+                  }}
+                  className="bg-[#FEF7F3] border border-[#B8520B]/40 py-3.5 px-4 rounded-xl flex-row items-center justify-between mb-3 shadow-xs active:opacity-90"
+                >
+                  <View className="flex-row items-center flex-1 pr-2">
+                    <View className="w-8 h-8 bg-[#B8520B]/10 rounded-xl items-center justify-center mr-3">
+                      <Ionicons name="map" size={16} color="#B8520B" />
+                    </View>
+                    <View className="flex-1">
+                      <Text className="text-xs font-bold text-[#1F130D]" numberOfLines={1}>
+                        {streetAddress || 'Pin Location on Map'}
+                      </Text>
+                      <Text className="text-[9px] text-[#B8520B] font-semibold">Click to paste Google Maps share link</Text>
+                    </View>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color="#B8520B" />
+                </TouchableOpacity>
+
+                {/* Detailed Location & Map Link Display Card */}
+                <View className="p-3 bg-[#F8F9FC] rounded-xl border border-[#EAE3DE]">
+                  <View className="flex-row items-center justify-between mb-1">
+                    <Text className="text-[10px] text-gray-700 font-bold">📍 Pinned Location Details</Text>
+                    <TouchableOpacity 
+                      onPress={() => Linking.openURL(`https://maps.google.com/?q=${mapRegion.latitude},${mapRegion.longitude}`)}
+                    >
+                      <Text className="text-[10px] text-[#B8520B] font-bold underline">Open Map Link ↗</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Text className="text-[10px] text-[#1F130D] font-semibold mb-0.5">{streetAddress} ({city})</Text>
+                  <Text className="text-[9px] text-gray-500 font-mono">
+                    Lat: {mapRegion.latitude.toFixed(5)}, Lng: {mapRegion.longitude.toFixed(5)}
+                  </Text>
+                  <Text className="text-[9px] text-gray-400 mt-1" numberOfLines={1}>
+                    URL: https://maps.google.com/?q={mapRegion.latitude.toFixed(5)},{mapRegion.longitude.toFixed(5)}
+                  </Text>
+                </View>
+              </>
+            ) : (
+              <>
+                <View className="mb-3">
+                  <Text className="text-[10px] font-bold text-gray-500 mb-1">Table Number / Seat</Text>
+                  <TextInput 
+                    className={`bg-[#F8F9FC] border p-3 rounded-xl text-xs text-[#1F130D] font-bold ${errors.tableNumber ? 'border-red-500' : 'border-[#EAE3DE]'}`} 
+                    value={tableNumber} 
+                    onChangeText={(text) => { setTableNumber(text); if(errors.tableNumber) setErrors({...errors, tableNumber: null}); }} 
+                    placeholder="Enter Table Number (e.g., Table 4)"
+                  />
+                  {errors.tableNumber ? <Text className="text-[10px] text-red-500 font-bold mt-1">{errors.tableNumber}</Text> : null}
+                </View>
+                <View className="mb-1">
+                  <Text className="text-[10px] font-bold text-gray-500 mb-1">Phone Number</Text>
+                  <TextInput 
+                    className={`bg-[#F8F9FC] border p-3 rounded-xl text-xs text-[#1F130D] ${errors.phone ? 'border-red-500' : 'border-[#EAE3DE]'}`} 
+                    value={phone} 
+                    onChangeText={(text) => { setPhone(text); if(errors.phone) setErrors({...errors, phone: null}); }} 
+                    keyboardType="phone-pad"
+                  />
+                  {errors.phone ? <Text className="text-[10px] text-red-500 font-bold mt-1">{errors.phone}</Text> : null}
+                </View>
+              </>
             )}
           </View>
-        </ScrollView>
 
-        {/* Dedicated Modal Popup for Item Reviews (Newest order reviews first) */}
-        <Modal
-          visible={!!selectedItemReviews}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setSelectedItemReviews(null)}
-        >
-          <View className="flex-1 bg-black/60 justify-center items-center px-5">
-            <View className="bg-white w-full max-w-[360px] rounded-3xl p-5 shadow-2xl border border-gray-100">
-              <View className="flex-row justify-between items-center mb-4 pb-2 border-b border-gray-100">
-                <View className="flex-row items-center space-x-2">
-                  <Ionicons name="chatbubbles" size={18} color="#B8520B" />
-                  <Text className="text-sm font-black text-[#1F130D]">Customer Reviews</Text>
-                </View>
-                <TouchableOpacity onPress={() => setSelectedItemReviews(null)} className="w-7 h-7 bg-gray-100 rounded-full items-center justify-center">
-                  <Ionicons name="close" size={14} color="#1F130D" />
-                </TouchableOpacity>
-              </View>
-
-              {selectedItemReviews && (
-                <View className="flex-row items-center mb-4 bg-[#FEF7F3] p-2.5 rounded-2xl border border-[#B8520B]/20">
-                  <Image source={{ uri: selectedItemReviews.image }} className="w-10 h-10 rounded-xl mr-3" />
-                  <View className="flex-1">
-                    <Text className="text-xs font-bold text-[#1F130D]" numberOfLines={1}>{selectedItemReviews.name}</Text>
-                    <Text className="text-[10px] text-[#B8520B] font-semibold">${selectedItemReviews.price.toFixed(2)}</Text>
+          {/* Order Amount Summary & Quantity Controls */}
+          <Text className="text-xs font-bold text-gray-400 uppercase mb-2 ml-1 tracking-wider">Order Amount Summary</Text>
+          <View className="bg-white rounded-2xl border border-[#EAE3DE] p-4 mb-5 shadow-xs">
+            {cartItems.length > 0 ? (
+              cartItems.map((item, index) => (
+                <View key={index} className="py-3 border-b border-gray-100">
+                  <View className="flex-row justify-between items-center mb-2">
+                    <Text className="text-xs font-bold text-[#1F130D] flex-1 pr-2" numberOfLines={1}>{item.name}</Text>
+                    <Text className="text-xs font-bold text-[#B8520B]">${(item.price * item.quantity).toFixed(2)}</Text>
                   </View>
-                </View>
-              )}
 
-              <ScrollView showsVerticalScrollIndicator={false} className="max-h-72 space-y-2.5">
-                {reviews.map((rev, idx) => (
-                  <View key={idx} className="bg-gray-50 p-3 rounded-2xl border border-gray-100 mb-2">
-                    <View className="flex-row justify-between items-center mb-1">
-                      <Text className="text-xs font-bold text-[#1F130D]">{rev.name || 'Customer'}</Text>
-                      <View className="flex-row items-center bg-[#FEF7F3] px-2 py-0.5 rounded-full border border-[#B8520B]/30">
-                        <Ionicons name="star" size={9} color="#B8520B" />
-                        <Text className="text-[9px] font-bold text-[#B8520B] ml-1">{rev.rating || 5}</Text>
-                      </View>
+                  <View className="flex-row justify-between items-center">
+                    <Text className="text-[10px] text-gray-400">Unit Price: ${item.price?.toFixed(2)}</Text>
+                    
+                    <View className="flex-row items-center space-x-2">
+                      <TouchableOpacity 
+                        onPress={() => updateItemQuantity(index, item.quantity - 1)}
+                        className="w-7 h-7 bg-gray-100 rounded-lg items-center justify-center border border-gray-200"
+                      >
+                        <Ionicons name="remove" size={14} color="#757575" />
+                      </TouchableOpacity>
+
+                      <TextInput
+                        className="w-10 h-7 bg-[#F8F9FC] border border-[#EAE3DE] rounded-lg text-center text-xs font-bold text-[#1F130D]"
+                        keyboardType="numeric"
+                        value={String(item.quantity)}
+                        onChangeText={(val) => updateItemQuantity(index, val)}
+                      />
+
+                      <TouchableOpacity 
+                        onPress={() => updateItemQuantity(index, item.quantity + 1)}
+                        className="w-7 h-7 bg-[#FEF7F3] rounded-lg items-center justify-center border border-[#B8520B]/30"
+                      >
+                        <Ionicons name="add" size={14} color="#B8520B" />
+                      </TouchableOpacity>
                     </View>
-                    <Text className="text-[11px] text-gray-600 leading-snug">{rev.comment || rev.text}</Text>
                   </View>
-                ))}
-              </ScrollView>
+                </View>
+              ))
+            ) : (
+              <View className="py-2">
+                <Text className="text-xs text-gray-400 italic mb-2">Standard Package</Text>
+                <Text className="text-xs font-bold text-[#1F130D]">Default Item</Text>
+              </View>
+            )}
 
-              <TouchableOpacity 
-                onPress={() => setSelectedItemReviews(null)}
-                className="mt-4 bg-[#1F130D] py-3 rounded-xl items-center"
-              >
-                <Text className="text-white font-bold text-xs">Close</Text>
-              </TouchableOpacity>
+            <View className="flex-row justify-between items-center pt-3 mt-1">
+              <Text className="text-xs text-gray-500">Service / Delivery Fee</Text>
+              <Text className="text-xs font-bold text-gray-700">Free</Text>
+            </View>
+
+            <View className="flex-row justify-between items-center pt-3 mt-2 border-t border-[#EAE3DE]">
+              <Text className="text-xs font-black text-[#1F130D]">Total Amount</Text>
+              <Text className="text-sm font-black text-[#B8520B]">${totalAmount.toFixed(2)}</Text>
             </View>
           </View>
-        </Modal>
 
-        <View className="absolute bottom-0 left-0 right-0 bg-white border-t border-[#EAE3DE] px-6 py-2.5 flex-row justify-between items-center shadow-lg">
-          <TouchableOpacity onPress={() => navigation.navigate('CustomerLanding')} className="items-center">
-            <Ionicons name="home" size={18} color="#B8520B" />
-            <Text className="text-[9px] font-bold text-[#B8520B] mt-0.5">Home</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('OrderHistoryScreen')} className="items-center">
-            <Ionicons name="receipt-outline" size={18} color="#757575" />
-            <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Orders</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('MenuScreen')} className="items-center">
-            <Ionicons name="restaurant-outline" size={18} color="#757575" />
-            <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Menu</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('CartScreen')} className="items-center">
-            <Ionicons name="cart-outline" size={18} color="#757575" />
-            <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Cart</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            onPress={() => {
-              if (isLoggedIn) {
-                const role = user?.role?.toLowerCase()?.trim();
-                if (role === 'manager' || role === 'admin') {
-                  navigation.navigate('ManagerDashboard');
-                } else {
-                  navigation.navigate('CustomerProfileScreen');
-                }
-              } else {
-                navigation.navigate('Signup');
-              }
-            }} 
-            className="items-center"
+          {/* Payment Methods */}
+          <Text className="text-xs font-bold text-gray-400 uppercase mb-2 ml-1 tracking-wider">Payment Method</Text>
+          <View className="bg-white rounded-2xl border border-[#EAE3DE] p-3 mb-6 shadow-xs">
+            
+            <TouchableOpacity 
+              onPress={() => setPaymentMethod('chapa')}
+              className={`flex-row items-center justify-between p-3 rounded-xl mb-2 ${paymentMethod === 'chapa' ? 'bg-[#FEF7F3] border border-[#B8520B]/30' : ''}`}
+            >
+              <View className="flex-row items-center">
+                <View className="w-8 h-8 bg-green-50 rounded-xl items-center justify-center mr-3 border border-green-200">
+                  <Ionicons name="card-outline" size={16} color="#008000" />
+                </View>
+                <View>
+                  <Text className="text-xs font-bold text-[#1F130D]">Chapa</Text>
+                  <Text className="text-[9px] text-gray-400">Pay via Chapa payment gateway</Text>
+                </View>
+              </View>
+              <Ionicons name={paymentMethod === 'chapa' ? "radio-button-on" : "radio-button-off"} size={16} color="#B8520B" />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              onPress={() => setPaymentMethod('telebirr')}
+              className={`flex-row items-center justify-between p-3 rounded-xl mb-2 ${paymentMethod === 'telebirr' ? 'bg-[#FEF7F3] border border-[#B8520B]/30' : ''}`}
+            >
+              <View className="flex-row items-center">
+                <View className="w-8 h-8 bg-blue-50 rounded-xl items-center justify-center mr-3 border border-blue-200">
+                  <Ionicons name="phone-portrait-outline" size={16} color="#0052CC" />
+                </View>
+                <View>
+                  <Text className="text-xs font-bold text-[#1F130D]">Telebirr</Text>
+                  <Text className="text-[9px] text-gray-400">Fast mobile wallet payment</Text>
+                </View>
+              </View>
+              <Ionicons name={paymentMethod === 'telebirr' ? "radio-button-on" : "radio-button-off"} size={16} color="#B8520B" />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              onPress={() => setPaymentMethod('card')}
+              className={`flex-row items-center justify-between p-3 rounded-xl mb-2 ${paymentMethod === 'card' ? 'bg-[#FEF7F3] border border-[#B8520B]/30' : ''}`}
+            >
+              <View className="flex-row items-center">
+                <View className="w-8 h-8 bg-gray-100 rounded-xl items-center justify-center mr-3">
+                  <Ionicons name="card-outline" size={16} color="#757575" />
+                </View>
+                <Text className="text-xs font-bold text-[#1F130D]">Credit / Debit Card</Text>
+              </View>
+              <Ionicons name={paymentMethod === 'card' ? "radio-button-on" : "radio-button-off"} size={16} color="#B8520B" />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              onPress={() => setPaymentMethod('cash')}
+              className={`flex-row items-center justify-between p-3 rounded-xl ${paymentMethod === 'cash' ? 'bg-[#FEF7F3] border border-[#B8520B]/30' : ''}`}
+            >
+              <View className="flex-row items-center">
+                <View className="w-8 h-8 bg-gray-100 rounded-xl items-center justify-center mr-3">
+                  <Ionicons name="cash-outline" size={16} color="#757575" />
+                </View>
+                <Text className="text-xs font-bold text-[#1F130D]">Cash on Delivery / Table</Text>
+              </View>
+              <Ionicons name={paymentMethod === 'cash' ? "radio-button-on" : "radio-button-off"} size={16} color="#B8520B" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Telebirr Action Button (if Telebirr selected) */}
+          {paymentMethod === 'telebirr' && (
+            <TouchableOpacity
+              onPress={activateTelebirr}
+              disabled={isActivatingTelebirr}
+              className="w-full bg-[#0052CC] py-3.5 rounded-xl items-center shadow-md mb-4 flex-row justify-center space-x-2"
+            >
+              <Ionicons name="phone-portrait-outline" size={18} color="#FFFFFF" />
+              <Text className="text-white font-bold text-xs uppercase tracking-wider">
+                {isActivatingTelebirr ? 'Processing Telebirr...' : 'Authorize Telebirr Payment'}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Place Order Button */}
+          <TouchableOpacity
+            onPress={handlePlaceOrder}
+            className="w-full bg-[#B8520B] py-4 rounded-2xl items-center shadow-lg active:opacity-95 mb-6"
           >
-            <Ionicons 
-              name={isLoggedIn ? "person" : "person-add-outline"} 
-              size={18} 
-              color={isLoggedIn ? "#B8520B" : "#757575"} 
-            />
-            <Text className={`text-[9px] ${isLoggedIn ? 'font-bold text-[#B8520B]' : 'font-semibold text-gray-500'} mt-0.5`}>
-              {isLoggedIn ? 'Profile' : 'Sign Up'}
+            <Text className="text-white font-black text-xs uppercase tracking-widest">
+              {paymentMethod === 'chapa' ? 'Proceed to Chapa Payment' : `Place Order • $${totalAmount.toFixed(2)}`}
             </Text>
           </TouchableOpacity>
-        </View>
+
+        </ScrollView>
       </View>
+
+      {/* Map Modal */}
+      <Modal
+        visible={isMapModalVisible}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setIsMapModalVisible(false)}
+      >
+        <View className="flex-1 bg-white pt-12 px-5">
+          <View className="flex-row justify-between items-center mb-4">
+            <Text className="text-base font-black text-[#1F130D]">Select Delivery Location</Text>
+            <TouchableOpacity onPress={() => setIsMapModalVisible(false)}>
+              <Ionicons name="close" size={24} color="#1F130D" />
+            </TouchableOpacity>
+          </View>
+
+          <Text className="text-xs font-bold text-gray-500 mb-1">Paste Google Maps Share Link</Text>
+          <TextInput
+            className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs text-[#1F130D] mb-4"
+            value={mapLinkInput}
+            onChangeText={handleParseGoogleMapsLink}
+            placeholder="Paste Google Maps URL here (e.g., https://maps.app.goo.gl/...)"
+          />
+
+          <View className="flex-1 rounded-2xl overflow-hidden border border-[#EAE3DE] mb-4">
+            <CustomMap
+              region={mapRegion}
+              onRegionChangeComplete={(region) => setMapRegion(region)}
+            />
+          </View>
+
+          <Text className="text-xs font-bold text-gray-500 mb-1">Selected Location Name</Text>
+          <TextInput
+            className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs text-[#1F130D] mb-4 font-bold"
+            value={tempAddress}
+            onChangeText={setTempAddress}
+            placeholder="Enter location name"
+          />
+
+          <TouchableOpacity
+            onPress={confirmMapSelection}
+            className="w-full bg-[#B8520B] py-4 rounded-xl items-center mb-6"
+          >
+            <Text className="text-white font-bold text-xs uppercase">Confirm Location</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </View>
   );
 }

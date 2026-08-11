@@ -4,6 +4,9 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { AuthContext } from '../../context/AuthContext';
 
+// Updated with your actual Render backend URL
+const API_URL = 'https://restaurant-management-app-wqmp.onrender.com';
+
 export default function ManagerProfileScreen({ navigation }) {
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState('');
@@ -37,7 +40,7 @@ export default function ManagerProfileScreen({ navigation }) {
 
   const handleSave = () => {
     // save to backend
-    fetch('http://localhost:5000/api/auth/profile', {
+    fetch(`${API_URL}/api/auth/profile`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, email, phone })
@@ -53,7 +56,7 @@ export default function ManagerProfileScreen({ navigation }) {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/auth/profile');
+        const res = await fetch(`${API_URL}/api/auth/profile`);
         const j = await res.json();
         if (j.success && j.user) {
           setName(j.user.name || '');

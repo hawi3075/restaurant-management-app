@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StatusBar, TextInput, Modal, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StatusBar, TextInput, Modal, ActivityIndicator, Alert, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { BACKEND_URL } from '../../api/backend';
+
+// Centralized API URL configuration (switches automatically between local development and Render production)
+const API_URL = __DEV__ 
+  ? (Platform.OS === 'android' ? 'http://10.0.2.2:5000' : 'http://localhost:5000')
+  : 'https://your-render-app-name.onrender.com'; // Replace with your actual Render backend URL
 
 export default function ManagerSupportScreen({ navigation }) {
   const [isLoading, setIsLoading] = useState(true);
@@ -28,7 +32,7 @@ export default function ManagerSupportScreen({ navigation }) {
       if (!isPolling) setIsLoading(true);
       const token = await AsyncStorage.getItem('token');
       
-      const response = await fetch(`${BACKEND_URL}/api/support/manager/tickets`, {
+      const response = await fetch(`${API_URL}/api/support/manager/tickets`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -66,7 +70,7 @@ export default function ManagerSupportScreen({ navigation }) {
       setIsSubmitting(true);
       const token = await AsyncStorage.getItem('token');
 
-      const response = await fetch(`${BACKEND_URL}/api/support/manager/reply/${selectedTicket._id}`, {
+      const response = await fetch(`${API_URL}/api/support/manager/reply/${selectedTicket._id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -90,41 +94,52 @@ export default function ManagerSupportScreen({ navigation }) {
 
   if (isLoading) {
     return (
-      <View className="flex-1 bg-[#F8F9FC] items-center justify-center">
-        <ActivityIndicator size="large" color="#B8520B" />
+      <View className="flex-1 bg-[#F8FAFC] items-center justify-center">
+        <ActivityIndicator size="large" color="#F97316" />
       </View>
     );
   }
 
   return (
-    <View className="flex-1 bg-[#F8F9FC] items-center">
-      <View className="w-full max-w-[440px] flex-1 bg-[#F8F9FC] relative shadow-2xl">
-        <StatusBar barStyle="dark-content" backgroundColor="#F8F9FC" />
+    <View className="flex-1 bg-[#F8FAFC] items-center justify-center">
+      <View className="w-full max-w-[440px] flex-1 bg-white relative shadow-2xl overflow-hidden border-x border-slate-100">
+        <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
 
         {/* Top Header */}
-        <View className="pt-12 px-5 pb-4 bg-white border-b border-[#EAE3DE] flex-row justify-between items-center">
-          <View className="flex-row items-center">
-            <TouchableOpacity onPress={() => navigation.goBack()} className="mr-3">
-              <Ionicons name="arrow-back" size={20} color="#1F130D" />
+        <View className="pt-12 px-5 pb-4 bg-white border-b border-slate-100 flex-row justify-between items-center">
+          <View className="flex-row items-center space-x-3">
+            <TouchableOpacity 
+              onPress={() => navigation.goBack()}
+              className="w-10 h-10 bg-slate-50 rounded-2xl border border-slate-200 items-center justify-center active:scale-95"
+            >
+              <Ionicons name="arrow-back" size={20} color="#0F172A" />
             </TouchableOpacity>
-            <Text className="text-xl font-black text-[#1F130D]">Manager Support Hub</Text>
+            <View>
+              <Text className="text-[10px] font-bold text-orange-500 uppercase tracking-widest">Management</Text>
+              <Text className="text-xl font-black text-slate-900">Support Hub</Text>
+            </View>
           </View>
-          <TouchableOpacity onPress={() => fetchManagerTickets()}>
-            <Ionicons name="reload" size={18} color="#B8520B" />
+          <TouchableOpacity 
+            onPress={() => fetchManagerTickets()}
+            className="w-10 h-10 bg-orange-50 rounded-2xl border border-orange-200 items-center justify-center active:scale-95"
+          >
+            <Ionicons name="reload" size={18} color="#F97316" />
           </TouchableOpacity>
         </View>
 
         {/* Tickets List Content */}
         <ScrollView showsVerticalScrollIndicator={false} className="px-5 pt-4 pb-24">
-          <Text className="text-xs font-bold text-gray-400 uppercase mb-3 ml-1 tracking-wider">
+          <Text className="text-xs font-bold text-slate-400 uppercase mb-3 ml-1 tracking-wider">
             Customer Inquiries ({tickets.length})
           </Text>
 
           {tickets.length === 0 ? (
-            <View className="bg-white p-6 rounded-3xl border border-[#EAE3DE] items-center mt-10">
-              <Ionicons name="chatbubbles-outline" size={40} color="#9E9E9E" style={{ marginBottom: 10 }} />
-              <Text className="text-sm font-bold text-[#1F130D] mb-1">No support tickets found</Text>
-              <Text className="text-xs text-gray-400 text-center">When customers submit messages from their profile, they will appear here.</Text>
+            <View className="bg-white p-6 rounded-3xl border border-slate-200 items-center mt-10 shadow-sm">
+              <View className="w-16 h-16 bg-orange-50 rounded-full items-center justify-center mb-3 border border-orange-100">
+                <Ionicons name="chatbubbles-outline" size={30} color="#F97316" />
+              </View>
+              <Text className="text-sm font-bold text-slate-900 mb-1">No support tickets found</Text>
+              <Text className="text-xs text-slate-400 text-center">When customers submit messages from their profile, they will appear here.</Text>
             </View>
           ) : (
             tickets.map((ticket, index) => {
@@ -134,35 +149,37 @@ export default function ManagerSupportScreen({ navigation }) {
                 <TouchableOpacity 
                   key={ticket._id || index}
                   onPress={() => handleOpenReplyModal(ticket)}
-                  className="bg-white p-4 rounded-2xl border border-[#EAE3DE] mb-3 shadow-xs active:opacity-90"
+                  className="bg-white p-4 rounded-3xl border border-slate-200 mb-3 shadow-sm active:scale-[0.99]"
                 >
                   <View className="flex-row justify-between items-center mb-2">
-                    <View className="flex-row items-center">
-                      <View className="w-7 h-7 bg-[#FEF7F3] rounded-full items-center justify-center mr-2">
-                        <Ionicons name="person" size={13} color="#B8520B" />
+                    <View className="flex-row items-center space-x-2">
+                      <View className="w-8 h-8 bg-orange-50 rounded-xl items-center justify-center border border-orange-200">
+                        <Ionicons name="person" size={14} color="#F97316" />
                       </View>
-                      <Text className="text-xs font-bold text-[#1F130D]">{ticket.name || 'Customer'}</Text>
+                      <Text className="text-xs font-bold text-slate-900">{ticket.name || 'Customer'}</Text>
                     </View>
-                    <View className={`px-2 py-0.5 rounded-full ${isResolved ? 'bg-green-100' : 'bg-yellow-100'}`}>
-                      <Text className={`text-[9px] font-bold ${isResolved ? 'text-green-700' : 'text-yellow-700'}`}>
+                    <View className={`px-2.5 py-1 rounded-full border ${isResolved ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+                      <Text className={`text-[10px] font-bold ${isResolved ? 'text-emerald-600' : 'text-amber-600'}`}>
                         {isResolved ? 'Replied' : 'Needs Reply'}
                       </Text>
                     </View>
                   </View>
 
-                  <Text className="text-xs text-gray-800 font-medium mb-1">Customer: "{ticket.message}"</Text>
+                  <Text className="text-xs text-slate-700 font-medium mb-2">Customer: "{ticket.message}"</Text>
                   
                   {isResolved && (
-                    <Text className="text-[11px] text-green-700 bg-green-50 p-2 rounded-xl mt-1 mb-1">
-                      Manager Reply: "{replyText}"
-                    </Text>
+                    <View className="bg-emerald-50/60 p-2.5 rounded-2xl border border-emerald-100 mt-1 mb-2">
+                      <Text className="text-[11px] text-emerald-800 font-medium">
+                        Manager Reply: "{replyText}"
+                      </Text>
+                    </View>
                   )}
 
-                  <View className="flex-row justify-between items-center pt-2 border-t border-gray-100 mt-2">
-                    <Text className="text-[10px] text-gray-400">
+                  <View className="flex-row justify-between items-center pt-2.5 border-t border-slate-100 mt-1">
+                    <Text className="text-[10px] text-slate-400 font-medium">
                       {ticket.createdAt ? new Date(ticket.createdAt).toLocaleDateString() : 'Recent'}
                     </Text>
-                    <Text className="text-[11px] font-bold text-[#B8520B]">
+                    <Text className="text-[11px] font-bold text-orange-500">
                       {isResolved ? 'Edit Response →' : 'Reply Now →'}
                     </Text>
                   </View>
@@ -173,49 +190,61 @@ export default function ManagerSupportScreen({ navigation }) {
         </ScrollView>
 
         {/* Reply Modal */}
-        <Modal visible={replyModalVisible} animationType="slide" transparent={true}>
-          <View className="flex-1 bg-black/50 justify-end items-center">
-            <View className="bg-white w-full max-w-[440px] rounded-t-3xl p-6 max-h-[85%]">
+        <Modal visible={replyModalVisible} animationType="fade" transparent={true} onRequestClose={() => setReplyModalVisible(false)}>
+          <View className="flex-1 bg-black/50 justify-center items-center px-5">
+            <View className="bg-white w-full max-w-[380px] rounded-3xl p-6 shadow-2xl border border-slate-100 max-h-[90%]">
               <View className="flex-row justify-between items-center mb-4">
-                <Text className="text-base font-black text-[#1F130D]">Respond to Ticket</Text>
-                <TouchableOpacity onPress={() => setReplyModalVisible(false)}>
-                  <Ionicons name="close" size={20} color="#1F130D" />
+                <Text className="text-lg font-black text-slate-900">Respond to Ticket</Text>
+                <TouchableOpacity 
+                  onPress={() => setReplyModalVisible(false)}
+                  className="w-8 h-8 bg-slate-100 rounded-full items-center justify-center"
+                >
+                  <Ionicons name="close" size={18} color="#0F172A" />
                 </TouchableOpacity>
               </View>
 
               {selectedTicket && (
                 <ScrollView showsVerticalScrollIndicator={false}>
                   {/* Customer info card */}
-                  <View className="bg-[#FEF7F3] p-3.5 rounded-2xl border border-[#B8520B]/20 mb-4">
-                    <Text className="text-[10px] font-bold text-[#B8520B] uppercase mb-1">Customer Details</Text>
-                    <Text className="text-xs font-bold text-[#1F130D]">{selectedTicket.name} ({selectedTicket.email})</Text>
-                    <Text className="text-xs text-gray-700 mt-2 italic">"{selectedTicket.message}"</Text>
+                  <View className="bg-orange-50 p-3.5 rounded-2xl border border-orange-200 mb-4">
+                    <Text className="text-[10px] font-bold text-orange-600 uppercase mb-1">Customer Details</Text>
+                    <Text className="text-xs font-bold text-slate-900">{selectedTicket.name} ({selectedTicket.email})</Text>
+                    <Text className="text-xs text-slate-700 mt-1.5 italic">"{selectedTicket.message}"</Text>
                   </View>
 
-                  <Text className="text-xs font-bold text-[#1F130D] mb-1">Manager Response</Text>
-                  <Text className="text-[11px] text-gray-500 mb-3">Type your instructions or answer below. This will instantly show up on the customer's profile screen.</Text>
+                  <Text className="text-xs font-bold text-slate-900 mb-1">Manager Response</Text>
+                  <Text className="text-[11px] text-slate-500 mb-3">Type your instructions or answer below. This will instantly show up on the customer's profile screen.</Text>
 
                   <TextInput 
-                    className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs mb-4 text-[#1F130D] h-32" 
+                    className="bg-slate-50 border border-slate-200 p-3.5 rounded-2xl text-xs mb-5 text-slate-900 h-32" 
                     placeholder="Write manager reply here..."
-                    placeholderTextColor="#9E9E9E"
+                    placeholderTextColor="#94A3B8"
                     multiline
                     textAlignVertical="top"
                     value={managerResponseText}
                     onChangeText={setManagerResponseText} 
                   />
 
-                  <TouchableOpacity 
-                    onPress={handleSendResponse} 
-                    disabled={isSubmitting}
-                    className="bg-[#B8520B] py-3.5 rounded-xl items-center flex-row justify-center mb-4"
-                  >
-                    {isSubmitting ? (
-                      <ActivityIndicator size="small" color="#FFFFFF" />
-                    ) : (
-                      <Text className="text-white text-xs font-bold">Send Response to Customer</Text>
-                    )}
-                  </TouchableOpacity>
+                  <View className="flex-row space-x-3">
+                    <TouchableOpacity 
+                      onPress={() => setReplyModalVisible(false)} 
+                      className="flex-1 bg-slate-100 py-3.5 rounded-2xl items-center"
+                    >
+                      <Text className="font-bold text-slate-700 text-sm">Cancel</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity 
+                      onPress={handleSendResponse} 
+                      disabled={isSubmitting}
+                      className="flex-1 bg-orange-500 py-3.5 rounded-2xl items-center justify-center shadow-md shadow-orange-500/20"
+                    >
+                      {isSubmitting ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      ) : (
+                        <Text className="text-white text-xs font-bold">Send Response</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
                 </ScrollView>
               )}
             </View>
