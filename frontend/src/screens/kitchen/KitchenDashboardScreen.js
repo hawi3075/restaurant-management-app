@@ -1,20 +1,16 @@
-import React, { useState, useEffect, useContext, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StatusBar, Image, Modal, TextInput, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import io from 'socket.io-client';
-import { AuthContext } from '../../context/AuthContext';
-import { BACKEND_URL } from '../../api/backend';
 
-// Replace 'https://your-live-backend-url.com' with your actual deployed production URL (e.g., Render, Railway, Heroku)
-const LIVE_BACKEND_URL = 'https://your-live-backend-url.com';
+const LIVE_BACKEND_URL = 'https://your-backend-service.onrender.com'; // Updated with your live Render backend URL
 
-const API_URL = BACKEND_URL || (__DEV__ ? 'http://localhost:5000' : LIVE_BACKEND_URL);
+const API_URL = __DEV__ ? 'http://localhost:5000' : LIVE_BACKEND_URL;
 const SOCKET_URL = API_URL;
 
 export default function KitchenDashboardScreen({ route, navigation }) {
-  const authContext = useContext(AuthContext);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [chefName, setChefName] = useState('Chef Alex');
   const [chefEmail, setChefEmail] = useState('kitchen@restaurant.com');
@@ -58,7 +54,7 @@ export default function KitchenDashboardScreen({ route, navigation }) {
   const fetchKitchenOrders = useCallback(async () => {
     try {
       setIsLoadingOrders(true);
-      const token = authContext?.token || await AsyncStorage.getItem('token');
+      const token = await AsyncStorage.getItem('token');
       const response = await fetch(`${API_URL}/api/orders/incoming`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -81,38 +77,39 @@ export default function KitchenDashboardScreen({ route, navigation }) {
     } finally {
       setIsLoadingOrders(false);
     }
-  }, [authContext?.token]);
+  }, []);
 
   useEffect(() => {
     loadChefProfile();
     fetchKitchenOrders();
 
-    const token = authContext?.token;
-    const socket = io(SOCKET_URL, {
-      transports: ['websocket'],
-      auth: { token }
-    });
+    AsyncStorage.getItem('token').then((token) => {
+      const socket = io(SOCKET_URL, {
+        transports: ['websocket'],
+        auth: { token }
+      });
 
-    socket.on('new_order_placed', (newOrder) => {
-      setKitchenOrders(prev => [formatOrderData([newOrder])[0], ...prev]);
-    });
+      socket.on('new_order_placed', (newOrder) => {
+        setKitchenOrders(prev => [formatOrderData([newOrder])[0], ...prev]);
+      });
 
-    socket.on('order_status_updated', (data) => {
-      const targetId = data.id || data._id;
-      const updatedStatus = data.status === 'Preparing' || data.status === 'Cooking' ? 'Cooking' : data.status;
-      
-      setKitchenOrders(prev => prev.map(o => {
-        if (String(o.id) === String(targetId)) {
-          return { ...o, status: updatedStatus };
-        }
-        return o;
-      }));
-    });
+      socket.on('order_status_updated', (data) => {
+        const targetId = data.id || data._id;
+        const updatedStatus = data.status === 'Preparing' || data.status === 'Cooking' ? 'Cooking' : data.status;
+        
+        setKitchenOrders(prev => prev.map(o => {
+          if (String(o.id) === String(targetId)) {
+            return { ...o, status: updatedStatus };
+          }
+          return o;
+        }));
+      });
 
-    return () => {
-      socket.disconnect();
-    };
-  }, [fetchKitchenOrders, authContext?.token]);
+      return () => {
+        socket.disconnect();
+      };
+    });
+  }, [fetchKitchenOrders]);
 
   const loadChefProfile = async () => {
     try {
@@ -132,12 +129,12 @@ export default function KitchenDashboardScreen({ route, navigation }) {
   const handleLogout = async () => {
     try {
       setProfileModalVisible(false);
-      if (authContext?.logout) {
-        await authContext.logout();
-      } else {
-        await AsyncStorage.removeItem('token');
-        await AsyncStorage.removeItem('user');
-      }
+      await AsyncStorage.removeItem('token');
+      await AsyncStorage.removeItem('user');
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Login' }],
+      });
     } catch (error) {
       console.error('Logout Error:', error);
       Alert.alert('Error', 'Failed to log out properly.');
@@ -178,7 +175,7 @@ export default function KitchenDashboardScreen({ route, navigation }) {
 
   const updateOrderStatus = async (id, newStatus) => {
     try {
-      const token = authContext?.token || await AsyncStorage.getItem('token');
+      const token = await AsyncStorage.getItem('token');
       const response = await fetch(`${API_URL}/api/orders/${id}/status`, {
         method: 'PUT',
         headers: { 

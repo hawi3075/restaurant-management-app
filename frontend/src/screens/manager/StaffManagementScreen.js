@@ -1,11 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Modal, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-
-// Centralized API URL configuration (switches automatically between local development and Render production)
-const API_URL = __DEV__ 
-  ? (Platform.OS === 'android' ? 'http://10.0.2.2:5000' : 'http://localhost:5000')
-  : 'https://your-render-app-name.onrender.com'; // Replace with your actual Render backend URL
+import { BACKEND_URL } from '../api/backend';
 
 export default function StaffManagementScreen({ navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -60,7 +56,7 @@ export default function StaffManagementScreen({ navigation }) {
   useEffect(() => {
     const fetchStaff = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/staff`);
+        const res = await fetch(`${BACKEND_URL}/api/staff`);
         const json = await res.json();
         if (json.success && Array.isArray(json.staff)) {
           const mapped = json.staff.map(u => ({
@@ -100,7 +96,7 @@ export default function StaffManagementScreen({ navigation }) {
     setStaffList(staffList.map(s => s.id === id ? { ...s, status: newActive ? 'Active' : 'Inactive' } : s));
     
     // API call
-    fetch(`${API_URL}/api/staff/${id}`, {
+    fetch(`${BACKEND_URL}/api/staff/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ active: newActive })
@@ -133,7 +129,7 @@ export default function StaffManagementScreen({ navigation }) {
       password: 'Password123!',
     };
 
-    fetch(`${API_URL}/api/staff`, {
+    fetch(`${BACKEND_URL}/api/staff`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)

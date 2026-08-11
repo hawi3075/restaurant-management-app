@@ -2,11 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StatusBar, TextInput, Modal, ActivityIndicator, Alert, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-// Centralized API URL configuration (switches automatically between local development and Render production)
-const API_URL = __DEV__ 
-  ? (Platform.OS === 'android' ? 'http://10.0.2.2:5000' : 'http://localhost:5000')
-  : 'https://your-render-app-name.onrender.com'; // Replace with your actual Render backend URL
+import { BACKEND_URL } from '../api/backend';
 
 export default function ManagerSupportScreen({ navigation }) {
   const [isLoading, setIsLoading] = useState(true);
@@ -32,7 +28,7 @@ export default function ManagerSupportScreen({ navigation }) {
       if (!isPolling) setIsLoading(true);
       const token = await AsyncStorage.getItem('token');
       
-      const response = await fetch(`${API_URL}/api/support/manager/tickets`, {
+      const response = await fetch(`${BACKEND_URL}/api/support/manager/tickets`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -70,7 +66,7 @@ export default function ManagerSupportScreen({ navigation }) {
       setIsSubmitting(true);
       const token = await AsyncStorage.getItem('token');
 
-      const response = await fetch(`${API_URL}/api/support/manager/reply/${selectedTicket._id}`, {
+      const response = await fetch(`${BACKEND_URL}/api/support/manager/reply/${selectedTicket._id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

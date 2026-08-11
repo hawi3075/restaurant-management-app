@@ -1,275 +1,212 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Image, Modal, Alert, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  ScrollView,
+  TextInput,
+  TouchableOpacity,
+  Modal,
+  Image,
+  StatusBar,
+  Alert,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 
-// Centralized API URL configuration using your Render live backend
-const API_URL = __DEV__ 
-  ? (Platform.OS === 'android' ? 'http://10.0.2.2:5000' : 'http://localhost:5000')
-  : 'https://restaurant-management-app-wqmp.onrender.com';
-
-const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=400&q=80';
-
-// Helper to sanitize blob or local file URIs which break on React Native Web refreshes
-const sanitizeImage = (uri) => {
-  if (!uri || typeof uri !== 'string' || uri.startsWith('blob:') || uri.startsWith('file:')) {
-    return FALLBACK_IMAGE;
-  }
-  return uri;
-};
+const API_URL = 'https://your-backend-service.onrender.com/api'; // Replace with your live Render backend URL
 
 export default function MenuManagementScreen({ navigation }) {
+  const [items, setItems] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedStyle, setSelectedStyle] = useState('Modern');
-  const [addModalVisible, setAddModalVisible] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  
+  const categories = ['All', 'Breakfast', 'Lunch', 'Dinner', 'Drinks', 'Desserts', 'Fast Food'];
+
+  // Modals State
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [selectedDish, setSelectedDish] = useState(null);
+
   const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editId, setEditId] = useState('');
   const [editName, setEditName] = useState('');
   const [editDesc, setEditDesc] = useState('');
   const [editPrice, setEditPrice] = useState('');
-  const [editRating, setEditRating] = useState('4.9');
+  const [editRating, setEditRating] = useState('');
   const [editImage, setEditImage] = useState('');
   const [editCategory, setEditCategory] = useState('Lunch');
   const [editStyle, setEditStyle] = useState('Modern');
 
-  const categories = ['All', 'Breakfast', 'Lunch', 'Dinner', 'Drinks', 'Desserts', 'Fast Food'];
-
-  const [menuItems, setMenuItems] = useState([
-    { 
-      id: '1', 
-      name: 'Truffle Mushroom Risotto', 
-      desc: 'Arborio rice, wild mushrooms, truffle oil', 
-      price: 24.00, 
-      category: 'Lunch', 
-      style: 'Modern', 
-      rating: '4.8', 
-      status: 'In Stock',
-      image: 'https://images.unsplash.com/photo-1541544741938-0af808871cc0?auto=format&fit=crop&w=400&q=80' 
-    },
-    { 
-      id: '2', 
-      name: 'Artisanal Wagyu Burger', 
-      desc: 'Wagyu beef patty, cheddar, brioche bun', 
-      price: 18.50, 
-      category: 'Dinner', 
-      style: 'Modern', 
-      rating: '4.9', 
-      status: 'In Stock',
-      image: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=400&q=80' 
-    },
-  ]);
-
-  useEffect(() => {
-    const fetchMenu = async () => {
-      try {
-        const res = await fetch(`${API_URL}/api/menu`);
-        const data = await res.json();
-        if (Array.isArray(data)) {
-          const mapped = data.map(i => ({
-            id: String(i._id || i.id),
-            name: i.name,
-            desc: i.description || i.desc || '',
-            price: i.price || 0,
-            category: i.category,
-            style: i.style || 'Modern',
-            rating: String(i.rating || 5),
-            status: i.availabilityStatus ? 'In Stock' : 'Out of Stock',
-            image: sanitizeImage(i.image)
-          }));
-          setMenuItems(mapped);
-        }
-      } catch (err) {
-        console.error('Failed to fetch menu items from live server', err);
-      }
-    };
-
-    fetchMenu();
-  }, []);
-
-  // Form states
+  const [addModalVisible, setAddModalVisible] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [newPrice, setNewPrice] = useState('');
-  const [newRating, setNewRating] = useState('4.9');
-  const [imageSourceType, setImageSourceType] = useState('url'); // 'url' or 'device'
+  const [newRating, setNewRating] = useState('');
   const [newImage, setNewImage] = useState('');
   const [newCategory, setNewCategory] = useState('Lunch');
   const [newStyle, setNewStyle] = useState('Modern');
+  const [imageSourceType, setImageSourceType] = useState('url');
 
-  const pickImageFromDevice = async () => {
+  // Fetch dishes from Render backend
+  const fetchDishes = async () => {
     try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permissionResult.granted) {
-        alert('Permission to access camera roll is required!');
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
-        base64: true,
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const asset = result.assets[0];
-        if (asset.base64) {
-          setNewImage(`data:image/jpeg;base64,${asset.base64}`);
-        } else {
-          setNewImage(sanitizeImage(asset.uri));
-        }
+      const response = await fetch(`${API_URL}/dishes`);
+      const data = await response.json();
+      if (Array.isArray(data)) {
+        setItems(data);
       }
     } catch (error) {
-      console.log('Error picking image: ', error);
+      console.error('Error fetching dishes from Render backend:', error);
     }
   };
 
-  const toggleStockStatus = (id) => {
-    const item = menuItems.find(m => m.id === id);
-    if (!item) return;
-    const newStatus = item.status === 'In Stock' ? false : true;
-    setMenuItems(menuItems.map(i => i.id === id ? { ...i, status: newStatus ? 'In Stock' : 'Out of Stock' } : i));
-    fetch(`${API_URL}/api/menu/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ availabilityStatus: newStatus })
-    }).then(r => r.json()).then(j => {
-      if (!j.success) console.warn('Failed to update stock status on live server', j);
-    }).catch(err => console.error('Menu update error', err));
+  useEffect(() => {
+    fetchDishes();
+  }, []);
+
+  const sanitizeImage = (imgUri) => {
+    if (!imgUri) return 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c';
+    return imgUri;
   };
 
-  const handleAddDish = () => {
-    if (!newName || !newPrice) return;
-    const payload = {
-      name: newName,
-      category: newCategory,
-      description: newDesc,
-      price: parseFloat(newPrice) || 0,
-      preparationTime: 15,
-      image: sanitizeImage(newImage.trim()),
-      availabilityStatus: true,
-      rating: parseFloat(newRating) || 5
-    };
-    fetch(`${API_URL}/api/menu`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    }).then(r => r.json()).then(j => {
-      if (j.success && j.item) {
-        const added = {
-          id: String(j.item._id || j.item.id),
-          name: j.item.name,
-          desc: j.item.description || newDesc,
-          price: j.item.price,
-          category: j.item.category,
-          style: 'Modern',
-          rating: String(j.item.rating || 5),
-          status: j.item.availabilityStatus ? 'In Stock' : 'Out of Stock',
-          image: sanitizeImage(j.item.image)
-        };
-        setMenuItems(prev => [added, ...prev]);
-        setNewName('');
-        setNewDesc('');
-        setNewPrice('');
-        setNewRating('4.9');
-        setNewImage('');
-        setImageSourceType('url');
-        setAddModalVisible(false);
-      } else {
-        alert('Failed to add dish to live server');
-      }
-    }).catch(err => {
-      console.error('Add dish error', err);
-      alert('Failed to connect to live backend');
+  const pickImageFromDevice = async () => {
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
     });
+
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      setNewImage(result.assets[0].uri);
+    }
+  };
+
+  const toggleStockStatus = async (id) => {
+    try {
+      const item = items.find(i => i.id === id || i._id === id);
+      if (!item) return;
+      const newStatus = item.status === 'In Stock' ? 'Out of Stock' : 'In Stock';
+      
+      // Optimistic UI update
+      setItems(items.map(i => (i.id === id || i._id === id) ? { ...i, status: newStatus } : i));
+
+      await fetch(`${API_URL}/dishes/${id || item._id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+    } catch (error) {
+      console.error('Error updating stock status:', error);
+      fetchDishes(); // Rollback on error
+    }
   };
 
   const openEditModal = (item) => {
-    setSelectedDish(item);
-    setEditName(item.name || '');
-    setEditDesc(item.desc || '');
-    setEditPrice(item.price ? String(item.price) : '');
-    setEditRating(item.rating || '4.9');
-    setEditImage(sanitizeImage(item.image));
+    setEditId(item.id || item._id);
+    setEditName(item.name);
+    setEditDesc(item.desc);
+    setEditPrice(item.price.toString());
+    setEditRating(item.rating ? item.rating.toString() : '4.5');
+    setEditImage(item.image);
     setEditCategory(item.category || 'Lunch');
     setEditStyle(item.style || 'Modern');
     setEditModalVisible(true);
   };
 
+  const handleUpdateDish = async () => {
+    try {
+      const updatedData = {
+        name: editName,
+        desc: editDesc,
+        price: parseFloat(editPrice) || 0,
+        rating: parseFloat(editRating) || 4.5,
+        image: editImage,
+        category: editCategory,
+        style: editStyle,
+      };
+
+      const response = await fetch(`${API_URL}/dishes/${editId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedData),
+      });
+
+      if (response.ok) {
+        setEditModalVisible(false);
+        fetchDishes();
+      } else {
+        Alert.alert('Error', 'Failed to update dish on Render server');
+      }
+    } catch (error) {
+      console.error('Error updating dish:', error);
+    }
+  };
+
+  const handleAddDish = async () => {
+    try {
+      if (!newName || !newPrice) {
+        Alert.alert('Validation Error', 'Please enter a dish name and price.');
+        return;
+      }
+
+      const newDishData = {
+        name: newName,
+        desc: newDesc,
+        price: parseFloat(newPrice) || 0,
+        rating: parseFloat(newRating) || 4.8,
+        image: newImage || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c',
+        category: newCategory,
+        style: newStyle,
+        status: 'In Stock',
+      };
+
+      const response = await fetch(`${API_URL}/dishes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newDishData),
+      });
+
+      if (response.ok) {
+        setNewName('');
+        setNewDesc('');
+        setNewPrice('');
+        setNewRating('');
+        setNewImage('');
+        setAddModalVisible(false);
+        fetchDishes();
+      } else {
+        Alert.alert('Error', 'Failed to add dish to Render server');
+      }
+    } catch (error) {
+      console.error('Error adding dish:', error);
+    }
+  };
+
   const confirmDelete = (id) => {
-    Alert.alert('Delete Dish', 'Are you sure you want to delete this dish?', [
+    Alert.alert('Delete Dish', 'Are you sure you want to remove this dish from the live Render database?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => handleDeleteDish(id) }
+      { 
+        text: 'Delete', 
+        style: 'destructive', 
+        onPress: async () => {
+          try {
+            await fetch(`${API_URL}/dishes/${id}`, { method: 'DELETE' });
+            fetchDishes();
+          } catch (error) {
+            console.error('Error deleting dish:', error);
+          }
+        } 
+      }
     ]);
   };
 
-  const handleDeleteDish = async (id) => {
-    try {
-      const res = await fetch(`${API_URL}/api/menu/${id}`, { method: 'DELETE' });
-      const j = await res.json();
-      if (j.success) {
-        setMenuItems(prev => prev.filter(i => String(i.id || i._id) !== String(id)));
-      } else {
-        Alert.alert('Error', j.message || 'Failed to delete dish');
-      }
-    } catch (err) {
-      console.error('Delete error', err);
-      Alert.alert('Error', 'Failed to connect to live server');
-    }
-  };
-
-  const handleUpdateDish = async () => {
-    if (!selectedDish) return;
-    const id = selectedDish.id;
-    const payload = {
-      name: editName,
-      description: editDesc,
-      price: parseFloat(editPrice) || 0,
-      image: sanitizeImage(editImage),
-      category: editCategory,
-      style: editStyle,
-      rating: parseFloat(editRating) || 5
-    };
-    try {
-      const res = await fetch(`${API_URL}/api/menu/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const j = await res.json();
-      if (j.success && j.item) {
-        const updated = {
-          id: String(j.item._id || j.item.id),
-          name: j.item.name,
-          desc: j.item.description || editDesc,
-          price: j.item.price,
-          category: j.item.category,
-          style: j.item.style || editStyle,
-          rating: String(j.item.rating || editRating),
-          status: j.item.availabilityStatus ? 'In Stock' : 'Out of Stock',
-          image: sanitizeImage(j.item.image)
-        };
-        setMenuItems(prev => prev.map(m => (m.id === id ? updated : m)));
-        setEditModalVisible(false);
-        setSelectedDish(null);
-      } else {
-        alert('Failed to update dish on live server');
-      }
-    } catch (err) {
-      console.error('Update error', err);
-      alert('Failed to connect to live backend');
-    }
-  };
-
-  const filteredItems = menuItems.filter(item => {
-    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+  const filteredItems = items.filter((item) => {
+    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           item.desc.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = selectedCategory === 'All' || item.category === selectedCategory;
     const matchesStyle = item.style === selectedStyle;
-    return matchesSearch && matchesCategory && matchesStyle;
+    const matchesCategory = selectedCategory === 'All' || item.category === selectedCategory;
+    return matchesSearch && matchesStyle && matchesCategory;
   });
 
   return (
@@ -351,7 +288,7 @@ export default function MenuManagementScreen({ navigation }) {
             <Text className="text-xs font-bold text-gray-400 mb-2">{selectedCategory} • {selectedStyle} Selection ({filteredItems.length})</Text>
             {filteredItems.map((item) => (
               <View 
-                key={item.id} 
+                key={item.id || item._id} 
                 className="bg-white p-4 rounded-3xl border border-[#EAE3DE] mb-4 shadow-xs"
               >
                 <View className="flex-row items-center mb-3">
@@ -360,7 +297,7 @@ export default function MenuManagementScreen({ navigation }) {
                     <View className="flex-row justify-between items-start">
                       <Text className="font-bold text-sm text-[#1F130D] w-3/4" numberOfLines={1}>{item.name}</Text>
                       <TouchableOpacity
-                        onPress={() => toggleStockStatus(item.id)}
+                        onPress={() => toggleStockStatus(item.id || item._id)}
                         className={`px-2.5 py-0.5 rounded-full border ${item.status === 'In Stock' ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}
                       >
                         <Text className={`text-[10px] font-bold ${item.status === 'In Stock' ? 'text-emerald-600' : 'text-rose-600'}`}>
@@ -393,7 +330,7 @@ export default function MenuManagementScreen({ navigation }) {
                   </TouchableOpacity>
 
                   <TouchableOpacity 
-                    onPress={() => toggleStockStatus(item.id)} 
+                    onPress={() => toggleStockStatus(item.id || item._id)} 
                     className="flex-1 bg-[#FEF7F3] border border-[#B8520B]/40 py-2 rounded-xl items-center flex-row justify-center active:scale-95"
                   >
                     <Ionicons name="refresh-outline" size={12} color="#B8520B" style={{ marginRight: 3 }} />
@@ -409,7 +346,7 @@ export default function MenuManagementScreen({ navigation }) {
                   </TouchableOpacity>
 
                   <TouchableOpacity
-                    onPress={() => confirmDelete(item.id)}
+                    onPress={() => confirmDelete(item.id || item._id)}
                     className="flex-1 bg-white border border-rose-100 py-2 rounded-xl items-center flex-row justify-center active:scale-95"
                   >
                     <Ionicons name="trash-outline" size={12} color="#E11D48" style={{ marginRight: 3 }} />
@@ -474,7 +411,7 @@ export default function MenuManagementScreen({ navigation }) {
             <View className="bg-white w-full max-w-[380px] rounded-3xl p-6 shadow-2xl border border-gray-100 max-h-[90%]">
               <ScrollView showsVerticalScrollIndicator={false}>
                 <Text className="text-lg font-black text-[#1F130D] mb-1">Edit Menu Dish</Text>
-                <Text className="text-xs text-gray-500 mb-4">Update dish details on the live database.</Text>
+                <Text className="text-xs text-gray-500 mb-4">Update dish details on the live Render database.</Text>
 
                 <Text className="text-xs font-bold text-gray-700 mb-1">Dish Name</Text>
                 <TextInput 

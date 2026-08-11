@@ -2,11 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Modal, ActivityIndicator, Alert, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-// Centralized API URL configuration
-const API_URL = __DEV__ 
-  ? (Platform.OS === 'android' ? 'http://10.0.2.2:5000' : 'http://localhost:5000')
-  : 'https://your-render-app-name.onrender.com'; // Replace with your actual Render backend URL
+import { BACKEND_URL } from '../api/backend';
 
 export default function UserManagementScreen({ navigation }) {
   const [isLoading, setIsLoading] = useState(true);
@@ -24,7 +20,7 @@ export default function UserManagementScreen({ navigation }) {
       if (!isPolling) setIsLoading(true);
       const token = await AsyncStorage.getItem('token');
 
-      const res = await fetch(`${API_URL}/api/users`, {
+      const res = await fetch(`${BACKEND_URL}/api/users`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -61,7 +57,7 @@ export default function UserManagementScreen({ navigation }) {
     
     try {
       const token = await AsyncStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/users/${id}`, {
+      const response = await fetch(`${BACKEND_URL}/api/users/${id}`, {
         method: 'PUT',
         headers: { 
           'Content-Type': 'application/json',

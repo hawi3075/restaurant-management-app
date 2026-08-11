@@ -1,11 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StatusBar, Modal, TextInput, Alert, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-
-// Centralized API URL configuration (switches automatically between local development and Render production)
-const API_URL = __DEV__ 
-  ? (Platform.OS === 'android' ? 'http://10.0.2.2:5000' : 'http://localhost:5000')
-  : 'https://your-render-app-name.onrender.com'; // Replace with your actual Render backend URL
+import { BACKEND_URL } from '../api/backend';
 
 export default function ReviewManagementScreen({ navigation }) {
   const [reviews, setReviews] = useState([]);
@@ -16,7 +12,7 @@ export default function ReviewManagementScreen({ navigation }) {
   useEffect(() => {
     const fetchReviews = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/reviews`);
+        const res = await fetch(`${BACKEND_URL}/api/reviews`);
         const data = await res.json();
         if (Array.isArray(data)) setReviews(data);
       } catch (err) {
@@ -34,7 +30,7 @@ export default function ReviewManagementScreen({ navigation }) {
 
   const changeStatus = async (id, status) => {
     try {
-      const res = await fetch(`${API_URL}/api/reviews/${id}`, {
+      const res = await fetch(`${BACKEND_URL}/api/reviews/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status })
@@ -51,7 +47,7 @@ export default function ReviewManagementScreen({ navigation }) {
   const saveComment = async () => {
     if (!selected) return;
     try {
-      const res = await fetch(`${API_URL}/api/reviews/${selected._id}`, {
+      const res = await fetch(`${BACKEND_URL}/api/reviews/${selected._id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ comment: replyText })
@@ -72,7 +68,7 @@ export default function ReviewManagementScreen({ navigation }) {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
         try {
-          const res = await fetch(`${API_URL}/api/reviews/${id}`, { method: 'DELETE' });
+          const res = await fetch(`${BACKEND_URL}/api/reviews/${id}`, { method: 'DELETE' });
           const j = await res.json();
           if (j.success) setReviews(prev => prev.filter(r => r._id !== id));
         } catch (err) { console.error('Delete review error', err); }

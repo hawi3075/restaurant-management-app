@@ -2,11 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StatusBar, ActivityIndicator, Image, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import io from 'socket.io-client';
-
-// Centralized API URL configuration (switches automatically between local development and Render production)
-const API_URL = __DEV__ 
-  ? (Platform.OS === 'android' ? 'http://10.0.2.2:5000' : 'http://localhost:5000')
-  : 'https://your-render-app-name.onrender.com'; // Replace with your actual Render backend URL
+import { BACKEND_URL } from '../api/backend';
 
 export default function OrderManagementScreen({ navigation }) {
   const [orders, setOrders] = useState([]);
@@ -15,7 +11,7 @@ export default function OrderManagementScreen({ navigation }) {
   const fetchOrders = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_URL}/api/admin/orders`);
+      const res = await fetch(`${BACKEND_URL}/api/admin/orders`);
       const data = await res.json();
       if (Array.isArray(data)) {
         setOrders(data);
@@ -31,7 +27,7 @@ export default function OrderManagementScreen({ navigation }) {
     fetchOrders();
 
     // Establish Socket.io connection for real-time order updates
-    const socket = io(API_URL, {
+    const socket = io(BACKEND_URL, {
       transports: ['websocket'],
     });
 
