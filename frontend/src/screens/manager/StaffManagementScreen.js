@@ -29,7 +29,7 @@ export default function StaffManagementScreen({ navigation }) {
       email: 'abebe.chef@restaurant.com', 
       phone: '+251 91 112 2334', 
       shift: '06:00 AM - 02:00 PM', 
-      status: 'On Duty' 
+      status: 'Active' 
     },
     { 
       id: '2', 
@@ -38,7 +38,7 @@ export default function StaffManagementScreen({ navigation }) {
       email: 'mekdes.cashier@restaurant.com', 
       phone: '+251 92 334 4556', 
       shift: '02:00 PM - 10:00 PM', 
-      status: 'Off Duty' 
+      status: 'Inactive' 
     },
     { 
       id: '3', 
@@ -47,7 +47,7 @@ export default function StaffManagementScreen({ navigation }) {
       email: 'samuel.driver@restaurant.com', 
       phone: '+251 93 556 7788', 
       shift: '09:00 AM - 09:00 PM', 
-      status: 'On Duty' 
+      status: 'Active' 
     },
   ]);
 
@@ -58,7 +58,6 @@ export default function StaffManagementScreen({ navigation }) {
         const res = await fetch('http://localhost:5000/api/staff');
         const json = await res.json();
         if (json.success && Array.isArray(json.staff)) {
-          // Map backend fields to UI model
           const mapped = json.staff.map(u => ({
             id: String(u._id || u.id),
             name: u.name,
@@ -88,12 +87,13 @@ export default function StaffManagementScreen({ navigation }) {
   ];
 
   const toggleDutyStatus = (id) => {
-    // Toggle active/inactive and call backend
     const member = staffList.find(s => s.id === id);
     if (!member) return;
     const newActive = member.status !== 'Active';
+    
     // Optimistic update
     setStaffList(staffList.map(s => s.id === id ? { ...s, status: newActive ? 'Active' : 'Inactive' } : s));
+    
     // API call
     fetch(`http://localhost:5000/api/staff/${id}`, {
       method: 'PUT',
@@ -107,7 +107,18 @@ export default function StaffManagementScreen({ navigation }) {
   };
 
   const handleAddStaff = () => {
-    if (!newName || !newRole || !newEmail || !newPhone) return;
+    if (!newName || !newRole || !newEmail || !newPhone) {
+      alert('Please fill in all fields');
+      return;
+    }
+
+    // Check if staff with this email already exists
+    const emailExists = staffList.some(s => s.email.toLowerCase() === newEmail.trim().toLowerCase());
+    if (emailExists) {
+      alert('This staff already exists');
+      return;
+    }
+
     const assignedShift = shiftMode === 'custom' ? `${startTime} - ${endTime}` : newShift;
     const payload = {
       name: newName,
@@ -116,6 +127,7 @@ export default function StaffManagementScreen({ navigation }) {
       phone: newPhone,
       password: 'Password123!',
     };
+
     fetch('http://localhost:5000/api/staff', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -138,7 +150,8 @@ export default function StaffManagementScreen({ navigation }) {
         setNewPhone('');
         setAddModalVisible(false);
       } else {
-        alert(j.message || 'Failed to add staff');
+        // Handle backend duplicate email messages
+        alert(j.message || 'This staff already exists');
       }
     }).catch(err => {
       console.error('Add staff error', err);
@@ -159,7 +172,8 @@ export default function StaffManagementScreen({ navigation }) {
     return matchesSearch && matchesCategory;
   });
 
-  const onDutyCount = staffList.filter(s => s.status === 'On Duty').length;
+  // Fixed calculation to check for 'Active' status instead of 'On Duty'
+  const onDutyCount = staffList.filter(s => s.status === 'Active').length;
 
   return (
     <View className="flex-1 bg-[#F8FAFC] items-center justify-center">
@@ -240,7 +254,6 @@ export default function StaffManagementScreen({ navigation }) {
                 key={member.id}
                 className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm mb-3 relative overflow-hidden"
               >
-                {/* Top Row: Avatar, Position Badge, Name, Detail Icon & Status Button */}
                 <View className="flex-row justify-between items-start mb-3">
                   <View className="flex-row items-center space-x-3 flex-1 mr-2">
                     <View className="w-11 h-11 rounded-2xl bg-orange-500/10 items-center justify-center border border-orange-500/20 shrink-0">
@@ -256,10 +269,8 @@ export default function StaffManagementScreen({ navigation }) {
                   </View>
 
                   <View className="flex-row items-center space-x-2">
-                    {/* Replaced Call Icon with Detail Icon */}
                     <TouchableOpacity 
                       onPress={() => {
-                        // Handle viewing staff details here (e.g. open profile or alert)
                         alert(`Staff Details:\nName: ${member.name}\nRole: ${member.role}\nEmail: ${member.email}\nPhone: ${member.phone}`);
                       }}
                       className="w-9 h-9 rounded-xl bg-orange-50 border border-orange-200 items-center justify-center shadow-sm active:scale-95"
@@ -269,9 +280,9 @@ export default function StaffManagementScreen({ navigation }) {
 
                     <TouchableOpacity
                       onPress={() => toggleDutyStatus(member.id)}
-                      className={`px-3 py-1.5 rounded-full border shrink-0 ${member.status === 'On Duty' ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-100 border-slate-200'}`}
+                      className={`px-3 py-1.5 rounded-full border shrink-0 ${member.status === 'Active' ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-100 border-slate-200'}`}
                     >
-                      <Text className={`text-[10px] font-bold ${member.status === 'On Duty' ? 'text-emerald-600' : 'text-slate-500'}`}>
+                      <Text className={`text-[10px] font-bold ${member.status === 'Active' ? 'text-emerald-600' : 'text-slate-500'}`}>
                         {member.status}
                       </Text>
                     </TouchableOpacity>
@@ -421,7 +432,6 @@ export default function StaffManagementScreen({ navigation }) {
                 <Text className="text-lg font-black text-slate-900 mb-1">Update Shift Schedule</Text>
                 <Text className="text-xs text-slate-500 mb-4">Set work interval for <Text className="font-bold text-slate-900">{selectedStaff?.name}</Text></Text>
 
-                {/* Mode Selector */}
                 <View className="flex-row bg-slate-100 p-1 rounded-2xl mb-4">
                   <TouchableOpacity 
                     onPress={() => setShiftMode('preset')}

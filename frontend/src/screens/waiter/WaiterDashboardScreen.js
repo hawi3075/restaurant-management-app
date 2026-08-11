@@ -27,26 +27,46 @@ export default function WaiterDashboardScreen({ route, navigation }) {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Base API URL (adjust to match your backend port/host)
+  // Base API URL
   const API_URL = 'http://localhost:5000/api';
 
-  // Fetch orders from backend
+  // Fetch active waiter & incoming orders from backend endpoints
   const fetchOrders = useCallback(async () => {
     try {
       setLoading(true);
       const token = authContext?.token || '';
-      const response = await fetch(`${API_URL}/orders`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      const data = await response.json();
-      if (response.ok) {
-        setOrders(data);
-      } else {
-        console.error('Failed to fetch orders:', data.message);
+      
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+
+      // Fetch active dine-in waiter orders and incoming queue concurrently
+      const [waiterRes, incomingRes] = await Promise.all([
+        fetch(`${API_URL}/orders/waiter/active`, { headers }),
+        fetch(`${API_URL}/orders/incoming`, { headers })
+      ]);
+
+      const waiterData = await waiterRes.json();
+      const incomingData = await incomingRes.json();
+
+      let combinedOrders = [];
+      if (waiterRes.ok) {
+        const list = Array.isArray(waiterData) ? waiterData : (waiterData.orders || []);
+        combinedOrders = [...list];
       }
+
+      if (incomingRes.ok) {
+        const list = Array.isArray(incomingData) ? incomingData : (incomingData.orders || []);
+        // Merge without duplicates
+        list.forEach(incOrder => {
+          if (!combinedOrders.some(o => (o._id || o.id) === (incOrder._id || incOrder.id))) {
+            combinedOrders.push(incOrder);
+          }
+        });
+      }
+
+      setOrders(combinedOrders);
     } catch (err) {
       console.error('Network request failed:', err);
     } finally {
@@ -56,8 +76,8 @@ export default function WaiterDashboardScreen({ route, navigation }) {
 
   useEffect(() => {
     fetchOrders();
-    // Optional: set up interval to poll for new orders live
-    const interval = setInterval(fetchOrders, 10000);
+    // Poll for customer orders live every 5 seconds
+    const interval = setInterval(fetchOrders, 5000);
     return () => clearInterval(interval);
   }, [fetchOrders]);
 
@@ -112,7 +132,8 @@ export default function WaiterDashboardScreen({ route, navigation }) {
         },
         body: JSON.stringify({
           table: `Table ${tableNumber}`,
-          items: [{ name: orderDetails, note: 'Custom manual entry' }],
+          orderItems: [{ name: orderDetails, quantity: 1, note: 'Custom manual entry' }],
+          serviceType: 'dine-in',
           source: 'Waiter Entry',
           image: orderImage
         })
@@ -121,12 +142,11 @@ export default function WaiterDashboardScreen({ route, navigation }) {
       const data = await response.json();
 
       if (response.ok) {
-        setOrders([data, ...orders]);
         setTableNumber('');
         setOrderDetails('');
         setOrderImage(null);
         setNewOrderModalVisible(false);
-        fetchOrders(); // Refresh list
+        fetchOrders(); // Refresh list immediately
       } else {
         alert(data.message || 'Failed to create order');
       }
@@ -142,7 +162,7 @@ export default function WaiterDashboardScreen({ route, navigation }) {
     try {
       const token = authContext?.token || '';
       const response = await fetch(`${API_URL}/orders/${id}/status`, {
-        method: 'PATCH',
+        method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -151,7 +171,8 @@ export default function WaiterDashboardScreen({ route, navigation }) {
       });
 
       if (response.ok) {
-        setOrders(orders.map(order => order.id === id || order._id === id ? { ...order, status: newStatus } : order));
+        setOrders(orders.map(order => (order.id === id || order._id === id) ? { ...order, status: newStatus } : order));
+        fetchOrders();
       } else {
         const data = await response.json();
         alert(data.message || 'Failed to update order status');
@@ -163,14 +184,20 @@ export default function WaiterDashboardScreen({ route, navigation }) {
 
   const filteredOrders = orders.filter(order => {
     const matchesTab = activeTab === 'All' || (order.status && order.status.toLowerCase() === activeTab.toLowerCase());
+    
+    // Safely format or lookup table name/string
+    const tableStr = typeof order.table === 'object' ? order.table?.name || '' : String(order.table || '');
+    const itemsStr = order.orderItems ? order.orderItems.map(i => i.name).join(' ') : (order.items ? order.items.map(i => i.name).join(' ') : '');
+
     const matchesSearch = searchQuery === '' || 
-      order.table?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      order.items?.some(item => item.name?.toLowerCase().includes(searchQuery.toLowerCase()));
+      tableStr.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      itemsStr.toLowerCase().includes(searchQuery.toLowerCase());
+
     return matchesTab && matchesSearch;
   });
 
-  const newOrdersCount = orders.filter(o => o.status === 'New').length;
-  const activeTablesCount = new Set(orders.map(o => o.table)).size;
+  const newOrdersCount = orders.filter(o => o.status === 'Pending' || o.status === 'New').length;
+  const activeTablesCount = new Set(orders.map(o => typeof o.table === 'object' ? o.table?._id : o.table)).size;
 
   return (
     <View className="flex-1 bg-[#F8F9FC] items-center">
@@ -201,6 +228,21 @@ export default function WaiterDashboardScreen({ route, navigation }) {
             <Text className="text-white text-xs font-bold">New Order</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Incoming Order Alert Banner */}
+        {newOrdersCount > 0 && (
+          <View className="bg-[#B8520B] px-4 py-2.5 flex-row items-center justify-between shadow-md">
+            <View className="flex-row items-center">
+              <Ionicons name="notifications-outline" size={18} color="white" style={{ marginRight: 8 }} />
+              <Text className="text-white text-xs font-bold">
+                {newOrdersCount} new customer order{newOrdersCount > 1 ? 's' : ''} waiting for action!
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => setActiveTab('Pending')}>
+              <Text className="text-white text-[11px] font-black underline">View</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Main Content Scrollable */}
         <ScrollView showsVerticalScrollIndicator={false} className="px-5 pt-4 pb-20">
@@ -237,7 +279,7 @@ export default function WaiterDashboardScreen({ route, navigation }) {
 
           {/* Filter Tabs */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-4 flex-row">
-            {['All', 'New', 'Preparing', 'Ready', 'Served'].map((tab) => (
+            {['All', 'Pending', 'Preparing', 'Ready', 'Served'].map((tab) => (
               <TouchableOpacity 
                 key={tab}
                 onPress={() => setActiveTab(tab)}
@@ -255,29 +297,40 @@ export default function WaiterDashboardScreen({ route, navigation }) {
 
           {loading && orders.length === 0 ? (
             <ActivityIndicator size="large" color="#B8520B" className="mt-10" />
+          ) : filteredOrders.length === 0 ? (
+            <View className="bg-white rounded-3xl p-8 items-center border border-[#EAE3DE] mt-2">
+              <Ionicons name="receipt-outline" size={36} color="#B8520B" style={{ opacity: 0.5, marginBottom: 8 }} />
+              <Text className="text-xs font-bold text-gray-500">No orders found</Text>
+              <Text className="text-[10px] text-gray-400 mt-1 text-center">Customer orders from tables will appear here automatically.</Text>
+            </View>
           ) : (
             filteredOrders.map((order) => {
               const orderId = order.id || order._id;
+              const tableDisplay = typeof order.table === 'object' ? order.table?.name || 'Table' : (order.table || 'Table');
+              const itemsList = order.orderItems || order.items || [];
+
               return (
-                <View key={orderId} className={`bg-white rounded-3xl p-4 border mb-3 shadow-xs ${order.status === 'New' ? 'border-[#B8520B]' : 'border-[#EAE3DE]'}`}>
+                <View key={orderId} className={`bg-white rounded-3xl p-4 border mb-3 shadow-xs ${order.status === 'Pending' ? 'border-[#B8520B]' : 'border-[#EAE3DE]'}`}>
                   <View className="flex-row justify-between items-center mb-2.5 pb-2.5 border-b border-[#F8F9FC]">
                     <View className="flex-row items-center">
                       <Text className="text-xs font-black text-[#1F130D] bg-[#FEF7F3] px-2.5 py-1 rounded-lg border border-[#B8520B]/20 mr-2">
-                        {order.table}
+                        {tableDisplay}
                       </Text>
-                      <Text className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded mr-2">{order.source || 'Customer App'}</Text>
-                      <Text className="text-[11px] text-gray-400">{order.time || 'Just now'}</Text>
+                      <Text className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded mr-2">{order.serviceType || 'Dine-in'}</Text>
+                      <Text className="text-[11px] text-gray-400">
+                        {order.createdAt ? new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now'}
+                      </Text>
                     </View>
-                    <View className={`px-2.5 py-1 rounded-full ${order.status === 'New' ? 'bg-[#FEF7F3] border border-[#B8520B]/30' : 'bg-gray-100'}`}>
-                      <Text className={`text-[10px] font-bold ${order.status === 'New' ? 'text-[#B8520B]' : 'text-gray-600'}`}>{order.status}</Text>
+                    <View className={`px-2.5 py-1 rounded-full ${order.status === 'Pending' ? 'bg-[#FEF7F3] border border-[#B8520B]/30' : 'bg-gray-100'}`}>
+                      <Text className={`text-[10px] font-bold ${order.status === 'Pending' ? 'text-[#B8520B]' : 'text-gray-600'}`}>{order.status}</Text>
                     </View>
                   </View>
 
                   <View className="mb-3">
-                    {order.items?.map((item, idx) => (
+                    {itemsList.map((item, idx) => (
                       <View key={idx} className="flex-row justify-between py-0.5">
-                        <Text className="text-xs font-semibold text-[#1F130D]">{item.name}</Text>
-                        <Text className="text-[10px] text-gray-400 italic">{item.note}</Text>
+                        <Text className="text-xs font-semibold text-[#1F130D]">{item.quantity ? `${item.quantity}x ` : ''}{item.name}</Text>
+                        <Text className="text-[10px] text-gray-400 italic">{item.note || item.instructions || ''}</Text>
                       </View>
                     ))}
                     {order.image && (
@@ -286,10 +339,10 @@ export default function WaiterDashboardScreen({ route, navigation }) {
                   </View>
 
                   <View className="flex-row justify-between items-center pt-2.5 border-t border-[#F8F9FC]">
-                    <Text className="text-xs font-black text-[#1F130D]">Total: {order.total || '$0.00'}</Text>
+                    <Text className="text-xs font-black text-[#1F130D]">Total: ${order.totalAmount?.toFixed(2) || order.total?.toFixed(2) || '0.00'}</Text>
                     
                     <View className="flex-row gap-2">
-                      {order.status === 'New' && (
+                      {order.status === 'Pending' && (
                         <TouchableOpacity 
                           onPress={() => updateOrderStatus(orderId, 'Preparing')}
                           className="bg-[#B8520B] px-3 py-1.5 rounded-xl"
@@ -445,10 +498,6 @@ export default function WaiterDashboardScreen({ route, navigation }) {
           <TouchableOpacity onPress={() => navigation.navigate('WaiterDashboard')} className="items-center">
             <Ionicons name="grid" size={18} color="#B8520B" />
             <Text className="text-[9px] font-bold text-[#B8520B] mt-0.5">Station</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('WaiterLiveOrders')} className="items-center">
-            <Ionicons name="notifications" size={18} color="#757575" />
-            <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Live</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setNewOrderModalVisible(true)} className="items-center">
             <Ionicons name="add-circle-outline" size={18} color="#757575" />
