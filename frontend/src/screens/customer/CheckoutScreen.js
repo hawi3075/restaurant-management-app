@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StatusBar, TextInput, Alert, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StatusBar, TextInput, Alert, Linking, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BACKEND_URL } from '../../api/backend';
@@ -15,6 +15,7 @@ export default function CheckoutScreen({ route, navigation }) {
   const [city, setCity] = useState('New York');
   const [phone, setPhone] = useState('+251 911 234 567');
   const [email, setEmail] = useState('');
+  const [tableNumber, setTableNumber] = useState(route?.params?.selectedTableId || '5');
   const [paymentMethod, setPaymentMethod] = useState('telebirr');
   const [isActivatingTelebirr, setIsActivatingTelebirr] = useState(false);
   const [paymentReference, setPaymentReference] = useState(`CHAPA-${Date.now()}`);
@@ -24,7 +25,6 @@ export default function CheckoutScreen({ route, navigation }) {
   useEffect(() => {
     const loadUserDataAndCart = async () => {
       try {
-        // Load user profile
         const storedUser = await AsyncStorage.getItem('user');
         if (storedUser) {
           const parsedUser = JSON.parse(storedUser);
@@ -33,14 +33,12 @@ export default function CheckoutScreen({ route, navigation }) {
           if (parsedUser?.phone) setPhone(parsedUser.phone);
         }
 
-        // Load cart items for amount breakdown
         let items = route?.params?.cartItems || [];
         if (!items || items.length === 0) {
           const storedCart = await AsyncStorage.getItem('cart');
           items = storedCart ? JSON.parse(storedCart) : [];
         }
         
-        // Ensure each item has a numeric quantity and price
         const formattedItems = items.map(i => ({
           ...i,
           quantity: Number(i.quantity) || 1,
@@ -56,18 +54,15 @@ export default function CheckoutScreen({ route, navigation }) {
     loadUserDataAndCart();
   }, []);
 
-  // Calculate total amount dynamically based on cart items quantities
   const totalAmount = cartItems.length > 0 
     ? cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
     : initialTotal;
 
-  // Handle quantity changes (+, -, or direct text input)
   const updateItemQuantity = (index, newQuantity) => {
     const updated = [...cartItems];
     const parsedQty = parseInt(newQuantity, 10);
     
     if (isNaN(parsedQty) || parsedQty <= 0) {
-      // Remove item or set to 1 minimum
       updated[index].quantity = 1;
     } else {
       updated[index].quantity = parsedQty;
@@ -77,7 +72,6 @@ export default function CheckoutScreen({ route, navigation }) {
     AsyncStorage.setItem('cart', JSON.stringify(updated)).catch(err => console.error(err));
   };
 
-  // Listen for deep link callback when returning from Chapa web view/browser
   useEffect(() => {
     const handleDeepLink = (event) => {
       if (event.url.includes('checkout') || event.url.includes('success') || event.url.includes('status=success')) {
@@ -130,8 +124,18 @@ export default function CheckoutScreen({ route, navigation }) {
   };
 
   const handlePlaceOrder = () => {
-    if (!fullName || !streetAddress || !phone) {
-      Alert.alert('Missing Fields', 'Please fill in all required delivery details.');
+    if (!fullName || !phone) {
+      Alert.alert('Missing Fields', 'Please fill in your full name and phone number.');
+      return;
+    }
+
+    if (serviceType === 'delivery' && !streetAddress) {
+      Alert.alert('Missing Address', 'Please provide a street address for delivery.');
+      return;
+    }
+
+    if (serviceType === 'dine-in' && !tableNumber) {
+      Alert.alert('Missing Table', 'Please specify your table number for dine-in orders.');
       return;
     }
     
@@ -144,11 +148,11 @@ export default function CheckoutScreen({ route, navigation }) {
 
         const payload = {
           customer: null,
-          table: route?.params?.selectedTableId || null,
+          table: serviceType === 'dine-in' ? tableNumber : null,
           waiter: null,
           orderItems,
           totalAmount,
-          specialInstructions: '',
+          specialInstructions: serviceType === 'delivery' ? `Delivery Address: ${streetAddress}, ${city}` : `Dine-in Table: ${tableNumber}`,
           paymentMethod,
           paymentReference: ['telebirr', 'chapa'].includes(paymentMethod) ? txRef : '',
           paymentStatus: paymentMethod === 'chapa' ? 'Pending' : 'Pending'
@@ -168,7 +172,6 @@ export default function CheckoutScreen({ route, navigation }) {
             throw new Error('Please sign in or provide an email before paying with Chapa.');
           }
 
-          // Clean phone number format for Chapa (removes spaces, +, and dashes)
           const formattedPhone = phone.replace(/[\s+\-]/g, '');
 
           const paymentResponse = await fetch(`${BACKEND_URL}/api/payments/chapa/initiate`, {
@@ -293,32 +296,83 @@ export default function CheckoutScreen({ route, navigation }) {
               placeholder="Enter full name"
             />
 
-            <Text className="text-[10px] font-bold text-gray-500 mb-1">Street Address</Text>
-            <TextInput 
-              className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs mb-3 text-[#1F130D]" 
-              value={streetAddress} 
-              onChangeText={setStreetAddress} 
-              placeholder="House/Apt and street"
-            />
+            {serviceType === 'delivery' ? (
+              <>
+                <Text className="text-[10px] font-bold text-gray-500 mb-1">Street Address</Text>
+                <TextInput 
+                  className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs mb-3 text-[#1F130D]" 
+                  value={streetAddress} 
+                  onChangeText={setStreetAddress} 
+                  placeholder="House/Apt and street"
+                />
 
-            <View className="flex-row space-x-2 mb-3">
-              <View className="flex-1">
-                <Text className="text-[10px] font-bold text-gray-500 mb-1">City</Text>
-                <TextInput 
-                  className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs text-[#1F130D]" 
-                  value={city} 
-                  onChangeText={setCity} 
-                />
-              </View>
-              <View className="flex-1">
-                <Text className="text-[10px] font-bold text-gray-500 mb-1">Phone Number</Text>
-                <TextInput 
-                  className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs text-[#1F130D]" 
-                  value={phone} 
-                  onChangeText={setPhone} 
-                />
-              </View>
-            </View>
+                <View className="flex-row space-x-2 mb-3">
+                  <View className="flex-1">
+                    <Text className="text-[10px] font-bold text-gray-500 mb-1">City</Text>
+                    <TextInput 
+                      className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs text-[#1F130D]" 
+                      value={city} 
+                      onChangeText={setCity} 
+                    />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-[10px] font-bold text-gray-500 mb-1">Phone Number</Text>
+                    <TextInput 
+                      className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs text-[#1F130D]" 
+                      value={phone} 
+                      onChangeText={setPhone} 
+                    />
+                  </View>
+                </View>
+
+                {/* Google Map Preview Integration */}
+                <View className="mt-2 rounded-xl overflow-hidden border border-[#EAE3DE] bg-[#F8F9FC]">
+                  <View className="h-32 w-full relative">
+                    <Image 
+                      source={{ uri: 'https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?auto=format&fit=crop&w=600&q=80' }} 
+                      className="w-full h-full opacity-80"
+                    />
+                    <View className="absolute inset-0 bg-black/10 items-center justify-center">
+                      <View className="bg-white/90 px-3 py-1.5 rounded-full shadow-md flex-row items-center">
+                        <Ionicons name="location" size={14} color="#B8520B" style={{ marginRight: 4 }} />
+                        <Text className="text-[10px] font-black text-[#1F130D]">Pinpoint Location Selected</Text>
+                      </View>
+                    </View>
+                  </View>
+                  <View className="p-2.5 flex-row justify-between items-center bg-white">
+                    <Text className="text-[10px] text-gray-500 font-semibold flex-1" numberOfLines={1}>
+                      📍 {streetAddress}, {city}
+                    </Text>
+                    <TouchableOpacity 
+                      onPress={() => Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(streetAddress + ', ' + city)}`)}
+                      className="bg-[#FEF7F3] px-2.5 py-1 rounded-lg border border-[#B8520B]/30"
+                    >
+                      <Text className="text-[9px] font-bold text-[#B8520B]">Open Map</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </>
+            ) : (
+              <>
+                <View className="mb-3">
+                  <Text className="text-[10px] font-bold text-gray-500 mb-1">Table Number / Seat</Text>
+                  <TextInput 
+                    className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs text-[#1F130D] font-bold" 
+                    value={tableNumber} 
+                    onChangeText={setTableNumber} 
+                    placeholder="Enter Table Number (e.g., Table 4)"
+                  />
+                </View>
+                <View className="mb-1">
+                  <Text className="text-[10px] font-bold text-gray-500 mb-1">Phone Number</Text>
+                  <TextInput 
+                    className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs text-[#1F130D]" 
+                    value={phone} 
+                    onChangeText={setPhone} 
+                  />
+                </View>
+              </>
+            )}
           </View>
 
           {/* Order Amount Summary & Quantity Controls */}
@@ -335,7 +389,6 @@ export default function CheckoutScreen({ route, navigation }) {
                   <View className="flex-row justify-between items-center">
                     <Text className="text-[10px] text-gray-400">Unit Price: ${item.price?.toFixed(2)}</Text>
                     
-                    {/* Quantity Control Buttons & Input */}
                     <View className="flex-row items-center space-x-2">
                       <TouchableOpacity 
                         onPress={() => updateItemQuantity(index, item.quantity - 1)}
@@ -383,7 +436,6 @@ export default function CheckoutScreen({ route, navigation }) {
           <Text className="text-xs font-bold text-gray-400 uppercase mb-2 ml-1 tracking-wider">Payment Method</Text>
           <View className="bg-white rounded-2xl border border-[#EAE3DE] p-3 mb-6 shadow-xs">
             
-            {/* Telebirr Option */}
             <TouchableOpacity 
               onPress={() => setPaymentMethod('telebirr')}
               className={`flex-row items-center justify-between p-3 rounded-xl mb-2 ${paymentMethod === 'telebirr' ? 'bg-[#FEF7F3] border border-[#B8520B]/30' : ''}`}
@@ -400,7 +452,6 @@ export default function CheckoutScreen({ route, navigation }) {
               <Ionicons name={paymentMethod === 'telebirr' ? "radio-button-on" : "radio-button-off"} size={16} color="#B8520B" />
             </TouchableOpacity>
 
-            {/* Chapa Option */}
             <TouchableOpacity 
               onPress={() => setPaymentMethod('chapa')}
               className={`flex-row items-center justify-between p-3 rounded-xl mb-2 ${paymentMethod === 'chapa' ? 'bg-[#FEF7F3] border border-[#B8520B]/30' : ''}`}
@@ -417,7 +468,6 @@ export default function CheckoutScreen({ route, navigation }) {
               <Ionicons name={paymentMethod === 'chapa' ? "radio-button-on" : "radio-button-off"} size={16} color="#B8520B" />
             </TouchableOpacity>
 
-            {/* Credit Card Option */}
             <TouchableOpacity 
               onPress={() => setPaymentMethod('card')}
               className={`flex-row items-center justify-between p-3 rounded-xl mb-2 ${paymentMethod === 'card' ? 'bg-[#FEF7F3] border border-[#B8520B]/30' : ''}`}
@@ -431,7 +481,6 @@ export default function CheckoutScreen({ route, navigation }) {
               <Ionicons name={paymentMethod === 'card' ? "radio-button-on" : "radio-button-off"} size={16} color="#B8520B" />
             </TouchableOpacity>
 
-            {/* Cash on Delivery Option */}
             <TouchableOpacity 
               onPress={() => setPaymentMethod('cash')}
               className={`flex-row items-center justify-between p-3 rounded-xl ${paymentMethod === 'cash' ? 'bg-[#FEF7F3] border border-[#B8520B]/30' : ''}`}
@@ -440,7 +489,7 @@ export default function CheckoutScreen({ route, navigation }) {
                 <View className="w-8 h-8 bg-gray-100 rounded-xl items-center justify-center mr-3">
                   <Ionicons name="cash-outline" size={16} color="#757575" />
                 </View>
-                <Text className="text-xs font-bold text-[#1F130D]">Cash on Delivery</Text>
+                <Text className="text-xs font-bold text-[#1F130D]">Cash on Delivery / Table</Text>
               </View>
               <Ionicons name={paymentMethod === 'cash' ? "radio-button-on" : "radio-button-off"} size={16} color="#B8520B" />
             </TouchableOpacity>

@@ -1,25 +1,22 @@
 const express = require('express');
 const router = express.Router();
-const Order = require('../models/Order'); // Make sure this points to your Order model
+const Order = require('../models/Order');
 
 // --- GET USER ORDERS (GET /api/orders/user) ---
 router.get('/user', async (req, res) => {
   try {
-    // Fetch orders from MongoDB 
     const orders = await Order.find().sort({ createdAt: -1 });
 
     const formattedOrders = orders.map(order => ({
       id: order.orderId || `ORD-${order._id.toString().slice(-4).toUpperCase()}`,
       date: new Date(order.createdAt || Date.now()).toLocaleString('en-US', { 
-        month: 'short', 
-        day: 'numeric', 
-        year: 'numeric', 
-        hour: 'numeric', 
-        minute: '2-digit' 
+        month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' 
       }),
       status: order.status || 'Preparing',
       paymentStatus: order.paymentStatus || 'Pending',
       paymentMethod: order.paymentMethod || 'telebirr',
+      serviceType: order.serviceType || 'dine-in',
+      deliveryAddress: order.deliveryAddress || null,
       items: order.orderItems && order.orderItems.length > 0 
         ? order.orderItems.map(item => `${item.quantity || 1}x ${item.name || 'Item'}`).join(', ')
         : '1x Custom Meal',
@@ -46,15 +43,57 @@ router.get('/incoming', async (req, res) => {
   }
 });
 
+// --- GET ACTIVE DRIVER ORDERS (GET /api/orders/driver/active) ---
+router.get('/driver/active', async (req, res) => {
+  try {
+    const orders = await Order.find({ 
+      serviceType: 'delivery', 
+      status: { $in: ['Ready', 'Out for Delivery', 'Confirmed'] } 
+    }).sort({ createdAt: -1 });
+    return res.status(200).json(orders);
+  } catch (err) {
+    console.error('Fetch Driver Orders Error:', err);
+    return res.status(500).json({ message: 'Server error while fetching driver delivery tasks.' });
+  }
+});
+
+// --- GET ACTIVE WAITER ORDERS (GET /api/orders/waiter/active) ---
+router.get('/waiter/active', async (req, res) => {
+  try {
+    const orders = await Order.find({ 
+      serviceType: 'dine-in', 
+      status: { $ne: 'Served' } 
+    }).populate('table').sort({ createdAt: -1 });
+    return res.status(200).json(orders);
+  } catch (err) {
+    console.error('Fetch Waiter Orders Error:', err);
+    return res.status(500).json({ message: 'Server error while fetching waiter table tasks.' });
+  }
+});
+
 // --- CREATE ORDER (POST /api/orders) ---
 router.post('/', async (req, res) => {
   try {
-    const { customer, table, waiter, orderItems, totalAmount, specialInstructions, paymentMethod, paymentReference, paymentStatus } = req.body;
+    const { 
+      customer, 
+      table, 
+      waiter, 
+      serviceType, 
+      deliveryAddress, 
+      orderItems, 
+      totalAmount, 
+      specialInstructions, 
+      paymentMethod, 
+      paymentReference, 
+      paymentStatus 
+    } = req.body;
 
     const newOrder = new Order({
       customer,
-      table,
-      waiter,
+      serviceType: serviceType || 'dine-in',
+      table: table || null,
+      waiter: waiter || null,
+      deliveryAddress: deliveryAddress || { street: 'Main Road', city: 'Adama', latitude: 8.5410, longitude: 39.2705 },
       orderItems: orderItems || [],
       totalAmount: totalAmount || 0,
       specialInstructions: specialInstructions || '',
@@ -77,6 +116,29 @@ router.post('/', async (req, res) => {
   }
 });
 
+// --- ASSIGN DRIVER TO ORDER (PUT /api/orders/:id/assign-driver) ---
+router.put('/:id/assign-driver', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { driverId } = req.body;
+    
+    const order = await Order.findById(id);
+    if (!order) return res.status(404).json({ message: 'Order not found.' });
+
+    order.driver = driverId;
+    order.status = 'Out for Delivery';
+    await order.save();
+
+    const io = req.app.get('io');
+    if (io) io.emit('order_status_updated', { id: order._id, status: order.status, driver: driverId });
+
+    return res.status(200).json({ success: true, order });
+  } catch (err) {
+    console.error('Assign Driver Error:', err);
+    return res.status(500).json({ message: 'Server error while assigning driver.' });
+  }
+});
+
 // --- UPDATE ORDER STATUS (PUT /api/orders/:id/status) ---
 router.put('/:id/status', async (req, res) => {
   try {
@@ -89,6 +151,7 @@ router.put('/:id/status', async (req, res) => {
     const statusMap = {
       'Preparing': 'Preparing',
       'Ready': 'Ready',
+      'Out for Delivery': 'Out for Delivery',
       'Served': 'Served',
       'Delivered': 'Served'
     };
