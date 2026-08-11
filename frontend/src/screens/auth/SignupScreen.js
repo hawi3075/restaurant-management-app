@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
@@ -16,7 +16,10 @@ export default function SignupScreen({ navigation }) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [signupError, setSignupError] = useState('');
+  
+  // State for center popup modal warning
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalMessage, setModalMessage] = useState('');
 
   // States for toggling password visibility
   const [showPassword, setShowPassword] = useState(false);
@@ -39,7 +42,6 @@ export default function SignupScreen({ navigation }) {
   const handleGoogleBackendAuth = async (token) => {
     try {
       setLoading(true);
-      setSignupError('');
       const userInfoResponse = await fetch('https://www.googleapis.com/userinfo/v2/me', {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -59,7 +61,8 @@ export default function SignupScreen({ navigation }) {
       const data = await res.json();
       
       if (!res.ok) {
-        setSignupError('this user is already exist');
+        setModalMessage('this user is already exist');
+        setModalVisible(true);
         return;
       }
 
@@ -74,27 +77,28 @@ export default function SignupScreen({ navigation }) {
       }
 
     } catch (error) {
-      setSignupError('this user is already exist');
+      setModalMessage('this user is already exist');
+      setModalVisible(true);
     } finally {
       setLoading(false);
     }
   };
 
   const handleSignup = async () => {
-    // Check if any required field is missing information
     if (!name.trim() || !email.trim() || !phone.trim() || !password || !confirmPassword) {
-      setSignupError('Please fill in all required fields.');
+      setModalMessage('Please fill in all required fields.');
+      setModalVisible(true);
       return;
     }
 
     if (password !== confirmPassword) {
-      setSignupError('Passwords do not match.');
+      setModalMessage('Passwords do not match.');
+      setModalVisible(true);
       return;
     }
 
     try {
       setLoading(true);
-      setSignupError('');
 
       const response = await fetch(`${API_BASE_URL}/api/auth/signup`, {
         method: 'POST',
@@ -113,7 +117,8 @@ export default function SignupScreen({ navigation }) {
       const data = await response.json();
 
       if (!response.ok) {
-        setSignupError('this user is already exist');
+        setModalMessage('this user is already exist');
+        setModalVisible(true);
         return;
       }
 
@@ -128,120 +133,112 @@ export default function SignupScreen({ navigation }) {
       }
 
     } catch (error) {
-      setSignupError('this user is already exist');
+      setModalMessage('this user is already exist');
+      setModalVisible(true);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View className="flex-1 bg-[#F8FAFC] items-center justify-center">
-      <View className="w-full max-w-[440px] flex-1 bg-white relative shadow-2xl overflow-hidden border-x-2 border-slate-200">
+    <View className="flex-1 bg-[#F8FAFC] items-center justify-center p-2">
+      {/* Slightly taller maximum height container to ensure everything is visible */}
+      <View className="w-full max-w-[390px] h-[520px] bg-white rounded-3xl shadow-2xl overflow-hidden border-2 border-slate-200">
         <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
 
         {/* Back Button Header */}
-        <View className="px-6 pt-4 pb-2 z-10">
+        <View className="px-4 pt-2 pb-1 z-10">
           <TouchableOpacity 
             onPress={() => navigation.goBack()} 
-            className="w-10 h-10 bg-slate-100 rounded-2xl items-center justify-center border border-slate-200 active:scale-95"
+            className="w-8 h-8 bg-slate-100 rounded-xl items-center justify-center border border-slate-200 active:scale-95"
           >
-            <Ionicons name="arrow-back" size={20} color="#0F172A" />
+            <Ionicons name="arrow-back" size={16} color="#0F172A" />
           </TouchableOpacity>
         </View>
 
-        <ScrollView showsVerticalScrollIndicator={false} className="flex-1 pt-2 pb-20 px-6">
+        <ScrollView showsVerticalScrollIndicator={true} className="px-4 pt-0.5 pb-6">
           
-          <View className="items-center mb-6 mt-2">
-            <View className="w-12 h-12 bg-orange-500/10 rounded-2xl items-center justify-center mb-2">
-              <Ionicons name="restaurant" size={24} color="#F97316" />
+          <View className="items-center mb-3">
+            <View className="w-9 h-9 bg-orange-500/10 rounded-xl items-center justify-center mb-0.5">
+              <Ionicons name="restaurant" size={18} color="#F97316" />
             </View>
-            <Text className="text-2xl font-black text-slate-900 tracking-wide">Create Account</Text>
-            <Text className="text-xs font-bold text-slate-400 mt-1">Sign up to get started with DineFlow.</Text>
+            <Text className="text-lg font-black text-slate-900 tracking-wide">Create Account</Text>
+            <Text className="text-[10px] font-bold text-slate-400">Sign up to get started with DineFlow.</Text>
           </View>
 
-          {/* Error Banner for Missing Fields / Existing User */}
-          {signupError ? (
-            <View className="bg-red-50 border border-red-300 p-3.5 rounded-2xl mb-4 flex-row items-center">
-              <Ionicons name="alert-circle" size={18} color="#EF4444" style={{ marginRight: 8 }} />
-              <Text className="text-red-600 text-xs font-bold flex-1">{signupError}</Text>
-            </View>
-          ) : null}
-
-          <View className="space-y-3 mb-5">
+          <View className="space-y-2 mb-3">
             <View>
-              <Text className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Full Name</Text>
+              <Text className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Full Name</Text>
               <TextInput
-                className="w-full bg-slate-50 px-4 py-3.5 rounded-2xl border-2 border-slate-200 text-slate-900 font-bold text-sm"
+                className="w-full bg-slate-50 px-3 py-2 rounded-xl border-2 border-slate-200 text-slate-900 font-bold text-xs"
                 placeholder="Full Name"
                 placeholderTextColor="#94A3B8"
                 value={name}
-                onChangeText={(val) => { setName(val); setSignupError(''); }}
+                onChangeText={setName}
               />
             </View>
 
             <View>
-              <Text className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Email Address</Text>
+              <Text className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Email Address</Text>
               <TextInput
-                className="w-full bg-slate-50 px-4 py-3.5 rounded-2xl border-2 border-slate-200 text-slate-900 font-bold text-sm"
+                className="w-full bg-slate-50 px-3 py-2 rounded-xl border-2 border-slate-200 text-slate-900 font-bold text-xs"
                 placeholder="name@company.com"
                 placeholderTextColor="#94A3B8"
                 keyboardType="email-address"
                 autoCapitalize="none"
                 value={email}
-                onChangeText={(val) => { setEmail(val); setSignupError(''); }}
+                onChangeText={setEmail}
               />
             </View>
 
             <View>
-              <Text className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Phone Number</Text>
+              <Text className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Phone Number</Text>
               <TextInput
-                className="w-full bg-slate-50 px-4 py-3.5 rounded-2xl border-2 border-slate-200 text-slate-900 font-bold text-sm"
+                className="w-full bg-slate-50 px-3 py-2 rounded-xl border-2 border-slate-200 text-slate-900 font-bold text-xs"
                 placeholder="Phone Number"
                 placeholderTextColor="#94A3B8"
                 keyboardType="phone-pad"
                 value={phone}
-                onChangeText={(val) => { setPhone(val); setSignupError(''); }}
+                onChangeText={setPhone}
               />
             </View>
 
-            {/* Password Field with Eye Icon */}
             <View>
-              <Text className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Password</Text>
+              <Text className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Password</Text>
               <View className="relative justify-center">
                 <TextInput
-                  className="w-full bg-slate-50 pl-4 pr-12 py-3.5 rounded-2xl border-2 border-slate-200 text-slate-900 font-bold text-sm"
+                  className="w-full bg-slate-50 pl-3 pr-9 py-2 rounded-xl border-2 border-slate-200 text-slate-900 font-bold text-xs"
                   placeholder="••••••••"
                   placeholderTextColor="#94A3B8"
                   secureTextEntry={!showPassword}
                   value={password}
-                  onChangeText={(val) => { setPassword(val); setSignupError(''); }}
+                  onChangeText={setPassword}
                 />
                 <TouchableOpacity 
                   onPress={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 p-1"
+                  className="absolute right-2.5 p-1"
                 >
-                  <Ionicons name={showPassword ? "eye-off" : "eye"} size={20} color="#94A3B8" />
+                  <Ionicons name={showPassword ? "eye-off" : "eye"} size={16} color="#94A3B8" />
                 </TouchableOpacity>
               </View>
             </View>
 
-            {/* Confirm Password Field with Eye Icon */}
             <View>
-              <Text className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Confirm Password</Text>
+              <Text className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Confirm Password</Text>
               <View className="relative justify-center">
                 <TextInput
-                  className="w-full bg-slate-50 pl-4 pr-12 py-3.5 rounded-2xl border-2 border-slate-200 text-slate-900 font-bold text-sm"
+                  className="w-full bg-slate-50 pl-3 pr-9 py-2 rounded-xl border-2 border-slate-200 text-slate-900 font-bold text-xs"
                   placeholder="••••••••"
                   placeholderTextColor="#94A3B8"
                   secureTextEntry={!showConfirmPassword}
                   value={confirmPassword}
-                  onChangeText={(val) => { setConfirmPassword(val); setSignupError(''); }}
+                  onChangeText={setConfirmPassword}
                 />
                 <TouchableOpacity 
                   onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-4 p-1"
+                  className="absolute right-2.5 p-1"
                 >
-                  <Ionicons name={showConfirmPassword ? "eye-off" : "eye"} size={20} color="#94A3B8" />
+                  <Ionicons name={showConfirmPassword ? "eye-off" : "eye"} size={16} color="#94A3B8" />
                 </TouchableOpacity>
               </View>
             </View>
@@ -250,39 +247,63 @@ export default function SignupScreen({ navigation }) {
           <TouchableOpacity
             onPress={handleSignup}
             disabled={loading}
-            className="w-full bg-[#B45309] py-4 rounded-2xl items-center shadow-lg shadow-orange-900/20 active:scale-95 mb-5"
+            className="w-full bg-[#B45309] py-2.5 rounded-xl items-center shadow-md shadow-orange-900/20 active:scale-95 mb-2.5"
           >
-            <Text className="text-sm font-black text-white uppercase tracking-wider">
+            <Text className="text-xs font-black text-white uppercase tracking-wider">
               {loading ? 'Creating Account...' : 'Sign Up'}
             </Text>
           </TouchableOpacity>
 
-          <View className="flex-row items-center my-3">
-            <View className="flex-1 h-0.5 bg-slate-200" />
-            <Text className="mx-3 text-[11px] font-bold text-slate-400 uppercase">Or continue with</Text>
-            <View className="flex-1 h-0.5 bg-slate-200" />
+          <View className="flex-row items-center my-1.5">
+            <View className="flex-1 h-px bg-slate-200" />
+            <Text className="mx-2 text-[9px] font-bold text-slate-400 uppercase">Or continue with</Text>
+            <View className="flex-1 h-px bg-slate-200" />
           </View>
 
-          <View className="mb-6">
+          <View className="mb-3">
             <TouchableOpacity
               disabled={!request || loading}
               onPress={() => promptAsync()}
-              className="w-full bg-white py-3.5 rounded-2xl border-2 border-slate-200 flex-row items-center justify-center space-x-2 shadow-sm active:scale-95"
+              className="w-full bg-white py-2 rounded-xl border-2 border-slate-200 flex-row items-center justify-center space-x-2 shadow-sm active:scale-95"
             >
-              <Ionicons name="logo-google" size={18} color="#EA4335" />
-              <Text className="text-xs font-black text-slate-700">Continue with Google</Text>
+              <Ionicons name="logo-google" size={15} color="#EA4335" />
+              <Text className="text-[11px] font-black text-slate-700">Continue with Google</Text>
             </TouchableOpacity>
           </View>
 
           <View className="flex-row justify-center items-center space-x-1 pb-4">
-            <Text className="text-xs font-medium text-slate-500">Already have an account?</Text>
+            <Text className="text-[10px] font-medium text-slate-500">Already have an account?</Text>
             <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-              <Text className="text-xs font-black text-[#B45309]">Log In</Text>
+              <Text className="text-[10px] font-black text-[#B45309]">Log In</Text>
             </TouchableOpacity>
           </View>
 
         </ScrollView>
       </View>
+
+      {/* Center Popup Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View className="flex-1 bg-black/50 items-center justify-center px-4">
+          <View className="bg-white w-full max-w-[280px] p-5 rounded-3xl items-center shadow-2xl border border-slate-100">
+            <View className="w-12 h-12 bg-red-50 rounded-2xl items-center justify-center mb-3">
+              <Ionicons name="alert-circle" size={24} color="#EF4444" />
+            </View>
+            <Text className="text-base font-black text-slate-900 mb-1 text-center">Notice</Text>
+            <Text className="text-xs font-bold text-slate-500 text-center mb-5">{modalMessage}</Text>
+            <TouchableOpacity
+              onPress={() => setModalVisible(false)}
+              className="w-full bg-[#B45309] py-3 rounded-xl items-center shadow-md active:scale-95"
+            >
+              <Text className="text-xs font-black text-white uppercase tracking-wider">OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
