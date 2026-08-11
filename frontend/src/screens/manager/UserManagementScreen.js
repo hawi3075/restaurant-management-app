@@ -1,259 +1,263 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Modal, ActivityIndicator, Alert, Platform } from 'react-native';
+import React, { useState, useEffect, useContext } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StatusBar, TextInput, Modal, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { BACKEND_URL } from '../api/backend';
+import { AuthContext } from '../../context/AuthContext';
+import { BACKEND_URL } from '../../api/backend';
+
+const LIVE_BACKEND_URL = 'https://restaurant-management-app-wqmp.onrender.com';
+const API_URL = BACKEND_URL || (__DEV__ ? 'http://localhost:5000' : LIVE_BACKEND_URL);
 
 export default function UserManagementScreen({ navigation }) {
+  const authContext = useContext(AuthContext);
   const [isLoading, setIsLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [modalVisible, setModalVisible] = useState(false);
   const [users, setUsers] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Modal states for editing user or roles
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState('customer');
 
   useEffect(() => {
     fetchUsers();
   }, []);
 
-  const fetchUsers = async (isPolling = false) => {
+  const fetchUsers = async () => {
     try {
-      if (!isPolling) setIsLoading(true);
+      setIsLoading(true);
       const token = await AsyncStorage.getItem('token');
 
-      const res = await fetch(`${BACKEND_URL}/api/users`, {
+      const response = await fetch(`${API_URL}/api/users`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         }
       });
-      const data = await res.json();
-      
-      if (res.ok && Array.isArray(data)) {
-        const mapped = data.map(u => ({
-          ...u,
-          id: String(u._id || u.id),
-          status: u.active === false ? 'Inactive' : 'Active'
-        }));
-        setUsers(mapped);
-      }
-    } catch (err) {
-      console.error('Fetch users error', err);
-      if (!isPolling) {
-        Alert.alert('Error', 'Failed to load system users.');
-      }
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to fetch users.');
+
+      setUsers(data.users || data.data || []);
+    } catch (error) {
+      console.error('Fetch Users Error:', error);
+      Alert.alert('Error', error.message);
     } finally {
-      if (!isPolling) setIsLoading(false);
+      setIsLoading(false);
     }
   };
 
-  const toggleStatus = async (id) => {
-    const user = users.find(u => u.id === id || u._id === id);
-    if (!user) return;
-    const newActive = !(user.active === true || user.status === 'Active');
-    
-    // Optimistic update
-    setUsers(prev => prev.map(u => (u._id === id || u.id === id) ? { ...u, status: newActive ? 'Active' : 'Inactive', active: newActive } : u));
-    
+  const handleOpenEdit = (user) => {
+    setSelectedUser(user);
+    setName(user.name || '');
+    setEmail(user.email || '');
+    setRole(user.role || 'customer');
+    setEditModalVisible(true);
+  };
+
+  const handleUpdateUser = async () => {
+    if (!selectedUser) return;
     try {
+      setIsLoading(true);
       const token = await AsyncStorage.getItem('token');
-      const response = await fetch(`${BACKEND_URL}/api/users/${id}`, {
+
+      const response = await fetch(`${API_URL}/api/users/${selectedUser._id}`, {
         method: 'PUT',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ active: newActive })
+        body: JSON.stringify({ name, email, role })
       });
-      const j = await response.json();
-      if (!response.ok || !j.success) {
-        console.warn('Failed to update user active status', j);
-        fetchUsers(true); // Revert on failure
-      }
-    } catch (err) {
-      console.error('User update error', err);
-      fetchUsers(true); // Revert on failure
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to update user.');
+
+      Alert.alert('Success', 'User updated successfully!');
+      setEditModalVisible(false);
+      fetchUsers();
+    } catch (error) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
+  const handleDeleteUser = async (userId) => {
+    Alert.alert(
+      'Delete User',
+      'Are you sure you want to delete this user account?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const token = await AsyncStorage.getItem('token');
+              const response = await fetch(`${API_URL}/api/users/${userId}`, {
+                method: 'DELETE',
+                headers: {
+                  'Authorization': `Bearer ${token}`
+                }
+              });
+
+              const data = await response.json();
+              if (!response.ok) throw new Error(data.message || 'Failed to delete user.');
+
+              Alert.alert('Success', 'User deleted successfully.');
+              fetchUsers();
+            } catch (error) {
+              Alert.alert('Error', error.message);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const filteredUsers = users.filter(u => 
-    (u.name && u.name.toLowerCase().includes(searchQuery.toLowerCase())) || 
+    (u.name && u.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
     (u.email && u.email.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
-  if (isLoading) {
+  if (isLoading && users.length === 0) {
     return (
-      <View className="flex-1 bg-[#F8FAFC] items-center justify-center">
-        <ActivityIndicator size="large" color="#F97316" />
+      <View className="flex-1 bg-[#F8F9FC] items-center justify-center">
+        <ActivityIndicator size="large" color="#B8520B" />
       </View>
     );
   }
 
   return (
-    <View className="flex-1 bg-[#F8FAFC] items-center justify-center">
-      <View className="w-full max-w-[440px] flex-1 bg-white relative shadow-2xl overflow-hidden border-x border-slate-100">
-        <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
+    <View className="flex-1 bg-[#F8F9FC] items-center">
+      <View className="w-full max-w-[440px] flex-1 bg-[#F8F9FC] relative shadow-2xl">
+        <StatusBar barStyle="dark-content" backgroundColor="#F8F9FC" />
 
-        {/* Header */}
-        <View className="pt-12 pb-4 px-6 bg-white border-b border-slate-100 flex-row items-center justify-between">
-          <View className="flex-row items-center space-x-3">
-            <TouchableOpacity 
-              onPress={() => navigation.goBack()}
-              className="w-10 h-10 bg-slate-50 rounded-2xl border border-slate-200 items-center justify-center active:scale-95"
-            >
-              <Ionicons name="arrow-back" size={20} color="#0F172A" />
+        {/* Top Header */}
+        <View className="pt-12 px-5 pb-4 bg-white border-b border-[#EAE3DE] flex-row justify-between items-center">
+          <View className="flex-row items-center">
+            <TouchableOpacity onPress={() => navigation.goBack()} className="mr-3">
+              <Ionicons name="arrow-back" size={20} color="#1F130D" />
             </TouchableOpacity>
-            <View>
-              <Text className="text-[10px] font-bold text-orange-500 uppercase tracking-widest">Administration</Text>
-              <Text className="text-xl font-black text-slate-900">User Management</Text>
-            </View>
+            <Text className="text-xl font-black text-[#1F130D]">User Management</Text>
           </View>
-          <TouchableOpacity 
-            onPress={() => fetchUsers()}
-            className="w-10 h-10 bg-orange-50 rounded-2xl border border-orange-200 items-center justify-center active:scale-95"
-          >
-            <Ionicons name="reload" size={18} color="#F97316" />
+          <TouchableOpacity onPress={fetchUsers}>
+            <Ionicons name="refresh-outline" size={20} color="#B8520B" />
           </TouchableOpacity>
         </View>
 
-        <ScrollView showsVerticalScrollIndicator={false} className="flex-1 p-5 pb-24">
-          
-          {/* Total Users Counter Card */}
-          <View className="bg-orange-50 border border-orange-200/60 rounded-2xl p-4 mb-4 flex-row items-center justify-between shadow-xs">
-            <View className="flex-row items-center space-x-3">
-              <View className="w-10 h-10 rounded-xl bg-orange-500 items-center justify-center shadow-sm">
-                <Ionicons name="people" size={18} color="#FFFFFF" />
-              </View>
-              <View>
-                <Text className="text-[10px] font-bold text-orange-600 uppercase tracking-wider">Total System Users</Text>
-                <Text className="text-lg font-black text-slate-900">{users.length} {users.length === 1 ? 'User' : 'Users'}</Text>
-              </View>
-            </View>
-            <View className="bg-white px-3 py-1.5 rounded-xl border border-orange-200 shadow-2xs">
-              <Text className="text-[10px] font-extrabold text-orange-600">
-                {filteredUsers.length} Shown
-              </Text>
-            </View>
-          </View>
-
-          {/* Search Bar */}
-          <View className="flex-row items-center bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 mb-5 shadow-sm">
-            <Ionicons name="search-outline" size={18} color="#64748B" />
-            <TextInput 
-              placeholder="Search by name or email..." 
-              placeholderTextColor="#94A3B8"
+        {/* Search Bar */}
+        <View className="px-5 pt-4 pb-2">
+          <View className="bg-white flex-row items-center px-3 py-2.5 rounded-2xl border border-[#EAE3DE]">
+            <Ionicons name="search" size={16} color="#9E9E9E" style={{ marginRight: 8 }} />
+            <TextInput
+              className="flex-1 text-xs text-[#1F130D]"
+              placeholder="Search by name or email..."
+              placeholderTextColor="#9E9E9E"
               value={searchQuery}
               onChangeText={setSearchQuery}
-              className="flex-1 ml-3 text-sm text-slate-900 font-medium"
             />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <Ionicons name="close-circle" size={16} color="#94A3B8" />
-              </TouchableOpacity>
-            )}
           </View>
+        </View>
 
-          {/* User Cards List */}
+        {/* Users List */}
+        <ScrollView showsVerticalScrollIndicator={false} className="px-5 pt-2 pb-24">
+          <Text className="text-xs font-bold text-gray-400 uppercase mb-2 ml-1 tracking-wider">
+            Registered Users ({filteredUsers.length})
+          </Text>
+
           {filteredUsers.length === 0 ? (
-            <View className="bg-white p-8 rounded-3xl border border-slate-200 items-center mt-6 shadow-sm">
-              <View className="w-16 h-16 bg-orange-50 rounded-full items-center justify-center mb-3 border border-orange-100">
-                <Ionicons name="search" size={28} color="#F97316" />
-              </View>
-              <Text className="text-sm font-bold text-slate-900 mb-1">No users found</Text>
-              <Text className="text-xs text-slate-400 text-center">Try searching with a different name or email query.</Text>
+            <View className="bg-white p-6 rounded-2xl border border-[#EAE3DE] items-center mt-4">
+              <Ionicons name="people-outline" size={36} color="#9E9E9E" style={{ marginBottom: 8 }} />
+              <Text className="text-xs font-bold text-[#1F130D] mb-1">No users found</Text>
+              <Text className="text-[11px] text-gray-500 text-center">Try searching with a different term.</Text>
             </View>
           ) : (
-            <View className="space-y-3">
-              {filteredUsers.map((user) => (
-                <View
-                  key={user.id}
-                  className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm mb-3 relative overflow-hidden"
-                >
-                  <View className="flex-row justify-between items-start mb-2">
-                    <View className="flex-row items-center space-x-3">
-                      <View className="w-11 h-11 rounded-2xl bg-orange-500/10 items-center justify-center border border-orange-500/20">
-                        <Text className="font-black text-orange-600 text-base">
-                          {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
-                        </Text>
-                      </View>
-                      <View>
-                        <Text className="text-base font-black text-slate-900">{user.name || 'Unnamed User'}</Text>
-                        <Text className="text-xs text-slate-500 font-medium">{user.email || 'No Email'}</Text>
-                      </View>
+            filteredUsers.map((item) => (
+              <View key={item._id} className="bg-white p-4 rounded-2xl border border-[#EAE3DE] mb-3 shadow-xs">
+                <View className="flex-row justify-between items-start mb-2">
+                  <View className="flex-row items-center flex-1 mr-2">
+                    <View className="w-9 h-9 bg-[#FEF7F3] rounded-full border border-[#B8520B]/30 items-center justify-center mr-3">
+                      <Ionicons name="person" size={16} color="#B8520B" />
                     </View>
-
-                    {/* View Details Icon Button */}
-                    <TouchableOpacity 
-                      onPress={() => {
-                        setSelectedUser(user);
-                        setModalVisible(true);
-                      }}
-                      className="w-9 h-9 rounded-xl bg-orange-50 border border-orange-200 items-center justify-center shadow-sm active:scale-95"
-                    >
-                      <Ionicons name="eye-outline" size={18} color="#F97316" />
-                    </TouchableOpacity>
+                    <View className="flex-1">
+                      <Text className="text-xs font-black text-[#1F130D]" numberOfLines={1}>{item.name || 'No Name'}</Text>
+                      <Text className="text-[11px] text-gray-400" numberOfLines={1}>{item.email}</Text>
+                    </View>
                   </View>
-
-                  {/* Tags & Action Status */}
-                  <View className="flex-row justify-between items-center mt-3 pt-3 border-t border-slate-100">
-                    <View className="flex-row space-x-2">
-                      <View className="px-2.5 py-1 rounded-lg bg-orange-50 border border-orange-100">
-                        <Text className="text-[10px] font-bold text-orange-600">{user.role || 'Customer'}</Text>
-                      </View>
-                      <View className={`px-2.5 py-1 rounded-lg ${user.status === 'Active' ? 'bg-emerald-50 border border-emerald-100' : 'bg-rose-50 border border-rose-100'}`}>
-                        <Text className={`text-[10px] font-bold ${user.status === 'Active' ? 'text-emerald-600' : 'text-rose-600'}`}>{user.status}</Text>
-                      </View>
-                    </View>
-
-                    <TouchableOpacity
-                      onPress={() => toggleStatus(user.id)}
-                      className={`px-3 py-1.5 rounded-xl border ${user.status === 'Active' ? 'bg-rose-50 border-rose-200' : 'bg-emerald-50 border-emerald-200'}`}
-                    >
-                      <Text className={`text-xs font-bold ${user.status === 'Active' ? 'text-rose-600' : 'text-emerald-600'}`}>
-                        {user.status === 'Active' ? 'Deactivate' : 'Activate'}
-                      </Text>
-                    </TouchableOpacity>
+                  <View className="px-2.5 py-1 rounded-full bg-[#FEF7F3] border border-[#B8520B]/20">
+                    <Text className="text-[10px] font-bold text-[#B8520B] capitalize">{item.role || 'customer'}</Text>
                   </View>
                 </View>
-              ))}
-            </View>
+
+                <View className="flex-row justify-end space-x-2 pt-2 border-t border-[#F8F9FC]">
+                  <TouchableOpacity 
+                    onPress={() => handleOpenEdit(item)}
+                    className="px-3 py-1.5 bg-gray-100 rounded-xl flex-row items-center mr-2"
+                  >
+                    <Ionicons name="create-outline" size={14} color="#1F130D" style={{ marginRight: 4 }} />
+                    <Text className="text-[11px] font-bold text-[#1F130D]">Edit</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    onPress={() => handleDeleteUser(item._id)}
+                    className="px-3 py-1.5 bg-red-50 rounded-xl flex-row items-center border border-red-100"
+                  >
+                    <Ionicons name="trash-outline" size={14} color="#DC2626" style={{ marginRight: 4 }} />
+                    <Text className="text-[11px] font-bold text-red-600">Delete</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))
           )}
         </ScrollView>
 
-        {/* User Detail Info Modal */}
-        <Modal animationType="fade" transparent={true} visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
-          <View className="flex-1 bg-black/50 justify-center items-center px-5">
-            <View className="bg-white w-full max-w-[380px] rounded-3xl p-6 shadow-2xl border border-slate-100">
-              <View className="items-center mb-4">
-                <View className="w-16 h-16 rounded-3xl bg-orange-500/10 border border-orange-500/20 items-center justify-center mb-3">
-                  <Text className="font-black text-orange-600 text-2xl">
-                    {selectedUser?.name ? selectedUser.name.charAt(0).toUpperCase() : 'U'}
-                  </Text>
-                </View>
-                <Text className="text-xl font-black text-slate-900">{selectedUser?.name || 'User Profile'}</Text>
-                <Text className="text-xs font-bold text-orange-500 mt-0.5">{selectedUser?.role || 'Customer'}</Text>
+        {/* Edit User Modal */}
+        <Modal visible={editModalVisible} animationType="slide" transparent={true}>
+          <View className="flex-1 bg-black/50 justify-end items-center">
+            <View className="bg-white w-full max-w-[440px] rounded-t-3xl p-6">
+              <View className="flex-row justify-between items-center mb-4">
+                <Text className="text-base font-black text-[#1F130D]">Edit User Profile</Text>
+                <TouchableOpacity onPress={() => setEditModalVisible(false)}>
+                  <Ionicons name="close" size={20} color="#1F130D" />
+                </TouchableOpacity>
               </View>
 
-              <View className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200 mb-5">
-                <View className="flex-row justify-between">
-                  <Text className="text-xs text-slate-500 font-bold">Email Address:</Text>
-                  <Text className="text-xs text-slate-900 font-bold">{selectedUser?.email || 'N/A'}</Text>
-                </View>
-                <View className="flex-row justify-between">
-                  <Text className="text-xs text-slate-500 font-bold">Phone Number:</Text>
-                  <Text className="text-xs text-slate-900 font-bold">{selectedUser?.phone || 'N/A'}</Text>
-                </View>
-                <View className="flex-row justify-between">
-                  <Text className="text-xs text-slate-500 font-bold">Account Status:</Text>
-                  <Text className={`text-xs font-bold ${selectedUser?.status === 'Active' ? 'text-emerald-600' : 'text-rose-600'}`}>{selectedUser?.status || 'Active'}</Text>
-                </View>
-              </View>
+              <Text className="text-[11px] font-bold text-gray-500 mb-1">Full Name</Text>
+              <TextInput 
+                className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs mb-3 text-[#1F130D]" 
+                value={name} 
+                onChangeText={setName} 
+              />
+
+              <Text className="text-[11px] font-bold text-gray-500 mb-1">Email Address</Text>
+              <TextInput 
+                className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs mb-3 text-[#1F130D]" 
+                value={email} 
+                onChangeText={setEmail} 
+              />
+
+              <Text className="text-[11px] font-bold text-gray-500 mb-1">Role (customer, manager, driver, staff)</Text>
+              <TextInput 
+                className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs mb-5 text-[#1F130D]" 
+                value={role} 
+                onChangeText={setRole} 
+              />
 
               <TouchableOpacity 
-                onPress={() => setModalVisible(false)}
-                className="w-full bg-slate-900 py-3.5 rounded-2xl items-center shadow-md"
+                onPress={handleUpdateUser} 
+                disabled={isLoading}
+                className="bg-[#B8520B] py-3.5 rounded-xl items-center"
               >
-                <Text className="font-bold text-white text-sm">Close Details</Text>
+                {isLoading ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text className="text-white text-xs font-bold">Save User Changes</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
