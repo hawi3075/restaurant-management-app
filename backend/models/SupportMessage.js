@@ -1,13 +1,13 @@
 const mongoose = require('mongoose');
 
-const supportSchema = new mongoose.Schema({
-  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  name: { type: String },
-  email: { type: String },
-  subject: { type: String },
+const supportMessageSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  email: { type: String, required: true },
   message: { type: String, required: true },
-  status: { type: String, enum: ['Pending', 'Resolved', 'Closed'], default: 'Pending' },
-  reply: { type: String }
+  managerResponse: { type: String, default: '' },
+  reply: { type: String, default: '' },
+  status: { type: String, default: 'Pending' },
+  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: false }
 }, { timestamps: true });
 
-module.exports = mongoose.model('SupportMessage', supportSchema);
+module.exports = mongoose.model('SupportMessage', supportMessageSchema);

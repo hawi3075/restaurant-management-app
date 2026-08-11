@@ -111,7 +111,7 @@ export default function CustomerProfileScreen({ route, navigation }) {
         const fetchedTickets = data.tickets;
         
         // Count how many tickets have manager responses
-        const respondedCount = fetchedTickets.filter(t => t.managerResponse && t.managerResponse.trim() !== '').length;
+        const respondedCount = fetchedTickets.filter(t => (t.managerResponse || t.reply) && (t.managerResponse || t.reply).trim() !== '').length;
 
         // If polling and we found new manager responses, trigger alert
         if (isPolling && lastCheckedResponseCount > 0 && respondedCount > lastCheckedResponseCount) {
@@ -446,7 +446,7 @@ export default function CustomerProfileScreen({ route, navigation }) {
                   value={supportMessage}
                   onChangeText={(text) => {
                     setSupportMessage(text);
-                    if (supportSuccessMsg) setSupportSuccessMsg(''); // Clear success banner on new type
+                    if (supportSuccessMsg) setSupportSuccessMsg('');
                   }} 
                 />
 
@@ -469,60 +469,44 @@ export default function CustomerProfileScreen({ route, navigation }) {
                     <Text className="text-[11px] text-gray-500">No support tickets submitted yet.</Text>
                   </View>
                 ) : (
-                  supportTickets.map((ticket, index) => (
-                    <View key={ticket._id || index} className="bg-[#F8F9FC] p-3.5 rounded-2xl border border-[#EAE3DE] mb-3">
-                      <View className="flex-row justify-between items-center mb-1">
-                        <Text className="text-[10px] font-bold text-gray-400">
-                          {ticket.createdAt ? new Date(ticket.createdAt).toLocaleDateString() : 'Recent'}
-                        </Text>
-                        <View className={`px-2 py-0.5 rounded-full ${ticket.managerResponse ? 'bg-green-100' : 'bg-yellow-100'}`}>
-                          <Text className={`text-[9px] font-bold ${ticket.managerResponse ? 'text-green-700' : 'text-yellow-700'}`}>
-                            {ticket.managerResponse ? 'Resolved / Replied' : 'Pending'}
+                  supportTickets.map((ticket, index) => {
+                    const replyText = ticket.managerResponse || ticket.reply;
+                    return (
+                      <View key={ticket._id || index} className="bg-[#F8F9FC] p-3.5 rounded-2xl border border-[#EAE3DE] mb-3">
+                        <View className="flex-row justify-between items-center mb-1">
+                          <Text className="text-[10px] font-bold text-gray-400">
+                            {ticket.createdAt ? new Date(ticket.createdAt).toLocaleDateString() : 'Recent'}
                           </Text>
+                          <View className={`px-2 py-0.5 rounded-full ${replyText ? 'bg-green-100' : 'bg-yellow-100'}`}>
+                            <Text className={`text-[9px] font-bold ${replyText ? 'text-green-700' : 'text-yellow-700'}`}>
+                              {replyText ? 'Resolved / Replied' : 'Pending'}
+                            </Text>
+                          </View>
                         </View>
+
+                        {/* Customer Message */}
+                        <View className="bg-white p-2.5 rounded-xl border border-gray-200 mb-2">
+                          <Text className="text-[10px] font-bold text-[#B8520B] mb-0.5">You:</Text>
+                          <Text className="text-xs text-[#1F130D]">{ticket.message}</Text>
+                        </View>
+
+                        {/* Manager Reply Display */}
+                        {replyText ? (
+                          <View className="bg-green-50 p-2.5 rounded-xl border border-green-200">
+                            <Text className="text-[10px] font-bold text-green-800 mb-0.5">Manager Response:</Text>
+                            <Text className="text-xs text-gray-800">{replyText}</Text>
+                          </View>
+                        ) : (
+                          <Text className="text-[10px] text-gray-400 italic mt-1">Waiting for manager response...</Text>
+                        )}
                       </View>
-
-                      <Text className="text-xs font-semibold text-[#1F130D] mb-2">You: {ticket.message}</Text>
-
-                      {ticket.managerResponse ? (
-                        <View className="bg-white p-2.5 rounded-xl border border-green-200 mt-1">
-                          <Text className="text-[10px] font-bold text-green-800 mb-0.5">Manager Response:</Text>
-                          <Text className="text-[11px] text-[#1F130D]">{ticket.managerResponse}</Text>
-                        </View>
-                      ) : (
-                        <Text className="text-[10px] text-gray-400 italic">Waiting for manager response...</Text>
-                      )}
-                    </View>
-                  ))
+                    );
+                  })
                 )}
               </ScrollView>
             </View>
           </View>
         </Modal>
-
-        {/* Bottom Mobile Navigation Bar */}
-        <View className="absolute bottom-0 left-0 right-0 bg-white border-t border-[#EAE3DE] px-6 py-2.5 flex-row justify-between items-center shadow-lg">
-          <TouchableOpacity onPress={() => navigation.navigate('CustomerLanding', { isLoggedIn })} className="items-center">
-            <Ionicons name="home-outline" size={18} color="#757575" />
-            <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Home</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('OrderHistoryScreen')} className="items-center">
-            <Ionicons name="receipt-outline" size={18} color="#757575" />
-            <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Orders</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('MenuScreen')} className="items-center">
-            <Ionicons name="restaurant-outline" size={18} color="#757575" />
-            <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Menu</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('CartScreen')} className="items-center">
-            <Ionicons name="notifications-outline" size={18} color="#757575" />
-            <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Alerts</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('CustomerProfileScreen', { isLoggedIn })} className="items-center">
-            <Ionicons name="person" size={18} color="#B8520B" />
-            <Text className="text-[9px] font-bold text-[#B8520B] mt-0.5">Profile</Text>
-          </TouchableOpacity>
-        </View>
 
       </View>
     </View>
