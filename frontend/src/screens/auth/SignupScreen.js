@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
@@ -16,6 +16,7 @@ export default function SignupScreen({ navigation }) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [signupError, setSignupError] = useState('');
 
   // States for toggling password visibility
   const [showPassword, setShowPassword] = useState(false);
@@ -38,6 +39,7 @@ export default function SignupScreen({ navigation }) {
   const handleGoogleBackendAuth = async (token) => {
     try {
       setLoading(true);
+      setSignupError('');
       const userInfoResponse = await fetch('https://www.googleapis.com/userinfo/v2/me', {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -55,37 +57,44 @@ export default function SignupScreen({ navigation }) {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Google authentication failed');
+      
+      if (!res.ok) {
+        setSignupError('this user is already exist');
+        return;
+      }
 
-      // Save token from backend response if available
       if (data.token) {
         await AsyncStorage.setItem('token', data.token);
       }
 
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'CustomerLanding', params: { isLoggedIn: true } }],
-      });
+      if (navigation.canGoBack()) {
+        navigation.goBack();
+      } else {
+        navigation.navigate('Login');
+      }
+
     } catch (error) {
-      Alert.alert('Error', error.message);
+      setSignupError('this user is already exist');
     } finally {
       setLoading(false);
     }
   };
 
   const handleSignup = async () => {
-    if (!name || !email || !password || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all required fields.');
+    // Check if any required field is missing information
+    if (!name.trim() || !email.trim() || !phone.trim() || !password || !confirmPassword) {
+      setSignupError('Please fill in all required fields.');
       return;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match.');
+      setSignupError('Passwords do not match.');
       return;
     }
 
     try {
       setLoading(true);
+      setSignupError('');
 
       const response = await fetch(`${API_BASE_URL}/api/auth/signup`, {
         method: 'POST',
@@ -93,10 +102,10 @@ export default function SignupScreen({ navigation }) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          name,
-          email,
+          name: name.trim(),
+          email: email.trim(),
           password,
-          phone,
+          phone: phone.trim(),
           role: 'customer',
         }),
       });
@@ -104,23 +113,22 @@ export default function SignupScreen({ navigation }) {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || 'Failed to sign up');
+        setSignupError('this user is already exist');
+        return;
       }
 
-      // Save token to AsyncStorage so CustomerLandingScreen detects active login
       if (data.token) {
         await AsyncStorage.setItem('token', data.token);
       }
-
-      Alert.alert('Success', 'Account created successfully!');
       
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'CustomerLanding', params: { isLoggedIn: true } }],
-      });
+      if (navigation.canGoBack()) {
+        navigation.goBack();
+      } else {
+        navigation.navigate('Login');
+      }
 
     } catch (error) {
-      Alert.alert('Signup Error', error.message || 'Server connection failed.');
+      setSignupError('this user is already exist');
     } finally {
       setLoading(false);
     }
@@ -151,6 +159,14 @@ export default function SignupScreen({ navigation }) {
             <Text className="text-xs font-bold text-slate-400 mt-1">Sign up to get started with DineFlow.</Text>
           </View>
 
+          {/* Error Banner for Missing Fields / Existing User */}
+          {signupError ? (
+            <View className="bg-red-50 border border-red-300 p-3.5 rounded-2xl mb-4 flex-row items-center">
+              <Ionicons name="alert-circle" size={18} color="#EF4444" style={{ marginRight: 8 }} />
+              <Text className="text-red-600 text-xs font-bold flex-1">{signupError}</Text>
+            </View>
+          ) : null}
+
           <View className="space-y-3 mb-5">
             <View>
               <Text className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Full Name</Text>
@@ -159,7 +175,7 @@ export default function SignupScreen({ navigation }) {
                 placeholder="Full Name"
                 placeholderTextColor="#94A3B8"
                 value={name}
-                onChangeText={setName}
+                onChangeText={(val) => { setName(val); setSignupError(''); }}
               />
             </View>
 
@@ -172,7 +188,7 @@ export default function SignupScreen({ navigation }) {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(val) => { setEmail(val); setSignupError(''); }}
               />
             </View>
 
@@ -184,7 +200,7 @@ export default function SignupScreen({ navigation }) {
                 placeholderTextColor="#94A3B8"
                 keyboardType="phone-pad"
                 value={phone}
-                onChangeText={setPhone}
+                onChangeText={(val) => { setPhone(val); setSignupError(''); }}
               />
             </View>
 
@@ -198,7 +214,7 @@ export default function SignupScreen({ navigation }) {
                   placeholderTextColor="#94A3B8"
                   secureTextEntry={!showPassword}
                   value={password}
-                  onChangeText={setPassword}
+                  onChangeText={(val) => { setPassword(val); setSignupError(''); }}
                 />
                 <TouchableOpacity 
                   onPress={() => setShowPassword(!showPassword)}
@@ -219,7 +235,7 @@ export default function SignupScreen({ navigation }) {
                   placeholderTextColor="#94A3B8"
                   secureTextEntry={!showConfirmPassword}
                   value={confirmPassword}
-                  onChangeText={setConfirmPassword}
+                  onChangeText={(val) => { setConfirmPassword(val); setSignupError(''); }}
                 />
                 <TouchableOpacity 
                   onPress={() => setShowConfirmPassword(!showConfirmPassword)}
