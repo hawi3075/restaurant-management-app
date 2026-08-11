@@ -3,6 +3,16 @@ import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Image, 
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 
+const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=400&q=80';
+
+// Helper to sanitize blob or local file URIs which break on React Native Web refreshes
+const sanitizeImage = (uri) => {
+  if (!uri || typeof uri !== 'string' || uri.startsWith('blob:') || uri.startsWith('file:')) {
+    return FALLBACK_IMAGE;
+  }
+  return uri;
+};
+
 export default function MenuManagementScreen({ navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -61,7 +71,7 @@ export default function MenuManagementScreen({ navigation }) {
             style: i.style || 'Modern',
             rating: String(i.rating || 5),
             status: i.availabilityStatus ? 'In Stock' : 'Out of Stock',
-            image: i.image || ''
+            image: sanitizeImage(i.image)
           }));
           setMenuItems(mapped);
         }
@@ -96,10 +106,16 @@ export default function MenuManagementScreen({ navigation }) {
         allowsEditing: true,
         aspect: [4, 3],
         quality: 0.8,
+        base64: true,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        setNewImage(result.assets[0].uri);
+        const asset = result.assets[0];
+        if (asset.base64) {
+          setNewImage(`data:image/jpeg;base64,${asset.base64}`);
+        } else {
+          setNewImage(sanitizeImage(asset.uri));
+        }
       }
     } catch (error) {
       console.log('Error picking image: ', error);
@@ -110,7 +126,6 @@ export default function MenuManagementScreen({ navigation }) {
     const item = menuItems.find(m => m.id === id);
     if (!item) return;
     const newStatus = item.status === 'In Stock' ? false : true;
-    // Optimistic update
     setMenuItems(menuItems.map(i => i.id === id ? { ...i, status: newStatus ? 'In Stock' : 'Out of Stock' } : i));
     fetch(`http://localhost:5000/api/menu/${id}`, {
       method: 'PUT',
@@ -129,7 +144,7 @@ export default function MenuManagementScreen({ navigation }) {
       description: newDesc,
       price: parseFloat(newPrice) || 0,
       preparationTime: 15,
-      image: newImage.trim() || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=400&q=80',
+      image: sanitizeImage(newImage.trim()),
       availabilityStatus: true,
       rating: parseFloat(newRating) || 5
     };
@@ -148,7 +163,7 @@ export default function MenuManagementScreen({ navigation }) {
           style: 'Modern',
           rating: String(j.item.rating || 5),
           status: j.item.availabilityStatus ? 'In Stock' : 'Out of Stock',
-          image: j.item.image
+          image: sanitizeImage(j.item.image)
         };
         setMenuItems(prev => [added, ...prev]);
         setNewName('');
@@ -173,7 +188,7 @@ export default function MenuManagementScreen({ navigation }) {
     setEditDesc(item.desc || '');
     setEditPrice(item.price ? String(item.price) : '');
     setEditRating(item.rating || '4.9');
-    setEditImage(item.image || '');
+    setEditImage(sanitizeImage(item.image));
     setEditCategory(item.category || 'Lunch');
     setEditStyle(item.style || 'Modern');
     setEditModalVisible(true);
@@ -188,10 +203,8 @@ export default function MenuManagementScreen({ navigation }) {
 
   const handleDeleteDish = async (id) => {
     try {
-      console.log('Deleting menu item id=', id);
       const res = await fetch(`http://localhost:5000/api/menu/${id}`, { method: 'DELETE' });
       const j = await res.json();
-      console.log('Delete response', j);
       if (j.success) {
         setMenuItems(prev => prev.filter(i => String(i.id || i._id) !== String(id)));
       } else {
@@ -210,7 +223,7 @@ export default function MenuManagementScreen({ navigation }) {
       name: editName,
       description: editDesc,
       price: parseFloat(editPrice) || 0,
-      image: editImage,
+      image: sanitizeImage(editImage),
       category: editCategory,
       style: editStyle,
       rating: parseFloat(editRating) || 5
@@ -232,7 +245,7 @@ export default function MenuManagementScreen({ navigation }) {
           style: j.item.style || editStyle,
           rating: String(j.item.rating || editRating),
           status: j.item.availabilityStatus ? 'In Stock' : 'Out of Stock',
-          image: j.item.image
+          image: sanitizeImage(j.item.image)
         };
         setMenuItems(prev => prev.map(m => (m.id === id ? updated : m)));
         setEditModalVisible(false);
@@ -256,21 +269,21 @@ export default function MenuManagementScreen({ navigation }) {
 
   return (
     <View className="flex-1 bg-[#F8F9FC] items-center justify-center">
-      <View className="w-full max-w-[440px] flex-1 bg-[#F8F9FC] relative shadow-2xl overflow-hidden border-x border-[#EAE3DE]">
+      <View className="w-full max-w-[440px] flex-1 bg-[#F8F9FC] relative shadow-2xl border-x border-[#EAE3DE]">
         <StatusBar barStyle="dark-content" backgroundColor="#F8F9FC" />
 
         <ScrollView showsVerticalScrollIndicator={false} className="flex-1 pt-12 px-5 pb-24">
           
           {/* Header */}
-          <View className="flex-row justify-between items-center mb-4">
-            <View className="flex-row items-center">
+          <View className="mb-4">
+            <View className="flex-row items-center mb-3">
               <TouchableOpacity 
                 onPress={() => navigation.goBack()} 
                 className="w-10 h-10 bg-white rounded-full border border-[#EAE3DE] items-center justify-center shadow-xs mr-3 active:scale-95"
               >
                 <Ionicons name="arrow-back" size={18} color="#1F130D" />
               </TouchableOpacity>
-              <View>
+              <View className="flex-1">
                 <Text className="text-2xl font-black text-[#1F130D]">Menu Management</Text>
                 <Text className="text-xs text-gray-500">Manage dishes, categories & availability</Text>
               </View>
@@ -278,10 +291,10 @@ export default function MenuManagementScreen({ navigation }) {
 
             <TouchableOpacity 
               onPress={() => setAddModalVisible(true)} 
-              className="bg-[#B8520B] px-4 py-2.5 rounded-2xl flex-row items-center shadow-md shadow-[#B8520B]/30 active:scale-95"
+              className="bg-[#B8520B] w-full py-3 rounded-2xl flex-row items-center justify-center shadow-md shadow-[#B8520B]/30 active:scale-95"
             >
-              <Ionicons name="add" size={16} color="white" style={{ marginRight: 4 }} />
-              <Text className="font-bold text-xs text-white">Add Dish</Text>
+              <Ionicons name="add" size={18} color="white" style={{ marginRight: 6 }} />
+              <Text className="font-bold text-sm text-white">Add New Dish</Text>
             </TouchableOpacity>
           </View>
 
@@ -337,7 +350,7 @@ export default function MenuManagementScreen({ navigation }) {
                 className="bg-white p-4 rounded-3xl border border-[#EAE3DE] mb-4 shadow-xs"
               >
                 <View className="flex-row items-center mb-3">
-                  <Image source={{ uri: item.image }} className="w-20 h-20 rounded-2xl mr-4" />
+                  <Image source={{ uri: sanitizeImage(item.image) }} className="w-20 h-20 rounded-2xl mr-4" />
                   <View className="flex-1">
                     <View className="flex-row justify-between items-start">
                       <Text className="font-bold text-sm text-[#1F130D] w-3/4" numberOfLines={1}>{item.name}</Text>
@@ -410,7 +423,7 @@ export default function MenuManagementScreen({ navigation }) {
               {selectedDish && (
                 <View>
                   <View className="items-center mb-4">
-                    <Image source={{ uri: selectedDish.image }} className="w-28 h-28 rounded-2xl mb-3 shadow-md" />
+                    <Image source={{ uri: sanitizeImage(selectedDish.image) }} className="w-28 h-28 rounded-2xl mb-3 shadow-md" />
                     <View className="flex-row items-center bg-[#FEF7F3] px-3 py-1 rounded-full border border-[#B8520B]/30 mb-2">
                       <Ionicons name="star" size={12} color="#B8520B" />
                       <Text className="text-xs font-bold text-[#B8520B] ml-1">{selectedDish.rating} Rating</Text>
@@ -630,7 +643,7 @@ export default function MenuManagementScreen({ navigation }) {
                       </Text>
                     </TouchableOpacity>
                     {newImage ? (
-                      <Text className="text-[10px] text-emerald-600 font-bold mt-1" numberOfLines={1}>Selected: {newImage}</Text>
+                      <Text className="text-[10px] text-emerald-600 font-bold mt-1" numberOfLines={1}>Image successfully selected</Text>
                     ) : null}
                   </View>
                 )}
@@ -666,7 +679,7 @@ export default function MenuManagementScreen({ navigation }) {
                     <Text className="font-bold text-gray-700 text-sm">Cancel</Text>
                   </TouchableOpacity>
                   <TouchableOpacity onPress={handleAddDish} className="flex-1 bg-[#B8520B] py-3.5 rounded-2xl items-center shadow-md shadow-[#B8520B]/20">
-                    <Text className="font-bold text-white text-sm">Save Dish</Text>
+                    <Text className="font-bold text-white text-sm">Add Dish</Text>
                   </TouchableOpacity>
                 </View>
               </ScrollView>

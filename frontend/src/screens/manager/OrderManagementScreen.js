@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StatusBar, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StatusBar, ActivityIndicator, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BACKEND_URL } from '../../api/backend';
 
@@ -27,6 +26,10 @@ export default function OrderManagementScreen({ navigation }) {
   useEffect(() => {
     fetchOrders();
   }, []);
+
+  // Calculate top summary metrics
+  const totalOrdersCount = orders.length;
+  const totalRevenueSum = orders.reduce((sum, ord) => sum + Number(ord.totalAmount || ord.total || 0), 0);
 
   return (
     <View className="flex-1 bg-[#F8FAFC] items-center justify-center">
@@ -58,6 +61,20 @@ export default function OrderManagementScreen({ navigation }) {
 
         {/* Content list */}
         <ScrollView showsVerticalScrollIndicator={false} className="flex-1 p-5">
+          {/* Top Summary Banner */}
+          {!loading && orders.length > 0 && (
+            <View className="mb-5 flex-row space-x-3">
+              <View className="flex-1 bg-orange-500/10 p-4 rounded-3xl border-2 border-orange-500/20">
+                <Text className="text-[10px] font-black text-orange-600 uppercase tracking-wider">Total Orders</Text>
+                <Text className="text-xl font-black text-slate-900 mt-1">{totalOrdersCount}</Text>
+              </View>
+              <View className="flex-1 bg-emerald-500/10 p-4 rounded-3xl border-2 border-emerald-500/20">
+                <Text className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Total Revenue</Text>
+                <Text className="text-xl font-black text-slate-900 mt-1">${totalRevenueSum.toFixed(2)}</Text>
+              </View>
+            </View>
+          )}
+
           {loading ? (
             <View className="py-20 items-center justify-center">
               <ActivityIndicator size="large" color="#F97316" />
@@ -76,6 +93,9 @@ export default function OrderManagementScreen({ navigation }) {
                 const formattedDate = orderDate.toLocaleDateString();
                 const formattedTime = orderDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                 const totalMoney = Number(order.totalAmount || order.total || 0).toFixed(2);
+                
+                // Use orderItems from your database schema
+                const itemsList = order.orderItems || order.items || [];
 
                 return (
                   <View key={order._id || index} className="bg-white p-4 rounded-3xl border-2 border-slate-100 shadow-md">
@@ -91,21 +111,50 @@ export default function OrderManagementScreen({ navigation }) {
                       </View>
                     </View>
 
+                    {/* Customer & Date Info */}
                     <View className="border-t border-slate-100 pt-2.5 mt-1 space-y-1">
                       <View className="flex-row justify-between">
                         <Text className="text-[11px] font-medium text-slate-500">Customer:</Text>
-                        <Text className="text-[11px] font-bold text-slate-800">{order.customerName || order.user?.name || 'Guest User'}</Text>
+                        <Text className="text-[11px] font-bold text-slate-800">
+                          {order.customerName || order.customer?.name || order.user?.name || 'Walk-in / Guest Customer'}
+                        </Text>
                       </View>
                       <View className="flex-row justify-between">
                         <Text className="text-[11px] font-medium text-slate-500">Date & Time:</Text>
                         <Text className="text-[11px] font-bold text-slate-800">{formattedDate} at {formattedTime}</Text>
                       </View>
-                      <View className="flex-row justify-between">
-                        <Text className="text-[11px] font-medium text-slate-500">Items Count:</Text>
-                        <Text className="text-[11px] font-bold text-slate-800">{order.items?.length || 0} items</Text>
-                      </View>
                     </View>
 
+                    {/* Food Items Preview (Image, Name & Quantity) */}
+                    <View className="border-t border-slate-100 pt-2.5 mt-2.5 space-y-2">
+                      <Text className="text-[10px] font-black text-slate-400 uppercase">Ordered Items ({itemsList.length})</Text>
+                      {itemsList.map((item, itemIdx) => {
+                        const foodName = item.name || item.menuItem?.name || item.title || 'Food Item';
+                        const foodImage = item.image || item.menuItem?.image || item.img;
+                        const qty = item.quantity || item.qty || 1;
+                        const price = item.price || 0;
+
+                        return (
+                          <View key={itemIdx} className="flex-row items-center justify-between bg-slate-50 p-2 rounded-2xl border border-slate-100">
+                            <View className="flex-row items-center space-x-2.5 flex-1">
+                              {foodImage ? (
+                                <Image source={{ uri: foodImage }} className="w-10 h-10 rounded-xl bg-slate-200" resizeMode="cover" />
+                              ) : (
+                                <View className="w-10 h-10 rounded-xl bg-orange-500/10 items-center justify-center border border-orange-500/20">
+                                  <Ionicons name="fast-food" size={16} color="#F97316" />
+                                </View>
+                              )}
+                              <View className="flex-1">
+                                <Text className="text-xs font-black text-slate-900" numberOfLines={1}>{foodName}</Text>
+                                <Text className="text-[10px] font-bold text-slate-500">Qty: {qty} x ${Number(price).toFixed(2)}</Text>
+                              </View>
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+
+                    {/* Total Amount Footer */}
                     <View className="border-t border-slate-100 pt-3 mt-3 flex-row items-center justify-between">
                       <Text className="text-xs font-black text-slate-400 uppercase">Total Amount</Text>
                       <Text className="text-base font-black text-orange-500">${totalMoney}</Text>

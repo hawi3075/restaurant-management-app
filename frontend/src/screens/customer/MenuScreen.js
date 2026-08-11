@@ -30,15 +30,29 @@ export default function MenuScreen({ navigation }) {
 
       const items = data.items || data || [];
 
-      // If database items exist, map them to match component structures cleanly
-      const formattedItems = items.map((item, index) => ({
-        id: item._id || item.id || index + 1,
-        name: item.name || 'Delicious Dish',
-        desc: item.description || item.desc || 'Freshly prepared ingredients',
-        price: item.price || 15.00,
-        rating: item.rating ? item.rating.toString() : '4.8',
-        image: item.image || 'https://images.unsplash.com/photo-1541544741938-0af808871cc0?auto=format&fit=crop&w=400&q=80'
-      }));
+      // Map items and ensure image URLs are fully qualified with BACKEND_URL if they are relative paths
+      const formattedItems = items.map((item, index) => {
+        let imageUrl = item.image;
+        if (imageUrl) {
+          if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
+            imageUrl = `${BACKEND_URL}${imageUrl.startsWith('/') ? '' : '/'}${imageUrl}`;
+          }
+        } else {
+          imageUrl = 'https://images.unsplash.com/photo-1541544741938-0af808871cc0?auto=format&fit=crop&w=400&q=80';
+        }
+
+        return {
+          id: item._id || item.id || index + 1,
+          name: item.name || 'Delicious Dish',
+          desc: item.description || item.desc || 'Freshly prepared ingredients',
+          ingredients: item.ingredients || item.ingredientList || '',
+          cookingStyle: item.cookingStyle || item.style || selectedStyle,
+          spicyLevel: item.spicyLevel || item.spice || 'Regular',
+          price: item.price || 15.00,
+          rating: item.rating ? item.rating.toString() : '4.8',
+          image: imageUrl
+        };
+      });
 
       setMenuItems(formattedItems);
     } catch (error) {
@@ -151,8 +165,12 @@ export default function MenuScreen({ navigation }) {
                   key={item.id} 
                   className="bg-white p-4 rounded-3xl border border-[#EAE3DE] mb-4 shadow-xs"
                 >
-                  <View className="flex-row items-center mb-3">
-                    <Image source={{ uri: item.image }} className="w-20 h-20 rounded-2xl mr-4" />
+                  <View className="flex-row items-start mb-3">
+                    <Image 
+                      source={{ uri: item.image }} 
+                      className="w-20 h-20 rounded-2xl mr-4 mt-1 bg-gray-100" 
+                      resizeMode="cover"
+                    />
                     <View className="flex-1">
                       <View className="flex-row justify-between items-start">
                         <Text className="font-bold text-sm text-[#1F130D] w-3/4" numberOfLines={1}>{item.name}</Text>
@@ -161,13 +179,38 @@ export default function MenuScreen({ navigation }) {
                           <Text className="text-[10px] font-bold text-[#B8520B] ml-1">{item.rating}</Text>
                         </View>
                       </View>
-                      <Text className="text-xs text-gray-400 mt-1" numberOfLines={1}>{item.desc}</Text>
-                      <Text className="font-black text-sm text-[#1F130D] mt-2">${item.price.toFixed(2)}</Text>
+
+                      {/* Full description uploaded by manager */}
+                      <Text className="text-xs text-gray-600 mt-1.5 leading-relaxed" numberOfLines={3}>
+                        {item.desc}
+                      </Text>
+
+                      {/* Additional Manager Upload Details (Ingredients / Spicy level) */}
+                      {(item.ingredients || item.spicyLevel) && (
+                        <View className="mt-2 pt-2 border-t border-gray-100 flex-row flex-wrap gap-2">
+                          {item.ingredients ? (
+                            <View className="bg-gray-50 px-2 py-0.5 rounded-md border border-gray-200">
+                              <Text className="text-[9px] text-gray-500 font-medium">
+                                <Text className="font-bold text-[#1F130D]">Ingredients:</Text> {item.ingredients}
+                              </Text>
+                            </View>
+                          ) : null}
+                          {item.spicyLevel && (
+                            <View className="bg-[#FEF7F3] px-2 py-0.5 rounded-md border border-[#B8520B]/20">
+                              <Text className="text-[9px] text-[#B8520B] font-semibold">
+                                Spice: {item.spicyLevel}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      )}
+
+                      <Text className="font-black text-sm text-[#1F130D] mt-2.5">${item.price.toFixed(2)}</Text>
                     </View>
                   </View>
 
                   {/* Bottom Action Buttons Row: Detail, Cart, and Checkout */}
-                  <View className="flex-row space-x-2 pt-2 border-t border-gray-100">
+                  <View className="flex-row space-x-2 pt-2.5 border-t border-gray-100">
                     <TouchableOpacity 
                       onPress={() => navigation.navigate('FoodDetailScreen', { foodItem: item })} 
                       className="flex-1 bg-gray-100 py-2 rounded-xl items-center flex-row justify-center"

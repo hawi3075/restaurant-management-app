@@ -1,152 +1,233 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Modal, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StatusBar, TextInput, Modal, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { BACKEND_URL } from '../../api/backend';
 
 export default function SupportMessageScreen({ navigation }) {
-  const [messages, setMessages] = useState([
-    // placeholder while loading
-  ]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [tickets, setTickets] = useState([]);
   
-  
-  const [selectedChat, setSelectedChat] = useState(null);
-  const [replyText, setReplyText] = useState('');
-  const [isModalVisible, setIsModalVisible] = useState(false);
+  // Reply modal state
+  const [replyModalVisible, setReplyModalVisible] = useState(false);
+  const [selectedTicket, setSelectedTicket] = useState(null);
+  const [managerResponse, setManagerResponse] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
 
-  const handleOpenReply = (item) => {
-    setSelectedChat(item);
-    setReplyText('');
-    setIsModalVisible(true);
+  useEffect(() => {
+    fetchManagerTickets();
+  }, []);
+
+  const fetchManagerTickets = async () => {
+    try {
+      setIsLoading(true);
+      const token = await AsyncStorage.getItem('token');
+      
+      const response = await fetch(`${BACKEND_URL}/api/support/all`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        setTickets(data.tickets || []);
+      } else {
+        throw new Error(data.message || 'Failed to load support tickets.');
+      }
+    } catch (error) {
+      console.error('Fetch Manager Tickets Error:', error);
+      Alert.alert('Error', error.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleSendReply = () => {
-    if (!replyText.trim()) {
-      Alert.alert('Error', 'Please enter a reply message.');
+  const handleOpenReplyModal = (ticket) => {
+    setSelectedTicket(ticket);
+    setManagerResponse(ticket.managerResponse || '');
+    setSuccessMessage('');
+    setReplyModalVisible(true);
+  };
+
+  const handleSendResponse = async () => {
+    if (!selectedTicket || (!selectedTicket._id && !selectedTicket.id)) {
+      Alert.alert('Error', 'Invalid ticket reference.');
       return;
     }
 
-    // send reply to backend
-    fetch(`http://localhost:5000/api/support/${selectedChat.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reply: replyText, status: 'Resolved' })
-    }).then(r => r.json()).then(j => {
-      if (j.success && j.message) {
-        setMessages(prev => prev.map(m => m._id === j.message._id || m.id === j.message._id ? { ...m, reply: j.message.reply, status: j.message.status } : m));
-        setIsModalVisible(false);
-        Alert.alert('Success', 'Reply sent successfully!');
-      } else {
-        Alert.alert('Error', 'Failed to send reply');
-      }
-    }).catch(err => {
-      console.error('Reply error', err);
-      Alert.alert('Error', 'Failed to send reply');
-    });
+    if (!managerResponse.trim()) {
+      Alert.alert('Error', 'Please write a response before sending.');
+      return;
+    }
+
+    const ticketId = selectedTicket._id || selectedTicket.id;
+
+    try {
+      setIsSubmitting(true);
+      setSuccessMessage('');
+      const token = await AsyncStorage.getItem('token');
+
+      const response = await fetch(`${BACKEND_URL}/api/support/${ticketId}/respond`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ managerResponse })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to send response.');
+
+      setSuccessMessage('Send successfully! Response sent to the customer.');
+      Alert.alert('Success', 'Response sent successfully!');
+      
+      // Refresh tickets list
+      fetchManagerTickets();
+
+      // Close modal after a brief moment so user sees green message
+      setTimeout(() => {
+        setReplyModalVisible(false);
+        setSuccessMessage('');
+      }, 1200);
+
+    } catch (error) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  useEffect(() => {
-    const fetchMessages = async () => {
-      try {
-        const res = await fetch('http://localhost:5000/api/support');
-        const data = await res.json();
-        if (Array.isArray(data)) setMessages(data);
-      } catch (err) {
-        console.error('Fetch support messages error', err);
-      }
-    };
-    fetchMessages();
-  }, []);
+  if (isLoading) {
+    return (
+      <View className="flex-1 bg-[#F8F9FC] items-center justify-center">
+        <ActivityIndicator size="large" color="#B8520B" />
+      </View>
+    );
+  }
 
   return (
-    <View className="flex-1 bg-[#F8FAFC] items-center justify-center">
-      <View className="w-full max-w-[440px] flex-1 bg-white relative shadow-2xl overflow-hidden border-x-2 border-slate-200">
-        <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
+    <View className="flex-1 bg-[#F8F9FC] items-center">
+      <View className="w-full max-w-[440px] flex-1 bg-[#F8F9FC] relative shadow-2xl">
+        <StatusBar barStyle="dark-content" backgroundColor="#F8F9FC" />
 
-        <ScrollView showsVerticalScrollIndicator={false} className="flex-1 pt-10 pb-24 px-5">
-          
-          {/* Header */}
-          <View className="flex-row justify-between items-center mb-6">
-            <TouchableOpacity 
-              onPress={() => navigation.goBack()} 
-              className="w-11 h-11 bg-slate-50 rounded-2xl border-2 border-slate-200 items-center justify-center shadow-md active:scale-95"
-            >
-              <Ionicons name="arrow-back" size={20} color="#0F172A" />
-            </TouchableOpacity>
-            <Text className="text-xl font-black text-slate-900">Support Messages</Text>
-            <View className="w-11" />
-          </View>
+        {/* Top Header */}
+        <View className="pt-12 px-5 pb-4 bg-white border-b border-[#EAE3DE] flex-row justify-between items-center">
+          <Text className="text-xl font-black text-[#1F130D]">Manager Support</Text>
+          <TouchableOpacity onPress={fetchManagerTickets}>
+            <Ionicons name="reload" size={18} color="#B8520B" />
+          </TouchableOpacity>
+        </View>
 
-          {/* Chat List */}
-          <Text className="text-xs font-black text-slate-400 uppercase tracking-wider mb-3">Customer Inquiries</Text>
-          <View className="space-y-3.5 pb-6">
-            {messages.map((item) => (
-              <View key={item.id} className="bg-white p-4 rounded-3xl border-2 border-slate-100 shadow-md">
+        {/* Tickets List */}
+        <ScrollView showsVerticalScrollIndicator={false} className="px-5 pt-4 pb-24">
+          <Text className="text-xs font-bold text-gray-400 uppercase mb-3 tracking-wider">Customer Support Tickets</Text>
+
+          {tickets.length === 0 ? (
+            <View className="bg-white p-6 rounded-3xl border border-[#EAE3DE] items-center mt-10">
+              <Ionicons name="chatbubbles-outline" size={32} color="#9E9E9E" style={{ marginBottom: 8 }} />
+              <Text className="text-xs font-bold text-[#1F130D] mb-1">No support requests</Text>
+              <Text className="text-[11px] text-gray-400 text-center">Customer messages sent from profiles will show up here.</Text>
+            </View>
+          ) : (
+            tickets.map((ticket, index) => (
+              <View key={ticket._id || ticket.id || index} className="bg-white rounded-2xl p-4 border border-[#EAE3DE] mb-3 shadow-xs">
                 <View className="flex-row justify-between items-center mb-2">
-                  <Text className="text-sm font-black text-slate-900">{item.user}</Text>
-                  <Text className="text-[10px] font-bold text-slate-400">{item.time}</Text>
+                  <View className="flex-row items-center">
+                    <View className="w-7 h-7 bg-[#FEF7F3] rounded-full items-center justify-center mr-2">
+                      <Ionicons name="person" size={12} color="#B8520B" />
+                    </View>
+                    <View>
+                      <Text className="text-xs font-bold text-[#1F130D]">{ticket.name || 'Customer'}</Text>
+                      <Text className="text-[10px] text-gray-400">{ticket.email || 'No email provided'}</Text>
+                    </View>
+                  </View>
+                  <View className={`px-2.5 py-0.5 rounded-full ${ticket.managerResponse ? 'bg-green-100' : 'bg-yellow-100'}`}>
+                    <Text className={`text-[9px] font-bold ${ticket.managerResponse ? 'text-green-700' : 'text-yellow-700'}`}>
+                      {ticket.managerResponse ? 'REPLIED' : 'PENDING'}
+                    </Text>
+                  </View>
                 </View>
-                <Text className="text-xs font-medium text-slate-600 mb-3 bg-slate-50 p-3 rounded-2xl border border-slate-100">
-                  {item.message}
-                </Text>
-                <View className="flex-row items-center justify-between">
-                  <Text className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full ${item.status === 'Pending' ? 'bg-orange-500/10 text-orange-500 border border-orange-500/20' : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'}`}>
-                    {item.status}
-                  </Text>
-                  <TouchableOpacity 
-                    onPress={() => handleOpenReply(item)}
-                    className="px-4 py-2 bg-slate-900 rounded-xl shadow-sm active:scale-95"
-                  >
-                    <Text className="text-xs font-black text-white">Reply</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))}
-          </View>
 
+                <View className="bg-[#F8F9FC] p-3 rounded-xl border border-[#EAE3DE] mb-3">
+                  <Text className="text-[11px] text-[#1F130D] font-medium">{ticket.message}</Text>
+                </View>
+
+                {ticket.managerResponse && (
+                  <View className="bg-green-50/50 p-2.5 rounded-xl border border-green-200 mb-3">
+                    <Text className="text-[10px] font-bold text-green-800 mb-0.5">Your Response:</Text>
+                    <Text className="text-[11px] text-gray-700">{ticket.managerResponse}</Text>
+                  </View>
+                )}
+
+                <TouchableOpacity 
+                  onPress={() => handleOpenReplyModal(ticket)}
+                  className="bg-[#1F130D] py-2.5 rounded-xl items-center"
+                >
+                  <Text className="text-white text-xs font-bold">
+                    {ticket.managerResponse ? 'Edit Response' : 'Reply'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ))
+          )}
         </ScrollView>
 
         {/* Reply Modal */}
-        <Modal
-          visible={isModalVisible}
-          animationType="slide"
-          transparent={true}
-          onRequestClose={() => setIsModalVisible(false)}
-        >
+        <Modal visible={replyModalVisible} animationType="slide" transparent={true}>
           <View className="flex-1 bg-black/50 justify-end items-center">
-            <View className="w-full max-w-[440px] bg-white rounded-t-[32px] p-6 border-t-2 border-slate-200 shadow-2xl">
-              
+            <View className="bg-white w-full max-w-[440px] rounded-t-3xl p-6">
               <View className="flex-row justify-between items-center mb-4">
-                <Text className="text-base font-black text-slate-900">
-                  Reply to {selectedChat?.user}
-                </Text>
-                <TouchableOpacity 
-                  onPress={() => setIsModalVisible(false)}
-                  className="w-8 h-8 rounded-full bg-slate-100 items-center justify-center"
-                >
-                  <Ionicons name="close" size={18} color="#0F172A" />
+                <Text className="text-base font-black text-[#1F130D]">Reply to Customer</Text>
+                <TouchableOpacity onPress={() => setReplyModalVisible(false)}>
+                  <Ionicons name="close" size={20} color="#1F130D" />
                 </TouchableOpacity>
               </View>
 
-              <Text className="text-xs font-medium text-slate-500 mb-4 bg-slate-50 p-3 rounded-2xl border border-slate-100">
-                "{selectedChat?.message}"
-              </Text>
+              {/* Green Success Banner */}
+              {successMessage ? (
+                <View className="bg-green-50 border border-green-200 p-3 rounded-xl mb-3 flex-row items-center">
+                  <Ionicons name="checkmark-circle" size={16} color="#15803D" style={{ marginRight: 6 }} />
+                  <Text className="text-green-700 text-xs font-bold flex-1">{successMessage}</Text>
+                </View>
+              ) : null}
 
-              <Text className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Your Response</Text>
-              <TextInput
-                className="w-full bg-slate-50 p-4 rounded-2xl border-2 border-slate-200 text-slate-900 font-medium text-sm mb-4 h-28 text-top"
-                placeholder="Type your message here..."
-                placeholderTextColor="#94A3B8"
-                multiline={true}
-                value={replyText}
-                onChangeText={setReplyText}
+              {selectedTicket && (
+                <View className="bg-[#F8F9FC] p-3 rounded-xl border border-[#EAE3DE] mb-4">
+                  <Text className="text-[10px] font-bold text-gray-400 mb-1">CUSTOMER MESSAGE:</Text>
+                  <Text className="text-xs text-[#1F130D]">{selectedTicket.message}</Text>
+                </View>
+              )}
+
+              <Text className="text-[11px] font-bold text-gray-500 mb-1">Your Response</Text>
+              <TextInput 
+                className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs mb-4 text-[#1F130D] h-28" 
+                placeholder="Type your response here..."
+                placeholderTextColor="#9E9E9E"
+                multiline
+                textAlignVertical="top"
+                value={managerResponse}
+                onChangeText={(text) => {
+                  setManagerResponse(text);
+                  if (successMessage) setSuccessMessage('');
+                }} 
               />
 
-              <TouchableOpacity
-                onPress={handleSendReply}
-                className="w-full bg-orange-500 py-4 rounded-2xl items-center shadow-lg active:scale-95"
+              <TouchableOpacity 
+                onPress={handleSendResponse} 
+                disabled={isSubmitting}
+                className="bg-[#B8520B] py-3.5 rounded-xl items-center flex-row justify-center"
               >
-                <Text className="text-sm font-black text-white uppercase tracking-wider">Send Reply</Text>
+                {isSubmitting ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text className="text-white text-xs font-bold">Send Reply</Text>
+                )}
               </TouchableOpacity>
-
             </View>
           </View>
         </Modal>

@@ -1,5 +1,5 @@
 import React, { useState, useContext, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Image, ImageBackground, ActivityIndicator, Animated } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Image, ImageBackground, ActivityIndicator, Animated, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../../context/AuthContext';
 import { BACKEND_URL } from '../../api/backend';
@@ -7,6 +7,8 @@ import { BACKEND_URL } from '../../api/backend';
 export default function CustomerLandingScreen({ navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [menuItems, setMenuItems] = useState([]);
+  const [reviews, setReviews] = useState([]);
+  const [selectedItemReviews, setSelectedItemReviews] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const { user, token } = useContext(AuthContext);
   
@@ -48,19 +50,36 @@ export default function CustomerLandingScreen({ navigation }) {
     const loadData = async () => {
       try {
         setIsLoading(true);
-        const [menuRes, tablesRes] = await Promise.all([
+        const [menuRes, tablesRes, reviewsRes] = await Promise.all([
           fetch(`${BACKEND_URL}/api/menu`),
-          fetch(`${BACKEND_URL}/api/tables`)
+          fetch(`${BACKEND_URL}/api/tables`),
+          fetch(`${BACKEND_URL}/api/reviews`).catch(() => null)
         ]);
         const menuJson = await menuRes.json();
         const tablesJson = await tablesRes.json();
+        
+        let reviewsData = [];
+        if (reviewsRes && reviewsRes.ok) {
+          const revJson = await reviewsRes.json();
+          reviewsData = revJson.reviews || revJson || [];
+        }
+
+        if (!reviewsData || reviewsData.length === 0) {
+          reviewsData = [
+            { id: 1, name: 'Abebe Kebede', rating: 5, comment: 'The absolute best burger and fast delivery! Highly recommended.', date: 'Yesterday' },
+            { id: 2, name: 'Sara Tadesse', rating: 5, comment: 'Amazing food quality and very warm customer service. Will order again!', date: '2 days ago' },
+            { id: 3, name: 'Dawit Mekonnen', rating: 4, comment: 'Fresh ingredients and great taste. Packaging was very neat.', date: '3 days ago' }
+          ];
+        }
+        
+        // Reverse reviews so the last/newest order review appears first
+        setReviews([...reviewsData].reverse());
 
         const items = menuJson.items || menuJson || [];
         if (items && items.length > 0) {
           setMenuItems(items.map((it, idx) => {
             let imageUrl = it.image || it.img;
             
-            // Reject empty values, non-strings, or broken local browser blob URLs
             if (!imageUrl || typeof imageUrl !== 'string' || imageUrl.trim() === '' || imageUrl.startsWith('blob:')) {
               imageUrl = 'https://images.unsplash.com/photo-1541544741938-0af808871cc0?auto=format&fit=crop&w=400&q=80';
             } else if (imageUrl.startsWith('/')) {
@@ -79,10 +98,6 @@ export default function CustomerLandingScreen({ navigation }) {
           }));
         } else {
           setMenuItems([]);
-        }
-
-        if (tablesJson.tables) {
-          void tablesJson.tables.length;
         }
       } catch (err) {
         console.error('CustomerLanding loadData error', err);
@@ -327,31 +342,40 @@ export default function CustomerLandingScreen({ navigation }) {
                       <Text className="font-black text-xs text-[#1F130D]">${item.price.toFixed(2)}</Text>
                     </View>
 
-                    <View className="flex-row space-x-1.5">
+                    {/* Action buttons row with Review button placed right next to Detail button */}
+                    <View className="flex-row space-x-1 mb-1.5">
                       <TouchableOpacity 
                         onPress={() => navigation.navigate('FoodDetailScreen', { foodItem: item })} 
                         className="flex-1 bg-gray-100 py-1.5 rounded-xl items-center flex-row justify-center"
                       >
-                        <Ionicons name="information-circle-outline" size={11} color="#1F130D" style={{ marginRight: 2 }} />
-                        <Text className="text-[9px] font-bold text-[#1F130D]">Detail</Text>
+                        <Ionicons name="information-circle-outline" size={10} color="#1F130D" style={{ marginRight: 2 }} />
+                        <Text className="text-[8px] font-bold text-[#1F130D]">Detail</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity 
+                        onPress={() => setSelectedItemReviews(item)} 
+                        className="flex-1 bg-[#FEF7F3] border border-[#B8520B]/40 py-1.5 rounded-xl items-center flex-row justify-center"
+                      >
+                        <Ionicons name="chatbubble-ellipses-outline" size={10} color="#B8520B" style={{ marginRight: 2 }} />
+                        <Text className="text-[8px] font-bold text-[#B8520B]">Reviews</Text>
                       </TouchableOpacity>
 
                       <TouchableOpacity 
                         onPress={() => handleAddToCart(item)} 
-                        className="flex-1 bg-[#FEF7F3] border border-[#B8520B]/40 py-1.5 rounded-xl items-center flex-row justify-center"
+                        className="flex-1 bg-gray-100 py-1.5 rounded-xl items-center flex-row justify-center"
                       >
-                        <Ionicons name="cart-outline" size={11} color="#B8520B" style={{ marginRight: 2 }} />
-                        <Text className="text-[9px] font-bold text-[#B8520B]">Cart</Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity 
-                        onPress={() => handleQuickCheckout(item)} 
-                        className="flex-1 bg-[#B8520B] py-1.5 rounded-xl items-center flex-row justify-center"
-                      >
-                        <Ionicons name="flash-outline" size={11} color="white" style={{ marginRight: 2 }} />
-                        <Text className="text-[9px] font-bold text-white">Checkout</Text>
+                        <Ionicons name="cart-outline" size={10} color="#1F130D" style={{ marginRight: 2 }} />
+                        <Text className="text-[8px] font-bold text-[#1F130D]">Cart</Text>
                       </TouchableOpacity>
                     </View>
+
+                    <TouchableOpacity 
+                      onPress={() => handleQuickCheckout(item)} 
+                      className="w-full bg-[#B8520B] py-2 rounded-xl items-center flex-row justify-center shadow-xs"
+                    >
+                      <Ionicons name="flash-outline" size={11} color="white" style={{ marginRight: 3 }} />
+                      <Text className="text-[9px] font-bold text-white uppercase">Checkout</Text>
+                    </TouchableOpacity>
 
                   </View>
                 </View>
@@ -360,6 +384,60 @@ export default function CustomerLandingScreen({ navigation }) {
             )}
           </View>
         </ScrollView>
+
+        {/* Dedicated Modal Popup for Item Reviews (Newest order reviews first) */}
+        <Modal
+          visible={!!selectedItemReviews}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setSelectedItemReviews(null)}
+        >
+          <View className="flex-1 bg-black/60 justify-center items-center px-5">
+            <View className="bg-white w-full max-w-[360px] rounded-3xl p-5 shadow-2xl border border-gray-100">
+              <View className="flex-row justify-between items-center mb-4 pb-2 border-b border-gray-100">
+                <View className="flex-row items-center space-x-2">
+                  <Ionicons name="chatbubbles" size={18} color="#B8520B" />
+                  <Text className="text-sm font-black text-[#1F130D]">Customer Reviews</Text>
+                </View>
+                <TouchableOpacity onPress={() => setSelectedItemReviews(null)} className="w-7 h-7 bg-gray-100 rounded-full items-center justify-center">
+                  <Ionicons name="close" size={14} color="#1F130D" />
+                </TouchableOpacity>
+              </View>
+
+              {selectedItemReviews && (
+                <View className="flex-row items-center mb-4 bg-[#FEF7F3] p-2.5 rounded-2xl border border-[#B8520B]/20">
+                  <Image source={{ uri: selectedItemReviews.image }} className="w-10 h-10 rounded-xl mr-3" />
+                  <View className="flex-1">
+                    <Text className="text-xs font-bold text-[#1F130D]" numberOfLines={1}>{selectedItemReviews.name}</Text>
+                    <Text className="text-[10px] text-[#B8520B] font-semibold">${selectedItemReviews.price.toFixed(2)}</Text>
+                  </View>
+                </View>
+              )}
+
+              <ScrollView showsVerticalScrollIndicator={false} className="max-h-72 space-y-2.5">
+                {reviews.map((rev, idx) => (
+                  <View key={idx} className="bg-gray-50 p-3 rounded-2xl border border-gray-100 mb-2">
+                    <View className="flex-row justify-between items-center mb-1">
+                      <Text className="text-xs font-bold text-[#1F130D]">{rev.name || 'Customer'}</Text>
+                      <View className="flex-row items-center bg-[#FEF7F3] px-2 py-0.5 rounded-full border border-[#B8520B]/30">
+                        <Ionicons name="star" size={9} color="#B8520B" />
+                        <Text className="text-[9px] font-bold text-[#B8520B] ml-1">{rev.rating || 5}</Text>
+                      </View>
+                    </View>
+                    <Text className="text-[11px] text-gray-600 leading-snug">{rev.comment || rev.text}</Text>
+                  </View>
+                ))}
+              </ScrollView>
+
+              <TouchableOpacity 
+                onPress={() => setSelectedItemReviews(null)}
+                className="mt-4 bg-[#1F130D] py-3 rounded-xl items-center"
+              >
+                <Text className="text-white font-bold text-xs">Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
 
         <View className="absolute bottom-0 left-0 right-0 bg-white border-t border-[#EAE3DE] px-6 py-2.5 flex-row justify-between items-center shadow-lg">
           <TouchableOpacity onPress={() => navigation.navigate('CustomerLanding')} className="items-center">

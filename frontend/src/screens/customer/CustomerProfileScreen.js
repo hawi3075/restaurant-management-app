@@ -15,22 +15,35 @@ export default function CustomerProfileScreen({ route, navigation }) {
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
 
+  // Support message, success banner, & responses state
+  const [supportMessage, setSupportMessage] = useState('');
+  const [isSubmittingSupport, setIsSubmittingSupport] = useState(false);
+  const [supportSuccessMsg, setSupportSuccessMsg] = useState('');
+  const [supportTickets, setSupportTickets] = useState([]);
+  const [lastCheckedResponseCount, setLastCheckedResponseCount] = useState(0);
+
   // Modal states
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [addressModalVisible, setAddressModalVisible] = useState(false);
   const [supportModalVisible, setSupportModalVisible] = useState(false);
-  const [notificationSettingsVisible, setNotificationSettingsVisible] = useState(false);
   const [reviewsModalVisible, setReviewsModalVisible] = useState(false);
 
-  // Fetch real profile data from database on load
+  // Fetch real profile data and support history on load
   useEffect(() => {
     fetchUserProfile();
+    fetchSupportTickets();
+
+    // Poll for manager responses every 10 seconds
+    const interval = setInterval(() => {
+      fetchSupportTickets(true);
+    }, 10000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const fetchUserProfile = async () => {
     try {
       setIsLoading(true);
-      // Prefer token and user from AuthContext when available
       let token = await AsyncStorage.getItem('token');
       const ctxUser = authContext?.user;
       if (ctxUser && ctxUser.email) {
@@ -38,11 +51,9 @@ export default function CustomerProfileScreen({ route, navigation }) {
         setEmail(ctxUser.email || '');
         setPhone(ctxUser.phone || '+1 234 567 890');
         setAddress(ctxUser.address || '123 Main Street, Apt 4B');
-        // still attempt to refresh from backend if we have a token
       }
 
       if (!token) {
-        // Fallback to route params
         if (route?.params?.user) {
           const u = route.params.user;
           setName(u.name || '');
@@ -73,12 +84,45 @@ export default function CustomerProfileScreen({ route, navigation }) {
       setAddress(data.user.address || '123 Main Street, Apt 4B');
     } catch (error) {
       console.error('Fetch Profile Error:', error);
-      // Fallback defaults so screen doesn't break
       setName('John Doe');
       setEmail('john.doe@example.com');
       setPhone('+1 234 567 890');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchSupportTickets = async (isPolling = false) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) return;
+
+      const response = await fetch(`${BACKEND_URL}/api/support/my-tickets`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-user-email': authContext?.user?.email || ''
+        }
+      });
+
+      const data = await response.json();
+      if (response.ok && data.tickets) {
+        const fetchedTickets = data.tickets;
+        
+        // Count how many tickets have manager responses
+        const respondedCount = fetchedTickets.filter(t => t.managerResponse && t.managerResponse.trim() !== '').length;
+
+        // If polling and we found new manager responses, trigger alert
+        if (isPolling && lastCheckedResponseCount > 0 && respondedCount > lastCheckedResponseCount) {
+          Alert.alert('New Support Response', 'The manager has written a response to your support message!');
+        }
+
+        setLastCheckedResponseCount(respondedCount);
+        setSupportTickets(fetchedTickets);
+      }
+    } catch (error) {
+      console.error('Fetch Support Tickets Error:', error);
     }
   };
 
@@ -100,12 +144,10 @@ export default function CustomerProfileScreen({ route, navigation }) {
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Failed to update profile.');
 
-      // Update stored user and auth context if available
       const updatedUser = { ...(authContext?.user || {}), name, email, phone, address };
       try {
         await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
         if (authContext && authContext.login) {
-          // re-run login to refresh context and storage
           await authContext.login(token, updatedUser);
         }
       } catch (e) {
@@ -145,6 +187,40 @@ export default function CustomerProfileScreen({ route, navigation }) {
       Alert.alert('Error', error.message);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSendSupportMessage = async () => {
+    if (!supportMessage.trim()) {
+      Alert.alert('Error', 'Please enter a support message before sending.');
+      return;
+    }
+
+    try {
+      setIsSubmittingSupport(true);
+      setSupportSuccessMsg('');
+      const token = await AsyncStorage.getItem('token');
+
+      const response = await fetch(`${BACKEND_URL}/api/support`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-user-email': authContext?.user?.email || ''
+        },
+        body: JSON.stringify({ message: supportMessage, name, email })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to send support message.');
+
+      setSupportSuccessMsg('Send successfully! Your message has been routed to the manager support page.');
+      setSupportMessage('');
+      fetchSupportTickets(); // Refresh tickets list
+    } catch (error) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setIsSubmittingSupport(false);
     }
   };
 
@@ -250,19 +326,6 @@ export default function CustomerProfileScreen({ route, navigation }) {
           <Text className="text-xs font-bold text-gray-400 uppercase mb-2 ml-1 tracking-wider">Preferences & Support</Text>
           <View className="bg-white rounded-2xl border border-[#EAE3DE] mb-6 overflow-hidden shadow-xs">
             <TouchableOpacity 
-              onPress={() => setNotificationSettingsVisible(true)}
-              className="flex-row items-center justify-between p-4 border-b border-[#F8F9FC]"
-            >
-              <View className="flex-row items-center">
-                <View className="w-8 h-8 bg-gray-100 rounded-xl items-center justify-center mr-3">
-                  <Ionicons name="notifications-outline" size={16} color="#757575" />
-                </View>
-                <Text className="text-xs font-bold text-[#1F130D]">Notifications</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={14} color="#9E9E9E" />
-            </TouchableOpacity>
-
-            <TouchableOpacity 
               onPress={() => setSupportModalVisible(true)}
               className="flex-row items-center justify-between p-4"
             >
@@ -351,39 +414,88 @@ export default function CustomerProfileScreen({ route, navigation }) {
           </View>
         </Modal>
 
-        {/* Notifications Modal */}
-        <Modal visible={notificationSettingsVisible} animationType="slide" transparent={true}>
-          <View className="flex-1 bg-black/50 justify-end items-center">
-            <View className="bg-white w-full max-w-[440px] rounded-t-3xl p-6">
-              <View className="flex-row justify-between items-center mb-4">
-                <Text className="text-base font-black text-[#1F130D]">Notification Preferences</Text>
-                <TouchableOpacity onPress={() => setNotificationSettingsVisible(false)}>
-                  <Ionicons name="close" size={20} color="#1F130D" />
-                </TouchableOpacity>
-              </View>
-              <Text className="text-xs text-gray-500 mb-4">You will receive push updates regarding order statuses, delivery tracking, and exclusive discounts.</Text>
-              <TouchableOpacity onPress={() => setNotificationSettingsVisible(false)} className="bg-[#B8520B] py-3.5 rounded-xl items-center">
-                <Text className="text-white text-xs font-bold">Save Preferences</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
-
         {/* Help & Support Modal */}
         <Modal visible={supportModalVisible} animationType="slide" transparent={true}>
           <View className="flex-1 bg-black/50 justify-end items-center">
-            <View className="bg-white w-full max-w-[440px] rounded-t-3xl p-6">
+            <View className="bg-white w-full max-w-[440px] rounded-t-3xl p-6 max-h-[85%]">
               <View className="flex-row justify-between items-center mb-4">
                 <Text className="text-base font-black text-[#1F130D]">Help & Support</Text>
                 <TouchableOpacity onPress={() => setSupportModalVisible(false)}>
                   <Ionicons name="close" size={20} color="#1F130D" />
                 </TouchableOpacity>
               </View>
-              <Text className="text-xs font-bold text-[#1F130D] mb-1">Need assistance?</Text>
-              <Text className="text-[11px] text-gray-500 mb-4">Contact our 24/7 customer support team via live chat or email us at support@restaurantapp.com.</Text>
-              <TouchableOpacity onPress={() => setSupportModalVisible(false)} className="bg-[#B8520B] py-3.5 rounded-xl items-center">
-                <Text className="text-white text-xs font-bold">Close</Text>
-              </TouchableOpacity>
+
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <Text className="text-xs font-bold text-[#1F130D] mb-1">Write your support message</Text>
+                <Text className="text-[11px] text-gray-500 mb-3">Describe your issue below. Your message will be routed directly to the manager support page.</Text>
+                
+                {/* Green Success Banner */}
+                {supportSuccessMsg ? (
+                  <View className="bg-green-50 border border-green-200 p-3 rounded-xl mb-3 flex-row items-center">
+                    <Ionicons name="checkmark-circle" size={16} color="#15803D" style={{ marginRight: 6 }} />
+                    <Text className="text-green-700 text-xs font-bold flex-1">{supportSuccessMsg}</Text>
+                  </View>
+                ) : null}
+
+                <TextInput 
+                  className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs mb-3 text-[#1F130D] h-24" 
+                  placeholder="Type your message here..."
+                  placeholderTextColor="#9E9E9E"
+                  multiline
+                  textAlignVertical="top"
+                  value={supportMessage}
+                  onChangeText={(text) => {
+                    setSupportMessage(text);
+                    if (supportSuccessMsg) setSupportSuccessMsg(''); // Clear success banner on new type
+                  }} 
+                />
+
+                <TouchableOpacity 
+                  onPress={handleSendSupportMessage} 
+                  disabled={isSubmittingSupport}
+                  className="bg-[#B8520B] py-3 rounded-xl items-center flex-row justify-center mb-5"
+                >
+                  {isSubmittingSupport ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text className="text-white text-xs font-bold">Send Message to Manager</Text>
+                  )}
+                </TouchableOpacity>
+
+                {/* Manager Responses Section */}
+                <Text className="text-xs font-bold text-[#1F130D] mb-2 uppercase tracking-wider">Your Support Conversations</Text>
+                {supportTickets.length === 0 ? (
+                  <View className="bg-[#F8F9FC] p-4 rounded-2xl border border-[#EAE3DE] items-center mb-4">
+                    <Text className="text-[11px] text-gray-500">No support tickets submitted yet.</Text>
+                  </View>
+                ) : (
+                  supportTickets.map((ticket, index) => (
+                    <View key={ticket._id || index} className="bg-[#F8F9FC] p-3.5 rounded-2xl border border-[#EAE3DE] mb-3">
+                      <View className="flex-row justify-between items-center mb-1">
+                        <Text className="text-[10px] font-bold text-gray-400">
+                          {ticket.createdAt ? new Date(ticket.createdAt).toLocaleDateString() : 'Recent'}
+                        </Text>
+                        <View className={`px-2 py-0.5 rounded-full ${ticket.managerResponse ? 'bg-green-100' : 'bg-yellow-100'}`}>
+                          <Text className={`text-[9px] font-bold ${ticket.managerResponse ? 'text-green-700' : 'text-yellow-700'}`}>
+                            {ticket.managerResponse ? 'Resolved / Replied' : 'Pending'}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <Text className="text-xs font-semibold text-[#1F130D] mb-2">You: {ticket.message}</Text>
+
+                      {ticket.managerResponse ? (
+                        <View className="bg-white p-2.5 rounded-xl border border-green-200 mt-1">
+                          <Text className="text-[10px] font-bold text-green-800 mb-0.5">Manager Response:</Text>
+                          <Text className="text-[11px] text-[#1F130D]">{ticket.managerResponse}</Text>
+                        </View>
+                      ) : (
+                        <Text className="text-[10px] text-gray-400 italic">Waiting for manager response...</Text>
+                      )}
+                    </View>
+                  ))
+                )}
+              </ScrollView>
             </View>
           </View>
         </Modal>
