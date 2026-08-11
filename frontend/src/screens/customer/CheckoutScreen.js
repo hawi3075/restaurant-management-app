@@ -1,26 +1,162 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StatusBar, TextInput, Alert, Linking, Image } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StatusBar, TextInput, Alert, Linking, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import CustomMap from '../../components/CustomMap';
 import { BACKEND_URL } from '../../api/backend';
 
 export default function CheckoutScreen({ route, navigation }) {
   const initialTotal = route?.params?.total ?? 40.99;
+  const scrollViewRef = useRef(null);
 
   const [serviceType, setServiceType] = useState('delivery'); // 'delivery' or 'dine-in'
   
   // Customer Form State
-  const [fullName, setFullName] = useState('Jane Doe');
-  const [streetAddress, setStreetAddress] = useState('123 Main St, Apt 4B');
-  const [city, setCity] = useState('New York');
-  const [phone, setPhone] = useState('+251 911 234 567');
-  const [email, setEmail] = useState('');
+  const [fullName, setFullName] = useState('Hawi Girma');
+  const [streetAddress, setStreetAddress] = useState('ASTU Freshman Programs');
+  const [city, setCity] = useState('Adama');
+  const [phone, setPhone] = useState('0911223344');
+  const [email, setEmail] = useState('hawig3521@gmail.com');
   const [tableNumber, setTableNumber] = useState(route?.params?.selectedTableId || '5');
-  const [paymentMethod, setPaymentMethod] = useState('telebirr');
+  const [paymentMethod, setPaymentMethod] = useState('chapa');
   const [isActivatingTelebirr, setIsActivatingTelebirr] = useState(false);
   const [paymentReference, setPaymentReference] = useState(`CHAPA-${Date.now()}`);
   const [isOrderComplete, setIsOrderComplete] = useState(false);
   const [cartItems, setCartItems] = useState([]);
+
+  // Inline Validation Error State
+  const [errors, setErrors] = useState({});
+
+  // Map Modal & Saved Pins State
+  const [isMapModalVisible, setIsMapModalVisible] = useState(false);
+  const [mapLinkInput, setMapLinkInput] = useState(''); 
+  const [savedPins, setSavedPins] = useState([
+    { name: 'ASTU Freshman Programs', lat: 8.5638545, lng: 39.2824094, mapUrl: 'https://maps.google.com/?q=8.5638545,39.2824094' },
+    { name: 'ASTU stadium', lat: 8.5647086, lng: 39.2923275, mapUrl: 'https://maps.google.com/?q=8.5647086,39.2923275' }
+  ]);
+  
+  // Temporary map selection state inside modal
+  const [tempAddress, setTempAddress] = useState('ASTU Freshman Programs');
+  const [mapRegion, setMapRegion] = useState({
+    latitude: 8.5638545,
+    longitude: 39.2824094,
+    latitudeDelta: 0.005,
+    longitudeDelta: 0.005,
+  });
+
+  // Load saved pins from AsyncStorage on mount
+  useEffect(() => {
+    const loadSavedPins = async () => {
+      try {
+        const storedPins = await AsyncStorage.getItem('saved_delivery_pins');
+        if (storedPins) {
+          setSavedPins(JSON.parse(storedPins));
+        }
+      } catch (e) {
+        console.error('Failed to load saved pins', e);
+      }
+    };
+    loadSavedPins();
+  }, []);
+
+  const savePinToStorage = async (newPins) => {
+    setSavedPins(newPins);
+    try {
+      await AsyncStorage.setItem('saved_delivery_pins', JSON.stringify(newPins));
+    } catch (e) {
+      console.error('Failed to save pins', e);
+    }
+  };
+
+  // Upgraded parser handling Google Maps Share Links (!3d / !4d) and browser URLs
+  const handleParseGoogleMapsLink = async (url) => {
+    setMapLinkInput(url);
+    if (!url) return;
+
+    try {
+      let targetUrl = url;
+
+      let lat = null;
+      let lng = null;
+
+      // 1. Check for standard @lat,lng pattern (from browser URL bar)
+      const coordMatch = targetUrl.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/) || targetUrl.match(/q=(-?\d+\.\d+),\s*(-?\d+\.\d+)/);
+      if (coordMatch) {
+        lat = parseFloat(coordMatch[1]);
+        lng = parseFloat(coordMatch[2]);
+      }
+
+      // 2. Check for Google Maps Share link format containing data coordinates (!3dLat!4dLng)
+      if (!lat || !lng) {
+        const latMatch = targetUrl.match(/!3d(-?\d+\.\d+)/);
+        const lngMatch = targetUrl.match(/!4d(-?\d+\.\d+)/);
+        if (latMatch && lngMatch) {
+          lat = parseFloat(latMatch[1]);
+          lng = parseFloat(lngMatch[1]);
+        }
+      }
+
+      let placeName = lat && lng ? `Location (${lat.toFixed(4)}, ${lng.toFixed(4)})` : 'Custom Pinned Location';
+      
+      const placeMatch = targetUrl.match(/\/place\/([^/@]+)/);
+      if (placeMatch && placeMatch[1]) {
+        const decoded = decodeURIComponent(placeMatch[1].replace(/\+/g, ' '));
+        if (!decoded.includes('°') && !decoded.startsWith('data=')) {
+          placeName = decoded;
+        }
+      }
+
+      if (lat && lng) {
+        setMapRegion({
+          latitude: lat,
+          longitude: lng,
+          latitudeDelta: 0.005,
+          longitudeDelta: 0.005,
+        });
+        setTempAddress(placeName);
+        setStreetAddress(placeName);
+        
+        Alert.alert('Success! 📍', `Updated location to:\n${placeName}`);
+      } else {
+        Alert.alert('Note', 'Could not read coordinates from this link. Please make sure you copy the full link shared from Google Maps.');
+      }
+    } catch (error) {
+      console.error('Error parsing map link:', error);
+    }
+  };
+
+  const handleAddPin = () => {
+    if (!tempAddress) return;
+    const existing = savedPins.find(p => p.name.toLowerCase() === tempAddress.toLowerCase());
+    const mapUrl = `https://maps.google.com/?q=${mapRegion.latitude},${mapRegion.longitude}`;
+    
+    if (!existing) {
+      const updated = [{ name: tempAddress, lat: mapRegion.latitude, lng: mapRegion.longitude, mapUrl }, ...savedPins];
+      savePinToStorage(updated);
+    }
+  };
+
+  const handleDeletePin = (pinName) => {
+    const updated = savedPins.filter(p => p.name !== pinName);
+    savePinToStorage(updated);
+  };
+
+  const handleSelectSavedPin = (pin) => {
+    setTempAddress(pin.name);
+    setStreetAddress(pin.name);
+    setMapRegion({
+      latitude: pin.lat,
+      longitude: pin.lng,
+      latitudeDelta: 0.005,
+      longitudeDelta: 0.005,
+    });
+  };
+
+  const confirmMapSelection = () => {
+    setStreetAddress(tempAddress);
+    handleAddPin();
+    setIsMapModalVisible(false);
+  };
 
   useEffect(() => {
     const loadUserDataAndCart = async () => {
@@ -123,19 +259,53 @@ export default function CheckoutScreen({ route, navigation }) {
     }
   };
 
+  const handleValidationFailed = (fieldKey, message) => {
+    setErrors({ [fieldKey]: message });
+    scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+  };
+
   const handlePlaceOrder = () => {
-    if (!fullName || !phone) {
-      Alert.alert('Missing Fields', 'Please fill in your full name and phone number.');
+    setErrors({}); // Clear previous errors
+
+    if (!fullName || fullName.trim() === '') {
+      handleValidationFailed('fullName', 'plese fill the name');
       return;
     }
 
-    if (serviceType === 'delivery' && !streetAddress) {
-      Alert.alert('Missing Address', 'Please provide a street address for delivery.');
+    if (!phone || phone.trim() === '') {
+      handleValidationFailed('phone', 'plese insert the phone');
       return;
     }
 
-    if (serviceType === 'dine-in' && !tableNumber) {
-      Alert.alert('Missing Table', 'Please specify your table number for dine-in orders.');
+    let cleanPhone = phone.replace(/[^\d]/g, '');
+    if (cleanPhone.startsWith('251')) {
+      cleanPhone = '0' + cleanPhone.slice(3);
+    }
+
+    const phoneRegex = /^(09|07)\d{8}$/;
+    if (!phoneRegex.test(cleanPhone)) {
+      handleValidationFailed('phone', 'plese insert a valid phone');
+      return;
+    }
+
+    if (!email || email.trim() === '') {
+      handleValidationFailed('email', 'invalide email');
+      return;
+    }
+
+    if (serviceType === 'delivery') {
+      if (!streetAddress || streetAddress.trim() === '') {
+        handleValidationFailed('streetAddress', 'plese fill the street address');
+        return;
+      }
+      if (!city || city.trim() === '') {
+        handleValidationFailed('city', 'plese fill the city');
+        return;
+      }
+    }
+
+    if (serviceType === 'dine-in' && (!tableNumber || tableNumber.trim() === '')) {
+      handleValidationFailed('tableNumber', 'plese fill the table number');
       return;
     }
     
@@ -146,13 +316,16 @@ export default function CheckoutScreen({ route, navigation }) {
         const txRef = paymentReference || `CHAPA-${Date.now()}`;
         setPaymentReference(txRef);
 
+        const currentMapUrl = `https://maps.google.com/?q=${mapRegion.latitude},${mapRegion.longitude}`;
+        const locationDetails = `Delivery Address: ${streetAddress}, ${city} | GPS Coordinates -> Latitude: ${mapRegion.latitude.toFixed(5)}, Longitude: ${mapRegion.longitude.toFixed(5)} | Google Maps Link: ${currentMapUrl}`;
+
         const payload = {
           customer: null,
           table: serviceType === 'dine-in' ? tableNumber : null,
           waiter: null,
           orderItems,
           totalAmount,
-          specialInstructions: serviceType === 'delivery' ? `Delivery Address: ${streetAddress}, ${city}` : `Dine-in Table: ${tableNumber}`,
+          specialInstructions: serviceType === 'delivery' ? locationDetails : `Dine-in Table: ${tableNumber}`,
           paymentMethod,
           paymentReference: ['telebirr', 'chapa'].includes(paymentMethod) ? txRef : '',
           paymentStatus: paymentMethod === 'chapa' ? 'Pending' : 'Pending'
@@ -168,12 +341,6 @@ export default function CheckoutScreen({ route, navigation }) {
         if (!res.ok) throw new Error(data.message || 'Failed to place order');
 
         if (paymentMethod === 'chapa') {
-          if (!email) {
-            throw new Error('Please sign in or provide an email before paying with Chapa.');
-          }
-
-          const formattedPhone = phone.replace(/[\s+\-]/g, '');
-
           const paymentResponse = await fetch(`${BACKEND_URL}/api/payments/chapa/initiate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -183,8 +350,8 @@ export default function CheckoutScreen({ route, navigation }) {
               email,
               first_name: fullName.split(' ')[0] || fullName,
               last_name: fullName.split(' ').slice(1).join(' ') || fullName,
-              phone_number: formattedPhone,
-              orderId: data.order?._id,
+              phone_number: cleanPhone,
+              orderId: data.order?._id || data._id,
             }),
           });
 
@@ -225,7 +392,7 @@ export default function CheckoutScreen({ route, navigation }) {
             <Ionicons name="checkmark-circle" size={32} color="#22C55E" />
           </View>
           <Text className="text-lg font-black text-[#1F130D] mb-1 text-center">Order Placed Successfully!</Text>
-          <Text className="text-xs text-gray-500 text-center mb-6">Your payment has been verified and your order has been sent to the kitchen.</Text>
+          <Text className="text-xs text-gray-500 text-center mb-6">Your payment has been verified and your order has been sent to the kitchen & driver.</Text>
           
           <TouchableOpacity
             onPress={() => navigation.navigate('OrderHistoryScreen')}
@@ -260,7 +427,7 @@ export default function CheckoutScreen({ route, navigation }) {
         </View>
 
         {/* Form Content */}
-        <ScrollView showsVerticalScrollIndicator={false} className="px-5 pt-4 pb-32">
+        <ScrollView ref={scrollViewRef} showsVerticalScrollIndicator={false} className="px-5 pt-4 pb-32">
           
           {/* Service Type Selection */}
           <Text className="text-xs font-bold text-gray-400 uppercase mb-2 ml-1 tracking-wider">Service Type</Text>
@@ -284,72 +451,107 @@ export default function CheckoutScreen({ route, navigation }) {
 
           {/* Customer Form Inputs */}
           <Text className="text-xs font-bold text-gray-400 uppercase mb-2 ml-1 tracking-wider">
-            {serviceType === 'delivery' ? 'Delivery Details' : 'Reservation & Guest Details'}
+            {serviceType === 'delivery' ? 'Delivery Details & Location Pin' : 'Reservation & Guest Details'}
           </Text>
           
           <View className="bg-white rounded-2xl border border-[#EAE3DE] p-4 mb-5 shadow-xs">
+            
+            {/* Full Name Input */}
             <Text className="text-[10px] font-bold text-gray-500 mb-1">Full Name</Text>
             <TextInput 
-              className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs mb-3 text-[#1F130D]" 
+              className={`bg-[#F8F9FC] border p-3 rounded-xl text-xs text-[#1F130D] ${errors.fullName ? 'border-red-500' : 'border-[#EAE3DE]'}`} 
               value={fullName} 
-              onChangeText={setFullName} 
+              onChangeText={(text) => { setFullName(text); if(errors.fullName) setErrors({...errors, fullName: null}); }} 
               placeholder="Enter full name"
             />
+            {errors.fullName ? <Text className="text-[10px] text-red-500 font-bold mt-1 mb-2">{errors.fullName}</Text> : <View className="mb-3" />}
+
+            {/* Email Input */}
+            <Text className="text-[10px] font-bold text-gray-500 mb-1">Email Address (Required for Chapa)</Text>
+            <TextInput 
+              className={`bg-[#F8F9FC] border p-3 rounded-xl text-xs text-[#1F130D] ${errors.email ? 'border-red-500' : 'border-[#EAE3DE]'}`} 
+              value={email} 
+              onChangeText={(text) => { setEmail(text); if(errors.email) setErrors({...errors, email: null}); }} 
+              placeholder="Enter email address"
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+            {errors.email ? <Text className="text-[10px] text-red-500 font-bold mt-1 mb-2">{errors.email}</Text> : <View className="mb-3" />}
 
             {serviceType === 'delivery' ? (
               <>
-                <Text className="text-[10px] font-bold text-gray-500 mb-1">Street Address</Text>
+                {/* Street Address Input */}
+                <Text className="text-[10px] font-bold text-gray-500 mb-1">Street Address / Landmark</Text>
                 <TextInput 
-                  className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs mb-3 text-[#1F130D]" 
+                  className={`bg-[#F8F9FC] border p-3 rounded-xl text-xs text-[#1F130D] ${errors.streetAddress ? 'border-red-500' : 'border-[#EAE3DE]'}`} 
                   value={streetAddress} 
-                  onChangeText={setStreetAddress} 
-                  placeholder="House/Apt and street"
+                  onChangeText={(text) => { setStreetAddress(text); if(errors.streetAddress) setErrors({...errors, streetAddress: null}); }} 
+                  placeholder="e.g., ASTU stadium"
                 />
+                {errors.streetAddress ? <Text className="text-[10px] text-red-500 font-bold mt-1 mb-2">{errors.streetAddress}</Text> : <View className="mb-3" />}
 
                 <View className="flex-row space-x-2 mb-3">
                   <View className="flex-1">
                     <Text className="text-[10px] font-bold text-gray-500 mb-1">City</Text>
                     <TextInput 
-                      className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs text-[#1F130D]" 
+                      className={`bg-[#F8F9FC] border p-3 rounded-xl text-xs text-[#1F130D] ${errors.city ? 'border-red-500' : 'border-[#EAE3DE]'}`} 
                       value={city} 
-                      onChangeText={setCity} 
+                      onChangeText={(text) => { setCity(text); if(errors.city) setErrors({...errors, city: null}); }} 
                     />
+                    {errors.city ? <Text className="text-[10px] text-red-500 font-bold mt-1">{errors.city}</Text> : null}
                   </View>
                   <View className="flex-1">
                     <Text className="text-[10px] font-bold text-gray-500 mb-1">Phone Number</Text>
                     <TextInput 
-                      className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs text-[#1F130D]" 
+                      className={`bg-[#F8F9FC] border p-3 rounded-xl text-xs text-[#1F130D] ${errors.phone ? 'border-red-500' : 'border-[#EAE3DE]'}`} 
                       value={phone} 
-                      onChangeText={setPhone} 
+                      onChangeText={(text) => { setPhone(text); if(errors.phone) setErrors({...errors, phone: null}); }} 
+                      placeholder="0911223344"
+                      keyboardType="phone-pad"
                     />
+                    {errors.phone ? <Text className="text-[10px] text-red-500 font-bold mt-1">{errors.phone}</Text> : null}
                   </View>
                 </View>
 
-                {/* Google Map Preview Integration */}
-                <View className="mt-2 rounded-xl overflow-hidden border border-[#EAE3DE] bg-[#F8F9FC]">
-                  <View className="h-32 w-full relative">
-                    <Image 
-                      source={{ uri: 'https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?auto=format&fit=crop&w=600&q=80' }} 
-                      className="w-full h-full opacity-80"
-                    />
-                    <View className="absolute inset-0 bg-black/10 items-center justify-center">
-                      <View className="bg-white/90 px-3 py-1.5 rounded-full shadow-md flex-row items-center">
-                        <Ionicons name="location" size={14} color="#B8520B" style={{ marginRight: 4 }} />
-                        <Text className="text-[10px] font-black text-[#1F130D]">Pinpoint Location Selected</Text>
-                      </View>
+                {/* Trigger Button to Open Embedded Map Modal */}
+                <TouchableOpacity
+                  onPress={() => {
+                    setTempAddress(streetAddress);
+                    setIsMapModalVisible(true);
+                  }}
+                  className="bg-[#FEF7F3] border border-[#B8520B]/40 py-3.5 px-4 rounded-xl flex-row items-center justify-between mb-3 shadow-xs active:opacity-90"
+                >
+                  <View className="flex-row items-center flex-1 pr-2">
+                    <View className="w-8 h-8 bg-[#B8520B]/10 rounded-xl items-center justify-center mr-3">
+                      <Ionicons name="map" size={16} color="#B8520B" />
+                    </View>
+                    <View className="flex-1">
+                      <Text className="text-xs font-bold text-[#1F130D]" numberOfLines={1}>
+                        {streetAddress || 'Pin Location on Map'}
+                      </Text>
+                      <Text className="text-[9px] text-[#B8520B] font-semibold">Click to paste Google Maps share link</Text>
                     </View>
                   </View>
-                  <View className="p-2.5 flex-row justify-between items-center bg-white">
-                    <Text className="text-[10px] text-gray-500 font-semibold flex-1" numberOfLines={1}>
-                      📍 {streetAddress}, {city}
-                    </Text>
+                  <Ionicons name="chevron-forward" size={16} color="#B8520B" />
+                </TouchableOpacity>
+
+                {/* Detailed Location & Map Link Display Card */}
+                <View className="p-3 bg-[#F8F9FC] rounded-xl border border-[#EAE3DE]">
+                  <View className="flex-row items-center justify-between mb-1">
+                    <Text className="text-[10px] text-gray-700 font-bold">📍 Pinned Location Details</Text>
                     <TouchableOpacity 
-                      onPress={() => Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(streetAddress + ', ' + city)}`)}
-                      className="bg-[#FEF7F3] px-2.5 py-1 rounded-lg border border-[#B8520B]/30"
+                      onPress={() => Linking.openURL(`https://maps.google.com/?q=${mapRegion.latitude},${mapRegion.longitude}`)}
                     >
-                      <Text className="text-[9px] font-bold text-[#B8520B]">Open Map</Text>
+                      <Text className="text-[10px] text-[#B8520B] font-bold underline">Open Map Link ↗</Text>
                     </TouchableOpacity>
                   </View>
+                  <Text className="text-[10px] text-[#1F130D] font-semibold mb-0.5">{streetAddress} ({city})</Text>
+                  <Text className="text-[9px] text-gray-500 font-mono">
+                    Lat: {mapRegion.latitude.toFixed(5)}, Lng: {mapRegion.longitude.toFixed(5)}
+                  </Text>
+                  <Text className="text-[9px] text-gray-400 mt-1" numberOfLines={1}>
+                    URL: https://maps.google.com/?q={mapRegion.latitude.toFixed(5)},{mapRegion.longitude.toFixed(5)}
+                  </Text>
                 </View>
               </>
             ) : (
@@ -357,19 +559,22 @@ export default function CheckoutScreen({ route, navigation }) {
                 <View className="mb-3">
                   <Text className="text-[10px] font-bold text-gray-500 mb-1">Table Number / Seat</Text>
                   <TextInput 
-                    className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs text-[#1F130D] font-bold" 
+                    className={`bg-[#F8F9FC] border p-3 rounded-xl text-xs text-[#1F130D] font-bold ${errors.tableNumber ? 'border-red-500' : 'border-[#EAE3DE]'}`} 
                     value={tableNumber} 
-                    onChangeText={setTableNumber} 
+                    onChangeText={(text) => { setTableNumber(text); if(errors.tableNumber) setErrors({...errors, tableNumber: null}); }} 
                     placeholder="Enter Table Number (e.g., Table 4)"
                   />
+                  {errors.tableNumber ? <Text className="text-[10px] text-red-500 font-bold mt-1">{errors.tableNumber}</Text> : null}
                 </View>
                 <View className="mb-1">
                   <Text className="text-[10px] font-bold text-gray-500 mb-1">Phone Number</Text>
                   <TextInput 
-                    className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs text-[#1F130D]" 
+                    className={`bg-[#F8F9FC] border p-3 rounded-xl text-xs text-[#1F130D] ${errors.phone ? 'border-red-500' : 'border-[#EAE3DE]'}`} 
                     value={phone} 
-                    onChangeText={setPhone} 
+                    onChangeText={(text) => { setPhone(text); if(errors.phone) setErrors({...errors, phone: null}); }} 
+                    keyboardType="phone-pad"
                   />
+                  {errors.phone ? <Text className="text-[10px] text-red-500 font-bold mt-1">{errors.phone}</Text> : null}
                 </View>
               </>
             )}
@@ -437,22 +642,6 @@ export default function CheckoutScreen({ route, navigation }) {
           <View className="bg-white rounded-2xl border border-[#EAE3DE] p-3 mb-6 shadow-xs">
             
             <TouchableOpacity 
-              onPress={() => setPaymentMethod('telebirr')}
-              className={`flex-row items-center justify-between p-3 rounded-xl mb-2 ${paymentMethod === 'telebirr' ? 'bg-[#FEF7F3] border border-[#B8520B]/30' : ''}`}
-            >
-              <View className="flex-row items-center">
-                <View className="w-8 h-8 bg-blue-50 rounded-xl items-center justify-center mr-3 border border-blue-200">
-                  <Ionicons name="phone-portrait-outline" size={16} color="#0052CC" />
-                </View>
-                <View>
-                  <Text className="text-xs font-bold text-[#1F130D]">Telebirr</Text>
-                  <Text className="text-[9px] text-gray-400">Fast mobile wallet payment</Text>
-                </View>
-              </View>
-              <Ionicons name={paymentMethod === 'telebirr' ? "radio-button-on" : "radio-button-off"} size={16} color="#B8520B" />
-            </TouchableOpacity>
-
-            <TouchableOpacity 
               onPress={() => setPaymentMethod('chapa')}
               className={`flex-row items-center justify-between p-3 rounded-xl mb-2 ${paymentMethod === 'chapa' ? 'bg-[#FEF7F3] border border-[#B8520B]/30' : ''}`}
             >
@@ -466,6 +655,22 @@ export default function CheckoutScreen({ route, navigation }) {
                 </View>
               </View>
               <Ionicons name={paymentMethod === 'chapa' ? "radio-button-on" : "radio-button-off"} size={16} color="#B8520B" />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              onPress={() => setPaymentMethod('telebirr')}
+              className={`flex-row items-center justify-between p-3 rounded-xl mb-2 ${paymentMethod === 'telebirr' ? 'bg-[#FEF7F3] border border-[#B8520B]/30' : ''}`}
+            >
+              <View className="flex-row items-center">
+                <View className="w-8 h-8 bg-blue-50 rounded-xl items-center justify-center mr-3 border border-blue-200">
+                  <Ionicons name="phone-portrait-outline" size={16} color="#0052CC" />
+                </View>
+                <View>
+                  <Text className="text-xs font-bold text-[#1F130D]">Telebirr</Text>
+                  <Text className="text-[9px] text-gray-400">Fast mobile wallet payment</Text>
+                </View>
+              </View>
+              <Ionicons name={paymentMethod === 'telebirr' ? "radio-button-on" : "radio-button-off"} size={16} color="#B8520B" />
             </TouchableOpacity>
 
             <TouchableOpacity 
@@ -497,6 +702,14 @@ export default function CheckoutScreen({ route, navigation }) {
 
           {/* Checkout Action Section */}
           <View className="bg-white rounded-2xl border border-[#EAE3DE] p-4 mb-4 shadow-xs">
+            {paymentMethod === 'chapa' ? (
+              <View className="mb-3 rounded-2xl border border-[#B8520B]/20 bg-[#FEF7F3] p-3">
+                <Text className="text-xs font-bold text-[#1F130D]">Chapa Reference</Text>
+                <Text className="text-[11px] text-gray-600 mt-1">{paymentReference}</Text>
+                <Text className="text-[10px] text-gray-500 mt-2">Tapping place order will redirect you securely to Chapa payment.</Text>
+              </View>
+            ) : null}
+
             {paymentMethod === 'telebirr' ? (
               <View className="mb-3 rounded-2xl border border-[#B8520B]/20 bg-[#FEF7F3] p-3">
                 <Text className="text-xs font-bold text-[#1F130D]">Telebirr reference</Text>
@@ -513,26 +726,117 @@ export default function CheckoutScreen({ route, navigation }) {
               </View>
             ) : null}
 
-            {paymentMethod === 'chapa' ? (
-              <View className="mb-3 rounded-2xl border border-[#B8520B]/20 bg-[#FEF7F3] p-3">
-                <Text className="text-xs font-bold text-[#1F130D]">Chapa Reference</Text>
-                <Text className="text-[11px] text-gray-600 mt-1">{paymentReference}</Text>
-                <Text className="text-[10px] text-gray-500 mt-2">The app will open Chapa when you place the order.</Text>
-              </View>
-            ) : null}
-
             <TouchableOpacity 
               onPress={handlePlaceOrder}
               className="bg-[#B8520B] py-4 rounded-xl items-center shadow-md active:opacity-95"
             >
               <Text className="text-white font-bold text-xs uppercase tracking-wider">
-                Place Order Now {paymentLabels[paymentMethod] ? `with ${paymentLabels[paymentMethod]}` : ''}
+                Place Order & Pay {paymentLabels[paymentMethod] ? `with ${paymentLabels[paymentMethod]}` : ''}
               </Text>
             </TouchableOpacity>
           </View>
 
         </ScrollView>
       </View>
+
+      {/* Embedded Map Picker Modal with Share Link Parse Support */}
+      <Modal
+        visible={isMapModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setIsMapModalVisible(false)}
+      >
+        <View className="flex-1 bg-black/60 justify-end items-center">
+          <View className="w-full max-w-[440px] bg-white rounded-t-3xl overflow-hidden shadow-2xl h-[90%] flex-col">
+            
+            {/* Modal Header */}
+            <View className="p-4 bg-white border-b border-gray-100 flex-row justify-between items-center">
+              <TouchableOpacity onPress={() => setIsMapModalVisible(false)} className="p-1">
+                <Ionicons name="close" size={22} color="#1F130D" />
+              </TouchableOpacity>
+              <Text className="text-sm font-black text-[#1F130D]">Paste Google Maps Share Link</Text>
+              <TouchableOpacity onPress={confirmMapSelection} className="bg-[#B8520B] px-3.5 py-1.5 rounded-xl">
+                <Text className="text-white font-bold text-xs">Confirm</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Paste Share Link Input Box */}
+            <View className="p-4 bg-[#FEF7F3] border-b border-[#B8520B]/20">
+              <Text className="text-[10px] font-bold text-[#B8520B] uppercase tracking-wider mb-1">🔗 Paste Google Maps Share Link</Text>
+              <View className="flex-row items-center space-x-2">
+                <TextInput
+                  className="flex-1 bg-white border border-[#EAE3DE] p-3 rounded-xl text-xs text-[#1F130D]"
+                  value={mapLinkInput}
+                  onChangeText={handleParseGoogleMapsLink}
+                  placeholder="Paste copied share link here..."
+                />
+                <TouchableOpacity 
+                  onPress={() => handleParseGoogleMapsLink(mapLinkInput)}
+                  className="bg-[#B8520B] px-4 py-3 rounded-xl items-center justify-center"
+                >
+                  <Text className="text-white font-bold text-xs">Parse</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Address Input & Saved Pins Bar */}
+            <View className="p-4 bg-[#F8F9FC] border-b border-gray-200">
+              <Text className="text-[10px] font-bold text-gray-500 mb-1">Extracted Place / Landmark Name</Text>
+              <TextInput
+                className="bg-white border border-[#EAE3DE] p-3 rounded-xl text-xs text-[#1F130D] font-bold mb-3 shadow-xs"
+                value={tempAddress}
+                onChangeText={setTempAddress}
+                placeholder="Enter location name..."
+              />
+
+              <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Saved Pins (Tap to reuse)</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row space-x-2">
+                {savedPins.map((pin, idx) => (
+                  <View key={idx} className="flex-row items-center bg-white border border-[#EAE3DE] rounded-xl pl-3 pr-2 py-1.5 mr-2 shadow-xs">
+                    <TouchableOpacity onPress={() => handleSelectSavedPin(pin)} className="flex-row items-center mr-2">
+                      <Ionicons name="location" size={12} color="#B8520B" style={{ marginRight: 4 }} />
+                      <Text className="text-[11px] font-bold text-[#1F130D] max-w-[140px]" numberOfLines={1}>{pin.name}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => handleDeletePin(pin.name)} className="p-1">
+                      <Ionicons name="close-circle" size={14} color="#9CA3AF" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+
+            {/* Map View Area */}
+            <View className="flex-1 relative bg-gray-100">
+              <CustomMap 
+                mapRegion={mapRegion}
+                onRegionChangeComplete={setMapRegion}
+                streetAddress={tempAddress}
+              />
+              
+              <View className="absolute top-3 left-3 right-3 items-center pointer-events-none">
+                <View className="bg-white/95 px-3 py-1.5 rounded-full shadow-md flex-row items-center border border-gray-200">
+                  <Ionicons name="pin" size={14} color="#B8520B" style={{ marginRight: 4 }} />
+                  <Text className="text-[10px] font-black text-[#1F130D]" numberOfLines={1}>
+                    Lat: {mapRegion.latitude.toFixed(4)}, Lng: {mapRegion.longitude.toFixed(4)}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Footer Confirm Action */}
+            <View className="p-4 bg-white border-t border-gray-100">
+              <TouchableOpacity
+                onPress={confirmMapSelection}
+                className="w-full bg-[#B8520B] py-3.5 rounded-xl items-center shadow-md active:opacity-95"
+              >
+                <Text className="text-white font-bold text-xs uppercase tracking-wider">Use This Location</Text>
+              </TouchableOpacity>
+            </View>
+
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }

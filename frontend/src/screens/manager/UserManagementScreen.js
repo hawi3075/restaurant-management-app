@@ -74,6 +74,24 @@ export default function UserManagementScreen({ navigation }) {
 
         <ScrollView showsVerticalScrollIndicator={false} className="flex-1 p-5 pb-24">
           
+          {/* Total Users Counter Card */}
+          <View className="bg-orange-50 border border-orange-200/60 rounded-2xl p-4 mb-4 flex-row items-center justify-between shadow-xs">
+            <View className="flex-row items-center space-x-3">
+              <View className="w-10 h-10 rounded-xl bg-orange-500 items-center justify-center shadow-sm">
+                <Ionicons name="people" size={18} color="#FFFFFF" />
+              </View>
+              <View>
+                <Text className="text-[10px] font-bold text-orange-600 uppercase tracking-wider">Total System Users</Text>
+                <Text className="text-lg font-black text-slate-900">{users.length} {users.length === 1 ? 'User' : 'Users'}</Text>
+              </View>
+            </View>
+            <View className="bg-white px-3 py-1.5 rounded-xl border border-orange-200 shadow-2xs">
+              <Text className="text-[10px] font-extrabold text-orange-600">
+                {filteredUsers.length} Shown
+              </Text>
+            </View>
+          </View>
+
           {/* Search Bar */}
           <View className="flex-row items-center bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 mb-5 shadow-sm">
             <Ionicons name="search-outline" size={18} color="#64748B" />
