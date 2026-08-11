@@ -49,6 +49,7 @@ export default function ManagerDashboardScreen({ navigation }) {
   };
 
   const modules = [
+    { title: 'Order Management', desc: 'View all orders, revenue, and details', icon: 'receipt-outline', screen: 'OrderManagementScreen' },
     { title: 'User Management', desc: 'Manage customer accounts and roles', icon: 'person-circle-outline', screen: 'UserManagementScreen' },
     { title: 'Staff Management', desc: 'Monitor staff schedules and shifts', icon: 'shield-checkmark-outline', screen: 'StaffManagementScreen' },
     { title: 'Menu Management', desc: 'Add, update or remove food items', icon: 'restaurant-outline', screen: 'MenuManagementScreen' },

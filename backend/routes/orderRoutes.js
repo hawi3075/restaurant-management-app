@@ -44,11 +44,12 @@ router.get('/incoming', async (req, res) => {
 });
 
 // --- GET ACTIVE DRIVER ORDERS (GET /api/orders/driver/active) ---
+// Returns ONLY delivery orders that are ready for pickup or out for delivery
 router.get('/driver/active', async (req, res) => {
   try {
     const orders = await Order.find({ 
-      serviceType: 'delivery', 
-      status: { $in: ['Ready', 'Out for Delivery', 'Confirmed'] } 
+      serviceType: { $regex: /^delivery$/i }, 
+      status: { $in: ['Ready', 'Ready for Pickup', 'Out for Delivery'] } 
     }).sort({ createdAt: -1 });
     return res.status(200).json(orders);
   } catch (err) {
@@ -58,10 +59,11 @@ router.get('/driver/active', async (req, res) => {
 });
 
 // --- GET ACTIVE WAITER ORDERS (GET /api/orders/waiter/active) ---
+// Returns ONLY non-delivery orders (dine-in, walk-in) that haven't been served
 router.get('/waiter/active', async (req, res) => {
   try {
     const orders = await Order.find({ 
-      serviceType: 'dine-in', 
+      serviceType: { $ne: 'delivery' }, 
       status: { $ne: 'Served' } 
     }).populate('table').sort({ createdAt: -1 });
     return res.status(200).json(orders);
@@ -105,7 +107,6 @@ router.post('/', async (req, res) => {
 
     const saved = await newOrder.save();
 
-    // Emit socket event for new order
     const io = req.app.get('io');
     if (io) io.emit('new_order_placed', saved);
 
@@ -151,6 +152,7 @@ router.put('/:id/status', async (req, res) => {
     const statusMap = {
       'Preparing': 'Preparing',
       'Ready': 'Ready',
+      'Ready for Pickup': 'Ready',
       'Out for Delivery': 'Out for Delivery',
       'Served': 'Served',
       'Delivered': 'Served'
@@ -159,7 +161,6 @@ router.put('/:id/status', async (req, res) => {
     order.status = statusMap[normalizedStatus] || order.status;
     await order.save();
 
-    // Emit status updates to sync customer and kitchen real-time views
     const io = req.app.get('io');
     if (io) {
       io.emit('order_status_updated', { id: order._id, status: order.status, order });

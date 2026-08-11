@@ -41,6 +41,7 @@ export default function KitchenDashboardScreen({ route, navigation }) {
         source: order.paymentMethod === 'telebirr' ? 'Telebirr Order' : (order.serviceType || 'Customer App'),
         deliveryAddress: formattedAddress,
         phone: order.phone || order.customerPhone || null,
+        serviceType: order.serviceType || 'dine-in',
         items: (order.orderItems || order.items || []).map((item) => ({
           name: `${item.quantity || 1}x ${item.name || item.menuItem?.name || item.title || 'Item'}`,
           note: item.note ? `Note: ${item.note}` : (item.unitPrice ? `ETB ${item.unitPrice.toFixed(2)}` : 'Regular')
@@ -126,12 +127,12 @@ export default function KitchenDashboardScreen({ route, navigation }) {
 
   const handleLogout = async () => {
     try {
-      await AsyncStorage.removeItem('token');
-      await AsyncStorage.removeItem('user');
-      await AsyncStorage.clear();
       setProfileModalVisible(false);
-      if (navigation?.replace) {
-        navigation.replace('CustomerLanding');
+      if (authContext?.logout) {
+        await authContext.logout();
+      } else {
+        await AsyncStorage.removeItem('token');
+        await AsyncStorage.removeItem('user');
       }
     } catch (error) {
       console.error('Logout Error:', error);
@@ -188,7 +189,11 @@ export default function KitchenDashboardScreen({ route, navigation }) {
 
       const localStatus = newStatus === 'Preparing' || newStatus === 'Cooking' ? 'Cooking' : newStatus;
       setKitchenOrders((prev) => prev.map((order) => (order.id === id ? { ...order, status: localStatus } : order)));
-      Alert.alert('Success', `Order status updated to ${newStatus}`);
+      
+      const successMsg = newStatus === 'Ready' 
+        ? 'Order marked as Ready! It is now synced to the Driver or Waiter queue.' 
+        : `Order status updated to ${newStatus}`;
+      Alert.alert('Success', successMsg);
     } catch (error) {
       console.error('Update Kitchen Order Error:', error);
       Alert.alert('Error', error.message || 'Unable to update order status');
@@ -338,7 +343,9 @@ export default function KitchenDashboardScreen({ route, navigation }) {
                 )}
                 {order.status === 'Ready' && (
                   <View className="bg-green-50 px-3 py-1.5 rounded-xl border border-green-200">
-                    <Text className="text-[10px] font-bold text-green-700">Ready for Waiter / Driver Pickup</Text>
+                    <Text className="text-[10px] font-bold text-green-700">
+                      {order.serviceType === 'delivery' ? 'Ready for Driver Pickup' : 'Ready for Waiter Pickup'}
+                    </Text>
                   </View>
                 )}
               </View>

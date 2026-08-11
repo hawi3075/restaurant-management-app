@@ -27,6 +27,7 @@ import MenuManagementScreen from './src/screens/manager/MenuManagementScreen';
 import InventoryManagementScreen from './src/screens/manager/InventoryManagementScreen';
 import SupportMessageScreen from './src/screens/manager/SupportMessageScreen';
 import ReviewManagementScreen from './src/screens/manager/ReviewManagementScreen';
+import OrderManagementScreen from './src/screens/manager/OrderManagementScreen';
 
 // Staff
 import WaiterDashboardScreen from './src/screens/waiter/WaiterDashboardScreen';
@@ -71,6 +72,7 @@ function AppNavigator() {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="ManagerDashboard" component={ManagerDashboardScreen} />
         <Stack.Screen name="ManagerProfileScreen" component={ManagerProfileScreen} />
+        <Stack.Screen name="OrderManagementScreen" component={OrderManagementScreen} />
         <Stack.Screen name="UserManagementScreen" component={UserManagementScreen} />
         <Stack.Screen name="StaffManagementScreen" component={StaffManagementScreen} />
         <Stack.Screen name="MenuManagementScreen" component={MenuManagementScreen} />

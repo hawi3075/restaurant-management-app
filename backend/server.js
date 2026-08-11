@@ -32,7 +32,7 @@ const userRoutes = require('./routes/userRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
 const tableRoutes = require('./routes/tableRoutes');
-const paymentRoutes = require('./routes/paymentRoutes'); // <-- 1. Import payment routes
+const paymentRoutes = require('./routes/paymentRoutes');
 
 // Mount Routes
 app.use('/api/auth', authRoutes);
@@ -42,10 +42,10 @@ app.use('/api/staff', staffRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/support', supportRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api/admin', adminRoutes);
+app.use('/api/admin', adminRoutes); // <-- Mounts both /metrics and /orders endpoints
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/tables', tableRoutes);
-app.use('/api/payments', paymentRoutes); // <-- 2. Mount payment routes
+app.use('/api/payments', paymentRoutes);
 
 // Database Connection
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/restaurant_db')

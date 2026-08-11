@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StatusBar, Image, Modal, TextInput, ActivityIndicator, Alert, Linking, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StatusBar, Image, Modal, TextInput, ActivityIndicator, Linking, Animated, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import io from 'socket.io-client';
 import { BACKEND_URL } from '../../api/backend';
 import { AuthContext } from '../../context/AuthContext';
 
@@ -9,8 +10,8 @@ export default function DriverDashboardScreen({ route, navigation }) {
   const authContext = useContext(AuthContext);
 
   const [profileModalVisible, setProfileModalVisible] = useState(false);
+  const [logoutModalVisible, setLogoutModalVisible] = useState(false);
   
-  // Real user state initialized from AuthContext or fallback
   const [driverName, setDriverName] = useState(authContext?.user?.name || 'Driver User');
   const [driverEmail, setDriverEmail] = useState(authContext?.user?.email || 'driver@restaurant.com');
   const [driverPhone, setDriverPhone] = useState(authContext?.user?.phone || '+251 000 000 000');
@@ -25,21 +26,48 @@ export default function DriverDashboardScreen({ route, navigation }) {
   const alertAnim = useState(new Animated.Value(-100))[0];
 
   useEffect(() => {
-    // If authContext user data updates or exists, sync it
     if (authContext?.user) {
       setDriverName(authContext.user.name || driverName);
       setDriverEmail(authContext.user.email || driverEmail);
       setDriverPhone(authContext.user.phone || authContext.user.phoneNumber || driverPhone);
       setDriverImage(authContext.user.profileImage || authContext.user.avatar || driverImage);
     } else {
-      // Fetch user profile directly from backend if not fully populated in context
       fetchUserProfile();
     }
 
     fetchDeliveries();
-    const interval = setInterval(fetchDeliveries, 10000);
-    return () => clearInterval(interval);
-  }, [authContext?.user]);
+
+    // Initialize Socket.io for Real-Time Order & Delivery Tracking
+    const socket = io(BACKEND_URL, {
+      transports: ['websocket'],
+      auth: { token: authContext?.token }
+    });
+
+    socket.on('connect', () => {
+      console.log('Driver connected to real-time socket server');
+    });
+
+    socket.on('orderCreated', (newOrder) => {
+      showAlertBanner('🔔 New delivery order received!');
+      fetchDeliveries();
+    });
+
+    socket.on('orderUpdated', (updatedOrder) => {
+      fetchDeliveries();
+    });
+
+    socket.on('statusUpdated', (data) => {
+      fetchDeliveries();
+    });
+
+    // Fallback polling interval reduced to 30s since sockets handle live updates
+    const interval = setInterval(fetchDeliveries, 30000);
+
+    return () => {
+      clearInterval(interval);
+      socket.disconnect();
+    };
+  }, [authContext?.user, authContext?.token]);
 
   const fetchUserProfile = async () => {
     try {
@@ -82,6 +110,82 @@ export default function DriverDashboardScreen({ route, navigation }) {
     }, 4000);
   };
 
+  const executeLogout = async () => {
+    try {
+      if (Platform.OS === 'web') {
+        localStorage.removeItem('userToken');
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      }
+      
+      if (authContext?.logout && typeof authContext.logout === 'function') {
+        authContext.logout();
+      }
+      
+      if (navigation && typeof navigation.replace === 'function') {
+        navigation.replace('Login');
+      } else if (navigation && typeof navigation.navigate === 'function') {
+        navigation.navigate('Login');
+      }
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
+
+  const handleLogout = () => {
+    setLogoutModalVisible(true);
+  };
+
+  const handlePickImage = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permissionResult.granted) {
+        alert('Permission to access camera roll is required!');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.7,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setDriverImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Image Picker Error:', error);
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    try {
+      const token = authContext?.token || '';
+      const response = await fetch(`${BACKEND_URL}/api/users/profile`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name: driverName,
+          phone: driverPhone,
+          profileImage: driverImage
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to update profile');
+
+      showAlertBanner('✨ Profile updated successfully!');
+      setProfileModalVisible(false);
+    } catch (error) {
+      console.error('Save Profile Error:', error);
+      alert(error.message || 'Could not save profile settings.');
+    }
+  };
+
   const fetchDeliveries = async () => {
     try {
       const token = authContext?.token || '';
@@ -91,14 +195,24 @@ export default function DriverDashboardScreen({ route, navigation }) {
           'Content-Type': 'application/json'
         }
       });
+      
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Server returned HTML instead of JSON. Check if backend route/server is running correctly.");
+      }
+
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Failed to fetch deliveries');
 
       const rawOrders = data.orders || (Array.isArray(data) ? data : []);
 
-      const mapped = rawOrders.map((order, index) => {
-        const customerName = order.customer?.name || order.customerName || 'Walk-in Customer';
-        const customerAddress = order.customer?.address || order.deliveryAddress || order.streetAddress || 'Delivery Address Pending';
+      const deliveryOrders = rawOrders.filter(order => 
+        order.orderType === 'delivery' || order.deliveryAddress || order.shippingAddress || order.customer?.address
+      );
+
+      const mapped = deliveryOrders.map((order, index) => {
+        const customerName = order.customer?.name || order.customerName || 'Customer';
+        const customerAddress = order.deliveryAddress || order.shippingAddress || order.customer?.address || 'Delivery Address Pending';
         
         const mapsCoords = order.location?.coordinates || order.coordinates || null;
         const googleMapsUrl = mapsCoords 
@@ -120,6 +234,10 @@ export default function DriverDashboardScreen({ route, navigation }) {
         const calculatedTotal = orderItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
         const finalTotal = Number(order.totalAmount || order.total || calculatedTotal || 0);
 
+        let mappedStatus = 'Ready for Pickup';
+        if (order.status === 'On the Way' || order.deliveryStatus === 'On the Way') mappedStatus = 'On the Way';
+        if (order.status === 'Served' || order.status === 'Delivered' || order.deliveryStatus === 'Delivered') mappedStatus = 'Delivered';
+
         return {
           id: order.id || order._id || `d${index + 1}`,
           customer: customerName,
@@ -127,7 +245,7 @@ export default function DriverDashboardScreen({ route, navigation }) {
           googleMapsUrl: googleMapsUrl,
           phone: phone,
           time: order.createdAt ? new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recent',
-          status: order.deliveryStatus || (order.status === 'Ready' ? 'Ready for Pickup' : order.status === 'Served' ? 'Delivered' : order.status === 'Completed' ? 'Delivered' : 'Ready for Pickup'),
+          status: mappedStatus,
           items: orderItems,
           total: `$${finalTotal.toFixed(2)}`,
         };
@@ -141,67 +259,11 @@ export default function DriverDashboardScreen({ route, navigation }) {
     }
   };
 
-  const handleUpdateProfile = async () => {
-    try {
-      const token = authContext?.token || '';
-      const response = await fetch(`${BACKEND_URL}/api/users/profile`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ name: driverName, phone: driverPhone, profileImage: driverImage })
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message || 'Failed to update profile');
-      
-      Alert.alert('Success', 'Profile updated successfully!');
-      setProfileModalVisible(false);
-    } catch (error) {
-      console.error('Update Profile Error:', error);
-      Alert.alert('Error', error.message || 'Could not update profile');
-    }
-  };
-
-  const openGoogleMaps = (url) => {
-    Linking.openURL(url).catch(err => {
-      console.error('An error occurred opening maps', err);
-      Alert.alert('Error', 'Unable to open Google Maps link');
-    });
-  };
-
-  const handleLogout = async () => {
-    try {
-      if (authContext && authContext.logout) {
-        await authContext.logout();
-      }
-    } catch (err) {
-      console.error('Logout error:', err);
-    }
-    setProfileModalVisible(false);
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'Login' }],
-    });
-  };
-
-  const pickDriverImage = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-
-    if (!result.canceled) {
-      setDriverImage(result.assets[0].uri);
-    }
-  };
-
   const updateDeliveryStatus = async (id, newStatus) => {
     try {
       const token = authContext?.token || '';
-      const apiStatus = newStatus === 'On the Way' ? 'Ready' : newStatus === 'Delivered' ? 'Served' : newStatus;
+      const apiStatus = newStatus === 'On the Way' ? 'On the Way' : newStatus === 'Delivered' ? 'Delivered' : newStatus;
+      
       const response = await fetch(`${BACKEND_URL}/api/orders/${id}/status`, {
         method: 'PUT',
         headers: { 
@@ -217,11 +279,13 @@ export default function DriverDashboardScreen({ route, navigation }) {
       setDeliveries((prev) => prev.map((order) => (order.id === id ? { ...order, status: newStatus } : order)));
 
       if (newStatus === 'On the Way') {
-        showAlertBanner('📦 Alert: Customer notified that order is On the Way!');
+        showAlertBanner('📦 Alert: Customer notified that food is On the Way!');
+      } else if (newStatus === 'Delivered') {
+        showAlertBanner('✅ Order successfully marked as delivered.');
       }
     } catch (error) {
       console.error('Update Delivery Error:', error);
-      Alert.alert('Error', error.message || 'Unable to update delivery status');
+      alert(error.message || 'Unable to update delivery status');
     }
   };
 
@@ -251,25 +315,39 @@ export default function DriverDashboardScreen({ route, navigation }) {
           </Animated.View>
         )}
 
-        {/* Top Header */}
+        {/* Top Header with Profile & Logout Actions */}
         <View className="pt-12 px-5 pb-4 bg-white border-b border-[#EAE3DE] flex-row justify-between items-center">
-          <TouchableOpacity onPress={() => setProfileModalVisible(true)} className="flex-row items-center">
-            <View className="w-9 h-9 bg-[#FEF7F3] rounded-full border border-[#B8520B]/30 items-center justify-center mr-2.5 overflow-hidden">
+          <TouchableOpacity onPress={() => setProfileModalVisible(true)} className="flex-row items-center flex-1 pr-2">
+            <View className="w-10 h-10 bg-[#FEF7F3] rounded-full border border-[#B8520B]/30 items-center justify-center mr-2.5 overflow-hidden">
               {driverImage ? (
                 <Image source={{ uri: driverImage }} className="w-full h-full" />
               ) : (
-                <Ionicons name="car" size={16} color="#B8520B" />
+                <Ionicons name="car" size={18} color="#B8520B" />
               )}
             </View>
-            <View>
-              <Text className="text-sm font-black text-[#1F130D]">{driverName}</Text>
-              <Text className="text-[10px] text-gray-400">Tap profile to edit</Text>
+            <View className="flex-1">
+              <Text className="text-sm font-black text-[#1F130D]" numberOfLines={1}>{driverName}</Text>
+              <View className="flex-row items-center mt-0.5">
+                <View className="w-2 h-2 rounded-full bg-emerald-500 mr-1" />
+                <Text className="text-[10px] text-gray-400">Online • Tap profile</Text>
+              </View>
             </View>
           </TouchableOpacity>
           
-          <View className="bg-[#FEF7F3] px-3 py-1.5 rounded-xl border border-[#B8520B]/20 flex-row items-center">
-            <View className="w-2 h-2 rounded-full bg-emerald-500 mr-1.5" />
-            <Text className="text-[11px] font-bold text-[#B8520B]">Online</Text>
+          <View className="flex-row items-center space-x-2">
+            <TouchableOpacity 
+              onPress={() => setProfileModalVisible(true)}
+              className="bg-[#FEF7F3] w-9 h-9 rounded-xl border border-[#B8520B]/20 items-center justify-center shadow-xs"
+            >
+              <Ionicons name="person-outline" size={17} color="#B8520B" />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              onPress={handleLogout}
+              className="bg-red-50 w-9 h-9 rounded-xl border border-red-200 items-center justify-center shadow-xs"
+            >
+              <Ionicons name="log-out-outline" size={17} color="#DC2626" />
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -341,7 +419,7 @@ export default function DriverDashboardScreen({ route, navigation }) {
                 </View>
               </View>
 
-              {/* Dual Address Options: Customer Text Address & Google Maps Button */}
+              {/* Dual Address Options */}
               <View className="bg-[#F8F9FC] p-3 rounded-2xl mb-3 border border-[#EAE3DE]">
                 <View className="flex-row items-center justify-between mb-2 pb-2 border-b border-gray-200">
                   <View className="flex-row items-center flex-1 pr-2">
@@ -355,7 +433,7 @@ export default function DriverDashboardScreen({ route, navigation }) {
 
                 {/* Google Maps Option */}
                 <TouchableOpacity 
-                  onPress={() => openGoogleMaps(delivery.googleMapsUrl)}
+                  onPress={() => Linking.openURL(delivery.googleMapsUrl)}
                   className="flex-row items-center justify-between bg-white px-3 py-2 rounded-xl border border-blue-200 shadow-xs"
                 >
                   <View className="flex-row items-center">
@@ -387,7 +465,7 @@ export default function DriverDashboardScreen({ route, navigation }) {
                 ))}
               </View>
 
-              {/* Card Footer: Total Amount & Start/Mark Actions */}
+              {/* Card Footer: Total Amount & Actions */}
               <View className="flex-row justify-between items-center pt-3 border-t border-gray-100 mt-1">
                 <View>
                   <Text className="text-[10px] font-bold text-gray-400 uppercase">Total Amount</Text>
@@ -397,8 +475,9 @@ export default function DriverDashboardScreen({ route, navigation }) {
                 <View className="flex-row space-x-2">
                   {delivery.status === 'Ready for Pickup' && (
                     <TouchableOpacity 
+                      activeOpacity={0.8}
                       onPress={() => updateDeliveryStatus(delivery.id, 'On the Way')}
-                      className="bg-[#B8520B] px-4 py-2.5 rounded-xl flex-row items-center shadow-md active:opacity-90"
+                      className="bg-[#B8520B] px-4 py-2.5 rounded-xl flex-row items-center shadow-md"
                     >
                       <Ionicons name="navigate" size={13} color="white" style={{ marginRight: 5 }} />
                       <Text className="text-xs font-bold text-white uppercase tracking-wider">Start Delivery</Text>
@@ -406,8 +485,9 @@ export default function DriverDashboardScreen({ route, navigation }) {
                   )}
                   {delivery.status === 'On the Way' && (
                     <TouchableOpacity 
+                      activeOpacity={0.8}
                       onPress={() => updateDeliveryStatus(delivery.id, 'Delivered')}
-                      className="bg-green-600 px-4 py-2.5 rounded-xl flex-row items-center shadow-md active:opacity-90"
+                      className="bg-green-600 px-4 py-2.5 rounded-xl flex-row items-center shadow-md"
                     >
                       <Ionicons name="checkmark-done" size={13} color="white" style={{ marginRight: 5 }} />
                       <Text className="text-xs font-bold text-white uppercase tracking-wider">Mark Delivered</Text>
@@ -426,65 +506,136 @@ export default function DriverDashboardScreen({ route, navigation }) {
 
         </ScrollView>
 
-        {/* --- PROFILE MODAL --- */}
-        <Modal visible={profileModalVisible} animationType="slide" transparent={true}>
+        {/* Profile Management Modal */}
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={profileModalVisible}
+          onRequestClose={() => setProfileModalVisible(false)}
+        >
           <View className="flex-1 bg-black/50 justify-end items-center">
-            <View className="bg-white w-full max-w-[440px] rounded-t-3xl p-6">
-              <View className="flex-row justify-between items-center mb-4">
-                <Text className="text-base font-black text-[#1F130D]">Driver Profile</Text>
+            <View className="w-full max-w-[440px] bg-white rounded-t-3xl p-6 shadow-2xl">
+              
+              <View className="flex-row justify-between items-center mb-5 pb-3 border-b border-gray-100">
+                <Text className="text-base font-black text-[#1F130D]">Driver Profile Settings</Text>
                 <TouchableOpacity onPress={() => setProfileModalVisible(false)}>
-                  <Ionicons name="close" size={20} color="#1F130D" />
+                  <Ionicons name="close-circle" size={24} color="#9E9E9E" />
                 </TouchableOpacity>
               </View>
 
-              <View className="items-center mb-4 relative">
-                <TouchableOpacity onPress={pickDriverImage} className="relative">
-                  <View className="w-20 h-20 bg-[#FEF7F3] rounded-full border border-[#B8520B]/30 items-center justify-center overflow-hidden">
-                    {driverImage ? (
-                      <Image source={{ uri: driverImage }} className="w-full h-full" />
-                    ) : (
-                      <Ionicons name="car" size={32} color="#B8520B" />
-                    )}
-                  </View>
-                  <View className="absolute bottom-0 right-0 bg-[#B8520B] p-1.5 rounded-full border-2 border-white shadow-sm">
-                    <Ionicons name="camera" size={12} color="white" />
-                  </View>
+              <ScrollView showsVerticalScrollIndicator={false} className="max-h-[400px]">
+                {/* Avatar Picker */}
+                <View className="items-center mb-5">
+                  <TouchableOpacity onPress={handlePickImage} className="relative">
+                    <View className="w-20 h-20 rounded-full bg-[#FEF7F3] border-2 border-[#B8520B] items-center justify-center overflow-hidden">
+                      {driverImage ? (
+                        <Image source={{ uri: driverImage }} className="w-full h-full" />
+                      ) : (
+                        <Ionicons name="car" size={32} color="#B8520B" />
+                      )}
+                    </View>
+                    <View className="absolute bottom-0 right-0 bg-[#B8520B] p-1.5 rounded-full border-2 border-white">
+                      <Ionicons name="camera" size={12} color="white" />
+                    </View>
+                  </TouchableOpacity>
+                  <Text className="text-xs font-bold text-[#B8520B] mt-2">Tap to change avatar</Text>
+                </View>
+
+                {/* Name Input */}
+                <View className="mb-3.5">
+                  <Text className="text-xs font-bold text-gray-500 uppercase mb-1">Full Name</Text>
+                  <TextInput 
+                    value={driverName}
+                    onChangeText={setDriverName}
+                    placeholder="Enter full name"
+                    className="bg-[#F8F9FC] border border-[#EAE3DE] rounded-xl px-4 py-3 text-sm text-[#1F130D]"
+                  />
+                </View>
+
+                {/* Email Input */}
+                <View className="mb-3.5">
+                  <Text className="text-xs font-bold text-gray-500 uppercase mb-1">Email Address</Text>
+                  <TextInput 
+                    value={driverEmail}
+                    editable={false}
+                    className="bg-gray-100 border border-[#EAE3DE] rounded-xl px-4 py-3 text-sm text-gray-400"
+                  />
+                </View>
+
+                {/* Phone Input */}
+                <View className="mb-5">
+                  <Text className="text-xs font-bold text-gray-500 uppercase mb-1">Phone Number</Text>
+                  <TextInput 
+                    value={driverPhone}
+                    onChangeText={setDriverPhone}
+                    placeholder="Enter phone number"
+                    keyboardType="phone-pad"
+                    className="bg-[#F8F9FC] border border-[#EAE3DE] rounded-xl px-4 py-3 text-sm text-[#1F130D]"
+                  />
+                </View>
+              </ScrollView>
+
+              {/* Action Buttons */}
+              <View className="flex-row space-x-3 mt-4 pt-4 border-t border-gray-100">
+                <TouchableOpacity 
+                  onPress={() => setProfileModalVisible(false)}
+                  className="flex-1 bg-gray-100 py-3.5 rounded-xl items-center"
+                >
+                  <Text className="text-xs font-bold text-gray-600 uppercase">Cancel</Text>
                 </TouchableOpacity>
-                <Text className="text-xs font-bold text-[#B8520B] mt-2">Tap icon to change photo</Text>
+                <TouchableOpacity 
+                  onPress={handleSaveProfile}
+                  className="flex-1 bg-[#B8520B] py-3.5 rounded-xl items-center shadow-md"
+                >
+                  <Text className="text-xs font-bold text-white uppercase tracking-wider">Save Changes</Text>
+                </TouchableOpacity>
               </View>
 
-              <Text className="text-[11px] font-bold text-gray-500 mb-1">Driver Name</Text>
-              <TextInput className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs mb-3 text-[#1F130D]" value={driverName} onChangeText={setDriverName} />
-              
-              <Text className="text-[11px] font-bold text-gray-500 mb-1">Email Address (Logged In)</Text>
-              <TextInput className="bg-gray-100 border border-[#EAE3DE] p-3 rounded-xl text-xs mb-3 text-gray-500" value={driverEmail} editable={false} />
-              
-              <Text className="text-[11px] font-bold text-gray-500 mb-1">Phone Number</Text>
-              <TextInput className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs mb-5 text-[#1F130D]" value={driverPhone} onChangeText={setDriverPhone} />
-              
-              <TouchableOpacity onPress={handleUpdateProfile} className="bg-[#B8520B] py-3.5 rounded-xl items-center mb-3">
-                <Text className="text-white text-xs font-bold uppercase tracking-wider">Save Changes</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity onPress={handleLogout} className="bg-red-50 border border-red-200 py-3 rounded-xl items-center flex-row justify-center">
-                <Ionicons name="log-out-outline" size={14} color="#DC2626" style={{ marginRight: 6 }} />
-                <Text className="text-red-600 font-bold text-xs uppercase tracking-wider">Log Out</Text>
-              </TouchableOpacity>
             </View>
           </View>
         </Modal>
 
-        {/* Bottom Navigation Bar */}
-        <View className="absolute bottom-0 left-0 right-0 bg-white border-t border-[#EAE3DE] px-6 py-2.5 flex-row justify-around items-center shadow-lg">
-          <TouchableOpacity onPress={() => setActiveTab('All')} className="items-center">
-            <Ionicons name="bicycle" size={18} color="#B8520B" />
-            <Text className="text-[9px] font-bold text-[#B8520B] mt-0.5">Deliveries</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setProfileModalVisible(true)} className="items-center">
-            <Ionicons name="person-outline" size={18} color="#757575" />
-            <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Driver Profile</Text>
-          </TouchableOpacity>
-        </View>
+        {/* Beautiful Custom Logout Confirmation Modal */}
+        <Modal
+          animationType="fade"
+          transparent={true}
+          visible={logoutModalVisible}
+          onRequestClose={() => setLogoutModalVisible(false)}
+        >
+          <View className="flex-1 bg-black/60 justify-center items-center px-5">
+            <View className="w-full max-w-[340px] bg-white rounded-3xl p-6 shadow-2xl items-center border border-gray-100">
+              
+              <View className="w-16 h-16 bg-red-50 rounded-full items-center justify-center mb-4 border border-red-100">
+                <Ionicons name="log-out" size={28} color="#DC2626" />
+              </View>
+
+              <Text className="text-lg font-black text-[#1F130D] text-center mb-1">Log Out Account</Text>
+              <Text className="text-xs text-gray-500 text-center mb-6 leading-relaxed">
+                Are you sure you want to end your current session? You'll need to sign back in to view deliveries.
+              </Text>
+
+              <View className="flex-row space-x-3 w-full">
+                <TouchableOpacity 
+                  onPress={() => setLogoutModalVisible(false)}
+                  className="flex-1 bg-gray-100 py-3.5 rounded-2xl items-center border border-gray-200"
+                >
+                  <Text className="text-xs font-bold text-gray-600 uppercase">Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  onPress={() => {
+                    setLogoutModalVisible(false);
+                    executeLogout();
+                  }}
+                  className="flex-1 bg-red-600 py-3.5 rounded-2xl items-center shadow-md shadow-red-200"
+                >
+                  <Text className="text-xs font-bold text-white uppercase tracking-wider">Log Out</Text>
+                </TouchableOpacity>
+              </View>
+
+            </View>
+          </View>
+        </Modal>
 
       </View>
     </View>
