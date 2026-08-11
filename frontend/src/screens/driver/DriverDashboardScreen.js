@@ -1,10 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StatusBar, Image, Modal, TextInput, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { BACKEND_URL } from '../../api/backend';
+import { AuthContext } from '../../context/AuthContext';
 
 export default function DriverDashboardScreen({ route, navigation }) {
+  const authContext = useContext(AuthContext);
+
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [driverName, setDriverName] = useState('Alex Rider');
   const [driverEmail, setDriverEmail] = useState('alex.driver@restaurant.com');
@@ -13,7 +16,6 @@ export default function DriverDashboardScreen({ route, navigation }) {
   const [isLoadingDeliveries, setIsLoadingDeliveries] = useState(true);
 
   const [activeTab, setActiveTab] = useState('All');
-  
   const [deliveries, setDeliveries] = useState([]);
 
   useEffect(() => {
@@ -23,18 +25,27 @@ export default function DriverDashboardScreen({ route, navigation }) {
   const fetchDeliveries = async () => {
     try {
       setIsLoadingDeliveries(true);
-      const response = await fetch(`${BACKEND_URL}/api/orders/user`);
+      const token = authContext?.token || '';
+      const response = await fetch(`${BACKEND_URL}/api/orders/user`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Failed to fetch deliveries');
 
       const mapped = (data.orders || []).map((order, index) => ({
-        id: order.id || `d${index + 1}`,
-        customer: 'Customer',
-        address: 'Delivery Address Pending',
-        phone: '+251 000 000 000',
+        id: order.id || order._id || `d${index + 1}`,
+        customer: order.customerName || 'Customer',
+        address: order.deliveryAddress || 'Delivery Address Pending',
+        phone: order.phone || '+251 000 000 000',
         time: order.date || 'Now',
         status: order.deliveryStatus || (order.status === 'Ready' ? 'Ready for Pickup' : order.status === 'Served' ? 'Delivered' : 'On the Way'),
-        items: (order.items || '').split(', ').map((entry) => ({ name: entry || '1x Item', note: order.paymentMethod === 'telebirr' ? 'Telebirr paid' : 'Pending payment' })),
+        items: (Array.isArray(order.items) ? order.items : String(order.items || '').split(', ')).map((entry) => ({ 
+          name: typeof entry === 'object' ? (entry.name || 'Item') : (entry || '1x Item'), 
+          note: order.paymentMethod === 'telebirr' ? 'Telebirr paid' : 'Pending payment' 
+        })),
         total: order.total || '$0.00',
         image: order.image || null
       }));
@@ -48,10 +59,18 @@ export default function DriverDashboardScreen({ route, navigation }) {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      if (authContext && authContext.logout) {
+        await authContext.logout();
+      }
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
+    setProfileModalVisible(false);
     navigation.reset({
       index: 0,
-      routes: [{ name: 'CustomerLanding', params: { isLoggedIn: false } }],
+      routes: [{ name: 'Login' }],
     });
   };
 
@@ -70,10 +89,14 @@ export default function DriverDashboardScreen({ route, navigation }) {
 
   const updateDeliveryStatus = async (id, newStatus) => {
     try {
+      const token = authContext?.token || '';
       const apiStatus = newStatus === 'On the Way' ? 'Ready' : newStatus === 'Delivered' ? 'Served' : newStatus;
       const response = await fetch(`${BACKEND_URL}/api/orders/${id}/status`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json' 
+        },
         body: JSON.stringify({ status: apiStatus })
       });
 
@@ -117,7 +140,7 @@ export default function DriverDashboardScreen({ route, navigation }) {
           </TouchableOpacity>
           
           <View className="bg-[#FEF7F3] px-3 py-1.5 rounded-xl border border-[#B8520B]/20 flex-row items-center">
-            <View className="w-2 h-2 rounded-full bg-emerald-500 mr-1.5 animate-pulse" />
+            <View className="w-2 h-2 rounded-full bg-emerald-500 mr-1.5" />
             <Text className="text-[11px] font-bold text-[#B8520B]">Online</Text>
           </View>
         </View>
@@ -137,7 +160,7 @@ export default function DriverDashboardScreen({ route, navigation }) {
             <View className="flex-1 bg-white rounded-3xl p-4 border border-[#EAE3DE] shadow-xs">
               <View className="flex-row justify-between items-center mb-2">
                 <Text className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">On the Way</Text>
-                <Ionicons name="navigate-outline" size={16} color="amber" />
+                <Ionicons name="navigate-outline" size={16} color="#B8520B" />
               </View>
               <Text className="text-2xl font-black text-[#1F130D]">{onTheWayCount}</Text>
             </View>
@@ -167,8 +190,10 @@ export default function DriverDashboardScreen({ route, navigation }) {
               <ActivityIndicator size="large" color="#B8520B" />
             </View>
           ) : filteredDeliveries.length === 0 ? (
-            <View className="py-16 items-center justify-center">
-              <Text className="text-sm text-gray-500">No deliveries yet.</Text>
+            <View className="py-16 items-center justify-center bg-white rounded-3xl border border-[#EAE3DE] p-6">
+              <Ionicons name="bicycle-outline" size={36} color="#9E9E9E" style={{ marginBottom: 8 }} />
+              <Text className="text-sm font-bold text-gray-600">No deliveries available</Text>
+              <Text className="text-xs text-gray-400 mt-1 text-center">Assigned deliveries will show up here.</Text>
             </View>
           ) : filteredDeliveries.map((delivery) => (
             <View key={delivery.id} className={`bg-white rounded-3xl p-4 border mb-3 shadow-xs ${delivery.status === 'Ready for Pickup' ? 'border-[#B8520B]' : 'border-[#EAE3DE]'}`}>
