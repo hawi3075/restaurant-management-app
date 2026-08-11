@@ -30,6 +30,10 @@ export default function LoginScreen() {
   const [newPassword, setNewPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
 
+  // Status & Feedback States
+  const [successMessage, setSuccessMessage] = useState('');
+  const [loginError, setLoginError] = useState('');
+
   const [request, response, promptAsync] = Google.useAuthRequest({
     webClientId: '801403267793-ktbmci8hevllseach2e5jn101dgpf4mc.apps.googleusercontent.com',
     useProxy: true,
@@ -47,6 +51,7 @@ export default function LoginScreen() {
   const handleGoogleBackendAuth = async (token) => {
     try {
       setIsLoading(true);
+      setLoginError('');
       const userInfoResponse = await fetch('https://www.googleapis.com/userinfo/v2/me', {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -64,7 +69,6 @@ export default function LoginScreen() {
       });
 
       const data = await res.json();
-      console.log('Login response data:', JSON.stringify(data, null, 2));
       if (!res.ok) throw new Error(data.message || 'Google authentication failed');
 
       if (data.token && data.user) {
@@ -77,12 +81,10 @@ export default function LoginScreen() {
         };
         const inferredRole = (data.user && data.user.role) ? data.user.role : (routeToRole[data.navigateTo] || 'customer');
         const userWithRole = Object.assign({}, data.user, { role: inferredRole });
-        console.log('Calling login with user (google):', JSON.stringify(userWithRole, null, 2));
         await login(data.token, userWithRole);
-        // Do not reset navigation here — AppNavigator will react to auth state change
       }
     } catch (error) {
-      Alert.alert('Error', error.message);
+      setLoginError(error.message);
     } finally {
       setIsLoading(false);
     }
@@ -90,11 +92,12 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Please enter both email and password.');
+      setLoginError('Please enter both email and password.');
       return;
     }
 
     setIsLoading(true);
+    setLoginError('');
 
     try {
       const cleanEmail = email.trim();
@@ -105,11 +108,10 @@ export default function LoginScreen() {
       });
 
       const data = await response.json();
-      console.log('Login response data:', JSON.stringify(data, null, 2));
       setIsLoading(false);
 
       if (!response.ok) {
-        Alert.alert('Login Failed', data.message || 'Invalid credentials.');
+        setLoginError('invalid email or password');
         return;
       }
 
@@ -123,15 +125,13 @@ export default function LoginScreen() {
         };
         const inferredRole = (data.user && data.user.role) ? data.user.role : (routeToRole[data.navigateTo] || 'customer');
         const userWithRole = Object.assign({}, data.user, { role: inferredRole });
-        console.log('Calling login with user:', JSON.stringify(userWithRole, null, 2));
         await login(data.token, userWithRole);
-        // Do not reset navigation here — AppNavigator will react to auth state change
       }
 
     } catch (error) {
       setIsLoading(false);
       console.error('Login Error:', error);
-      Alert.alert('Connection Error', 'Unable to connect to the server. Please check your network and backend URL.');
+      setLoginError('invalid email or password');
     }
   };
 
@@ -143,6 +143,8 @@ export default function LoginScreen() {
 
     try {
       setIsLoading(true);
+      setSuccessMessage('');
+      setLoginError('');
       const response = await fetch(`${BACKEND_URL}/api/auth/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -156,7 +158,7 @@ export default function LoginScreen() {
         throw new Error(data.message || 'Failed to send reset instructions.');
       }
 
-      Alert.alert('Success', 'Password reset instructions have been sent to your email.');
+      setSuccessMessage('Password reset instructions have been sent to your email.');
       setForgotStep('reset'); 
     } catch (error) {
       setIsLoading(false);
@@ -172,6 +174,8 @@ export default function LoginScreen() {
 
     try {
       setIsLoading(true);
+      setSuccessMessage('');
+      setLoginError('');
       const response = await fetch(`${BACKEND_URL}/api/auth/reset-password/${resetToken.trim()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -185,11 +189,16 @@ export default function LoginScreen() {
         throw new Error(data.message || 'Failed to reset password.');
       }
 
-      Alert.alert('Success', 'Your password has been successfully updated! Please sign in.');
-      setIsForgotPassword(false);
-      setForgotStep('email');
-      setResetToken('');
-      setNewPassword('');
+      setSuccessMessage('You are update your password text');
+      
+      setTimeout(() => {
+        setIsForgotPassword(false);
+        setForgotStep('email');
+        setResetToken('');
+        setNewPassword('');
+        setSuccessMessage('');
+      }, 2000);
+      
     } catch (error) {
       setIsLoading(false);
       Alert.alert('Error', error.message || 'Server connection failed.');
@@ -205,6 +214,8 @@ export default function LoginScreen() {
         <View className="px-6 pt-6 pb-2 z-10">
           <TouchableOpacity 
             onPress={() => {
+              setSuccessMessage('');
+              setLoginError('');
               if (isForgotPassword) {
                 if (forgotStep === 'reset') {
                   setForgotStep('email');
@@ -237,6 +248,22 @@ export default function LoginScreen() {
             </Text>
           </View>
 
+          {/* Success Feedback Banner */}
+          {successMessage ? (
+            <View className="bg-emerald-50 border border-emerald-300 p-4 rounded-2xl mb-4 flex-row items-center">
+              <Ionicons name="checkmark-circle" size={18} color="#059669" style={{ marginRight: 8 }} />
+              <Text className="text-emerald-700 text-xs font-bold flex-1">{successMessage}</Text>
+            </View>
+          ) : null}
+
+          {/* Login Error / Invalid Text Banner */}
+          {loginError ? (
+            <View className="bg-emerald-50 border border-emerald-300 p-4 rounded-2xl mb-4 flex-row items-center">
+              <Ionicons name="alert-circle" size={18} color="#059669" style={{ marginRight: 8 }} />
+              <Text className="text-emerald-700 text-xs font-bold flex-1">{loginError}</Text>
+            </View>
+          ) : null}
+
           {/* Form Container */}
           <View className="bg-white p-6 rounded-3xl border border-[#EAE3DE] shadow-xs mb-6">
             
@@ -249,7 +276,7 @@ export default function LoginScreen() {
                     placeholder="manager@restaurant.com"
                     placeholderTextColor="#9E9E9E"
                     value={email}
-                    onChangeText={setEmail}
+                    onChangeText={(val) => { setEmail(val); setLoginError(''); }}
                     keyboardType="email-address"
                     autoCapitalize="none"
                     className="bg-[#F8F9FC] border border-[#EAE3DE] rounded-2xl px-4 py-3 text-xs text-[#1F130D]"
@@ -265,7 +292,7 @@ export default function LoginScreen() {
                       placeholder="••••••••"
                       placeholderTextColor="#9E9E9E"
                       value={password}
-                      onChangeText={setPassword}
+                      onChangeText={(val) => { setPassword(val); setLoginError(''); }}
                       secureTextEntry={!showPassword}
                       className="bg-[#F8F9FC] border border-[#EAE3DE] rounded-2xl pl-4 pr-12 py-3 text-xs text-[#1F130D]"
                       editable={!isLoading}
@@ -280,7 +307,7 @@ export default function LoginScreen() {
                 </View>
 
                 {/* Forgot Password Link */}
-                <TouchableOpacity onPress={() => { setIsForgotPassword(true); setForgotStep('email'); }} className="self-end mb-6">
+                <TouchableOpacity onPress={() => { setSuccessMessage(''); setLoginError(''); setIsForgotPassword(true); setForgotStep('email'); }} className="self-end mb-6">
                   <Text className="text-[11px] font-bold text-[#B8520B]">Forgot Password?</Text>
                 </TouchableOpacity>
 
@@ -311,11 +338,11 @@ export default function LoginScreen() {
                     try {
                       const res = await promptAsync();
                       if (!res || res.type !== 'success') {
-                        Alert.alert('Google Sign-in', 'Google sign-in was cancelled or failed.');
+                        setLoginError('invalid email or password');
                       }
                     } catch (err) {
                       console.error('Google prompt error', err);
-                      Alert.alert('Google Sign-in Error', err.message || 'An error occurred while attempting Google sign-in.');
+                      setLoginError('invalid email or password');
                     }
                   }}
                   className="bg-[#F8F9FC] border border-[#EAE3DE] py-3.5 rounded-2xl items-center flex-row justify-center"
@@ -358,7 +385,7 @@ export default function LoginScreen() {
                 </TouchableOpacity>
 
                 <TouchableOpacity 
-                  onPress={() => setIsForgotPassword(false)}
+                  onPress={() => { setSuccessMessage(''); setLoginError(''); setIsForgotPassword(false); }}
                   className="items-center py-2"
                 >
                   <Text className="text-xs font-bold text-gray-500">Remember your password? <Text className="text-[#B8520B]">Sign In</Text></Text>
