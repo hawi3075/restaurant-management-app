@@ -13,6 +13,18 @@ router.get(['/', '/all'], async (req, res) => {
   }
 });
 
+// Get tickets specific to the logged-in customer (/api/support/my-tickets)
+router.get('/my-tickets', async (req, res) => {
+  try {
+    const userEmail = req.headers['x-user-email'];
+    const query = userEmail ? { email: userEmail } : {};
+    const tickets = await SupportMessage.find(query).sort({ createdAt: -1 });
+    return res.status(200).json({ success: true, tickets, messages: tickets });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // Create a support message (from customers)
 router.post('/', async (req, res) => {
   try {
