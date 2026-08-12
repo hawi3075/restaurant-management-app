@@ -52,10 +52,13 @@ function AppNavigator() {
     );
   }
 
-  // Not logged in (Auth Stack)
+  // Not logged in (Guest / Public Stack) - Starts at CustomerLanding
   if (!user) {
     return (
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="CustomerLanding">
+        <Stack.Screen name="CustomerLanding" component={CustomerLandingScreen} />
+        <Stack.Screen name="MenuScreen" component={MenuScreen} />
+        <Stack.Screen name="FoodDetailScreen" component={FoodDetailScreen} />
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="Signup" component={SignupScreen} />
       </Stack.Navigator>
@@ -111,7 +114,7 @@ function AppNavigator() {
     );
   }
 
-  // CUSTOMER (Default fallback stack)
+  // LOGGED-IN CUSTOMER STACK
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="CustomerLanding" component={CustomerLandingScreen} />
