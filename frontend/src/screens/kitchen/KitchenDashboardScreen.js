@@ -4,10 +4,9 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import io from 'socket.io-client';
+import { BACKEND_URL } from '../../api/backend';
 
-const LIVE_BACKEND_URL = 'https://your-backend-service.onrender.com'; // Updated with your live Render backend URL
-
-const API_URL = __DEV__ ? 'http://localhost:5000' : LIVE_BACKEND_URL;
+const API_URL = BACKEND_URL;
 const SOCKET_URL = API_URL;
 
 export default function KitchenDashboardScreen({ route, navigation }) {
@@ -210,8 +209,8 @@ export default function KitchenDashboardScreen({ route, navigation }) {
   const cookingCount = kitchenOrders.filter(o => o.status === 'Cooking').length;
 
   return (
-    <View className="flex-1 bg-[#F8F9FC] items-center">
-      <View className="w-full max-w-[440px] flex-1 bg-[#F8F9FC] relative shadow-2xl pb-16">
+    <View className="flex-1 bg-[#F8F9FC] items-center justify-center">
+      <View className="w-full max-w-[440px] flex-1 bg-[#F8F9FC] relative shadow-2xl border-x border-[#EAE3DE] pb-16">
         <StatusBar barStyle="dark-content" backgroundColor="#F8F9FC" />
 
         {/* Top Header */}
@@ -230,7 +229,7 @@ export default function KitchenDashboardScreen({ route, navigation }) {
             </View>
           </TouchableOpacity>
           
-          <TouchableOpacity onPress={fetchKitchenOrders} className="bg-[#FEF7F3] px-3 py-1.5 rounded-xl border border-[#B8520B]/20 flex-row items-center">
+          <TouchableOpacity onPress={fetchKitchenOrders} className="bg-[#FEF7F3] px-3 py-1.5 rounded-xl border border-[#B8520B]/20 flex-row items-center active:scale-95">
             <View className="w-2 h-2 rounded-full bg-emerald-500 mr-1.5 animate-pulse" />
             <Text className="text-[11px] font-bold text-[#B8520B]">Sync Live</Text>
           </TouchableOpacity>
@@ -281,7 +280,7 @@ export default function KitchenDashboardScreen({ route, navigation }) {
               <ActivityIndicator size="large" color="#B8520B" />
             </View>
           ) : filteredOrders.length === 0 ? (
-            <View className="py-16 items-center justify-center bg-white rounded-3xl border border-[#EAE3DE] p-6">
+            <View className="py-16 items-center justify-center bg-white rounded-3xl border border-[#EAE3DE] p-6 shadow-xs">
               <Ionicons name="restaurant-outline" size={36} color="#9E9E9E" style={{ marginBottom: 8 }} />
               <Text className="text-sm font-bold text-gray-600">No active kitchen orders</Text>
               <Text className="text-xs text-gray-400 mt-1 text-center">New orders from customer checkouts will appear here instantly.</Text>
@@ -327,7 +326,7 @@ export default function KitchenDashboardScreen({ route, navigation }) {
                 {order.status === 'Pending' && (
                   <TouchableOpacity 
                     onPress={() => updateOrderStatus(order.id, 'Preparing')}
-                    className="bg-[#B8520B] px-4 py-2 rounded-xl flex-row items-center"
+                    className="bg-[#B8520B] px-4 py-2 rounded-xl flex-row items-center active:scale-95 shadow-md shadow-[#B8520B]/30"
                   >
                     <Ionicons name="flame" size={14} color="white" style={{ marginRight: 4 }} />
                     <Text className="text-xs font-bold text-white">Accept & Cook</Text>
@@ -336,7 +335,7 @@ export default function KitchenDashboardScreen({ route, navigation }) {
                 {order.status === 'Cooking' && (
                   <TouchableOpacity 
                     onPress={() => updateOrderStatus(order.id, 'Ready')}
-                    className="bg-green-600 px-4 py-2 rounded-xl flex-row items-center"
+                    className="bg-emerald-600 px-4 py-2 rounded-xl flex-row items-center active:scale-95 shadow-md shadow-emerald-600/30"
                   >
                     <Ionicons name="checkmark-circle" size={14} color="white" style={{ marginRight: 4 }} />
                     <Text className="text-xs font-bold text-white">Mark as Ready</Text>
@@ -358,7 +357,7 @@ export default function KitchenDashboardScreen({ route, navigation }) {
         {/* --- PROFILE MODAL --- */}
         <Modal visible={profileModalVisible} animationType="slide" transparent={true}>
           <View className="flex-1 bg-black/50 justify-end items-center">
-            <View className="bg-white w-full max-w-[440px] rounded-t-3xl p-6">
+            <View className="bg-white w-full max-w-[440px] rounded-t-3xl p-6 shadow-2xl border-t border-gray-100">
               <View className="flex-row justify-between items-center mb-4">
                 <Text className="text-base font-black text-[#1F130D]">Head Chef Profile</Text>
                 <TouchableOpacity onPress={() => setProfileModalVisible(false)}>
@@ -368,7 +367,7 @@ export default function KitchenDashboardScreen({ route, navigation }) {
 
               <View className="items-center mb-4 relative">
                 <TouchableOpacity onPress={pickChefImage} className="relative">
-                  <View className="w-20 h-20 bg-[#FEF7F3] rounded-full border border-[#B8520B]/30 items-center justify-center overflow-hidden">
+                  <View className="w-20 h-20 bg-[#FEF7F3] rounded-full border border-[#B8520B]/30 items-center justify-center overflow-hidden shadow-xs">
                     {chefImage ? (
                       <Image source={{ uri: chefImage }} className="w-full h-full" />
                     ) : (
@@ -391,11 +390,11 @@ export default function KitchenDashboardScreen({ route, navigation }) {
               <Text className="text-[11px] font-bold text-gray-500 mb-1">Phone Number</Text>
               <TextInput className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs mb-5 text-[#1F130D]" value={chefPhone} onChangeText={setChefPhone} />
               
-              <TouchableOpacity onPress={saveProfileChanges} className="bg-[#B8520B] py-3.5 rounded-xl items-center mb-3">
+              <TouchableOpacity onPress={saveProfileChanges} className="bg-[#B8520B] py-3.5 rounded-xl items-center mb-3 active:scale-95 shadow-md shadow-[#B8520B]/30">
                 <Text className="text-white text-xs font-bold">Save Changes</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity onPress={handleLogout} className="bg-red-50 border border-red-200 py-3 rounded-xl items-center flex-row justify-center">
+              <TouchableOpacity onPress={handleLogout} className="bg-red-50 border border-red-200 py-3 rounded-xl items-center flex-row justify-center active:scale-95">
                 <Ionicons name="log-out-outline" size={14} color="#DC2626" style={{ marginRight: 6 }} />
                 <Text className="text-red-600 font-bold text-xs">Log Out</Text>
               </TouchableOpacity>

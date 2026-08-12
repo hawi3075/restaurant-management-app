@@ -12,8 +12,9 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { BACKEND_URL } from '../../api/backend';
 
-const API_URL = 'https://your-backend-service.onrender.com/api'; // Replace with your live Render backend URL
+const API_URL = `${BACKEND_URL}/api`;
 
 export default function MenuManagementScreen({ navigation }) {
   const [items, setItems] = useState([]);
