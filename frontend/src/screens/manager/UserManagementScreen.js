@@ -5,8 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthContext } from '../../context/AuthContext';
 import { BACKEND_URL } from '../../api/backend';
 
-const LIVE_BACKEND_URL = 'https://restaurant-management-app-wqmp.onrender.com';
-const API_URL = BACKEND_URL || (__DEV__ ? 'http://localhost:5000' : LIVE_BACKEND_URL);
+const API_URL = BACKEND_URL;
 
 export default function UserManagementScreen({ navigation }) {
   const authContext = useContext(AuthContext);
@@ -37,6 +36,12 @@ export default function UserManagementScreen({ navigation }) {
           'Authorization': `Bearer ${token}`
         }
       });
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const textResponse = await response.text();
+        throw new Error(`Server returned non-JSON response (Status ${response.status}). Please check backend routes.`);
+      }
 
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Failed to fetch users.');
@@ -73,6 +78,11 @@ export default function UserManagementScreen({ navigation }) {
         body: JSON.stringify({ name, email, role })
       });
 
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server returned non-JSON response during update.');
+      }
+
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Failed to update user.');
 
@@ -104,6 +114,11 @@ export default function UserManagementScreen({ navigation }) {
                   'Authorization': `Bearer ${token}`
                 }
               });
+
+              const contentType = response.headers.get('content-type');
+              if (!contentType || !contentType.includes('application/json')) {
+                throw new Error('Server returned non-JSON response during deletion.');
+              }
 
               const data = await response.json();
               if (!response.ok) throw new Error(data.message || 'Failed to delete user.');

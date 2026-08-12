@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BACKEND_URL } from '../../api/backend';
 
 const API_URL = `${BACKEND_URL}/api`;
@@ -48,13 +49,27 @@ export default function MenuManagementScreen({ navigation }) {
   const [newStyle, setNewStyle] = useState('Modern');
   const [imageSourceType, setImageSourceType] = useState('url');
 
-  // Fetch dishes from Render backend
+  // Fetch dishes from Render backend with safe content-type checks
   const fetchDishes = async () => {
     try {
-      const response = await fetch(`${API_URL}/dishes`);
+      const token = await AsyncStorage.getItem('token');
+      const response = await fetch(`${API_URL}/dishes`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const textResponse = await response.text();
+        throw new Error(`Server returned non-JSON response (Status ${response.status}).`);
+      }
+
       const data = await response.json();
       if (Array.isArray(data)) {
         setItems(data);
+      } else if (data.dishes && Array.isArray(data.dishes)) {
+        setItems(data.dishes);
       }
     } catch (error) {
       console.error('Error fetching dishes from Render backend:', error);
@@ -92,11 +107,20 @@ export default function MenuManagementScreen({ navigation }) {
       // Optimistic UI update
       setItems(items.map(i => (i.id === id || i._id === id) ? { ...i, status: newStatus } : i));
 
-      await fetch(`${API_URL}/dishes/${id || item._id}`, {
+      const token = await AsyncStorage.getItem('token');
+      const response = await fetch(`${API_URL}/dishes/${id || item._id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ status: newStatus }),
       });
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server returned non-JSON response.');
+      }
     } catch (error) {
       console.error('Error updating stock status:', error);
       fetchDishes(); // Rollback on error
@@ -106,10 +130,10 @@ export default function MenuManagementScreen({ navigation }) {
   const openEditModal = (item) => {
     setEditId(item.id || item._id);
     setEditName(item.name);
-    setEditDesc(item.desc);
+    setEditDesc(item.desc || '');
     setEditPrice(item.price.toString());
     setEditRating(item.rating ? item.rating.toString() : '4.5');
-    setEditImage(item.image);
+    setEditImage(item.image || '');
     setEditCategory(item.category || 'Lunch');
     setEditStyle(item.style || 'Modern');
     setEditModalVisible(true);
@@ -127,20 +151,31 @@ export default function MenuManagementScreen({ navigation }) {
         style: editStyle,
       };
 
+      const token = await AsyncStorage.getItem('token');
       const response = await fetch(`${API_URL}/dishes/${editId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify(updatedData),
       });
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server returned non-JSON response during update.');
+      }
 
       if (response.ok) {
         setEditModalVisible(false);
         fetchDishes();
       } else {
-        Alert.alert('Error', 'Failed to update dish on Render server');
+        const data = await response.json();
+        Alert.alert('Error', data.message || 'Failed to update dish on Render server');
       }
     } catch (error) {
       console.error('Error updating dish:', error);
+      Alert.alert('Error', error.message);
     }
   };
 
@@ -162,11 +197,20 @@ export default function MenuManagementScreen({ navigation }) {
         status: 'In Stock',
       };
 
+      const token = await AsyncStorage.getItem('token');
       const response = await fetch(`${API_URL}/dishes`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify(newDishData),
       });
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server returned non-JSON response during creation.');
+      }
 
       if (response.ok) {
         setNewName('');
@@ -177,10 +221,12 @@ export default function MenuManagementScreen({ navigation }) {
         setAddModalVisible(false);
         fetchDishes();
       } else {
-        Alert.alert('Error', 'Failed to add dish to Render server');
+        const data = await response.json();
+        Alert.alert('Error', data.message || 'Failed to add dish to Render server');
       }
     } catch (error) {
       console.error('Error adding dish:', error);
+      Alert.alert('Error', error.message);
     }
   };
 
@@ -192,10 +238,23 @@ export default function MenuManagementScreen({ navigation }) {
         style: 'destructive', 
         onPress: async () => {
           try {
-            await fetch(`${API_URL}/dishes/${id}`, { method: 'DELETE' });
+            const token = await AsyncStorage.getItem('token');
+            const response = await fetch(`${API_URL}/dishes/${id}`, { 
+              method: 'DELETE',
+              headers: {
+                'Authorization': `Bearer ${token}`
+              }
+            });
+
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+              throw new Error('Server returned non-JSON response during deletion.');
+            }
+
             fetchDishes();
           } catch (error) {
             console.error('Error deleting dish:', error);
+            Alert.alert('Error', error.message);
           }
         } 
       }
@@ -203,8 +262,8 @@ export default function MenuManagementScreen({ navigation }) {
   };
 
   const filteredItems = items.filter((item) => {
-    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          item.desc.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = (item.name && item.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                          (item.desc && item.desc.toLowerCase().includes(searchQuery.toLowerCase()));
     const matchesStyle = item.style === selectedStyle;
     const matchesCategory = selectedCategory === 'All' || item.category === selectedCategory;
     return matchesSearch && matchesStyle && matchesCategory;
@@ -302,16 +361,16 @@ export default function MenuManagementScreen({ navigation }) {
                         className={`px-2.5 py-0.5 rounded-full border ${item.status === 'In Stock' ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}
                       >
                         <Text className={`text-[10px] font-bold ${item.status === 'In Stock' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                          {item.status}
+                          {item.status || 'In Stock'}
                         </Text>
                       </TouchableOpacity>
                     </View>
                     <Text className="text-xs text-gray-400 mt-1" numberOfLines={1}>{item.desc}</Text>
                     <View className="flex-row justify-between items-center mt-2">
-                      <Text className="font-black text-sm text-[#1F130D]">${item.price.toFixed(2)}</Text>
+                      <Text className="font-black text-sm text-[#1F130D]">${item.price ? item.price.toFixed(2) : '0.00'}</Text>
                       <View className="flex-row items-center bg-[#FEF7F3] px-2 py-0.5 rounded-full border border-[#B8520B]/30">
                         <Ionicons name="star" size={10} color="#B8520B" />
-                        <Text className="text-[10px] font-bold text-[#B8520B] ml-1">{item.rating}</Text>
+                        <Text className="text-[10px] font-bold text-[#B8520B] ml-1">{item.rating || '4.5'}</Text>
                       </View>
                     </View>
                   </View>
@@ -369,7 +428,7 @@ export default function MenuManagementScreen({ navigation }) {
                     <Image source={{ uri: sanitizeImage(selectedDish.image) }} className="w-28 h-28 rounded-2xl mb-3 shadow-md" />
                     <View className="flex-row items-center bg-[#FEF7F3] px-3 py-1 rounded-full border border-[#B8520B]/30 mb-2">
                       <Ionicons name="star" size={12} color="#B8520B" />
-                      <Text className="text-xs font-bold text-[#B8520B] ml-1">{selectedDish.rating} Rating</Text>
+                      <Text className="text-xs font-bold text-[#B8520B] ml-1">{selectedDish.rating || '4.5'} Rating</Text>
                     </View>
                     <Text className="text-xl font-black text-[#1F130D] text-center">{selectedDish.name}</Text>
                     <Text className="text-xs text-gray-500 text-center mt-1 px-2">{selectedDish.desc}</Text>
@@ -386,11 +445,11 @@ export default function MenuManagementScreen({ navigation }) {
                     </View>
                     <View className="flex-row justify-between">
                       <Text className="text-xs text-gray-500">Price:</Text>
-                      <Text className="text-xs font-black text-[#B8520B]">${selectedDish.price.toFixed(2)}</Text>
+                      <Text className="text-xs font-black text-[#B8520B]">${selectedDish.price ? selectedDish.price.toFixed(2) : '0.00'}</Text>
                     </View>
                     <View className="flex-row justify-between">
                       <Text className="text-xs text-gray-500">Stock Status:</Text>
-                      <Text className={`text-xs font-bold ${selectedDish.status === 'In Stock' ? 'text-emerald-600' : 'text-rose-600'}`}>{selectedDish.status}</Text>
+                      <Text className={`text-xs font-bold ${selectedDish.status === 'In Stock' ? 'text-emerald-600' : 'text-rose-600'}`}>{selectedDish.status || 'In Stock'}</Text>
                     </View>
                   </View>
 
