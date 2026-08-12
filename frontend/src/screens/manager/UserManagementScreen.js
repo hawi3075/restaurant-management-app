@@ -46,7 +46,9 @@ export default function UserManagementScreen({ navigation }) {
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Failed to fetch users.');
 
-      setUsers(data.users || data.data || []);
+      // Backend returns a plain array from User.find(); fall back to
+      // data.users / data.data in case the response shape ever changes.
+      setUsers(Array.isArray(data) ? data : (data.users || data.data || []));
     } catch (error) {
       console.error('Fetch Users Error:', error);
       Alert.alert('Error', error.message);

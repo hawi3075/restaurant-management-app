@@ -15,7 +15,7 @@ import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BACKEND_URL } from '../../api/backend';
 
-const API_URL = `${BACKEND_URL}/api`;
+const API_URL = `${BACKEND_URL}/api/menu`;
 
 export default function MenuManagementScreen({ navigation }) {
   const [items, setItems] = useState([]);
@@ -25,7 +25,6 @@ export default function MenuManagementScreen({ navigation }) {
   
   const categories = ['All', 'Breakfast', 'Lunch', 'Dinner', 'Drinks', 'Desserts', 'Fast Food'];
 
-  // Modals State
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [selectedDish, setSelectedDish] = useState(null);
 
@@ -38,6 +37,7 @@ export default function MenuManagementScreen({ navigation }) {
   const [editImage, setEditImage] = useState('');
   const [editCategory, setEditCategory] = useState('Lunch');
   const [editStyle, setEditStyle] = useState('Modern');
+  const [editPrepTime, setEditPrepTime] = useState('15');
 
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [newName, setNewName] = useState('');
@@ -47,13 +47,23 @@ export default function MenuManagementScreen({ navigation }) {
   const [newImage, setNewImage] = useState('');
   const [newCategory, setNewCategory] = useState('Lunch');
   const [newStyle, setNewStyle] = useState('Modern');
+  const [newPrepTime, setNewPrepTime] = useState('15');
   const [imageSourceType, setImageSourceType] = useState('url');
 
-  // Fetch dishes from Render backend with safe content-type checks
+  // Map a raw backend MenuItem doc to the shape this screen renders with.
+  // Backend field names (description / availabilityStatus) differ from the
+  // UI's working names (desc / status), so normalize on the way in.
+  const normalizeItem = (doc) => ({
+    ...doc,
+    desc: doc.description || doc.desc || '',
+    status: doc.availabilityStatus === false ? 'Out of Stock' : 'In Stock',
+    style: doc.style || 'Modern',
+  });
+
   const fetchDishes = async () => {
     try {
       const token = await AsyncStorage.getItem('token');
-      const response = await fetch(`${API_URL}/dishes`, {
+      const response = await fetch(`${API_URL}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -66,11 +76,8 @@ export default function MenuManagementScreen({ navigation }) {
       }
 
       const data = await response.json();
-      if (Array.isArray(data)) {
-        setItems(data);
-      } else if (data.dishes && Array.isArray(data.dishes)) {
-        setItems(data.dishes);
-      }
+      const raw = Array.isArray(data) ? data : (data.dishes && Array.isArray(data.dishes) ? data.dishes : []);
+      setItems(raw.map(normalizeItem));
     } catch (error) {
       console.error('Error fetching dishes from Render backend:', error);
     }
@@ -104,17 +111,18 @@ export default function MenuManagementScreen({ navigation }) {
       if (!item) return;
       const newStatus = item.status === 'In Stock' ? 'Out of Stock' : 'In Stock';
       
-      // Optimistic UI update
       setItems(items.map(i => (i.id === id || i._id === id) ? { ...i, status: newStatus } : i));
 
       const token = await AsyncStorage.getItem('token');
-      const response = await fetch(`${API_URL}/dishes/${id || item._id}`, {
-        method: 'PATCH',
+      // Backend field is availabilityStatus (boolean), not status (string).
+      // Only PUT /:id exists on the backend (no PATCH route).
+      const response = await fetch(`${API_URL}/${id || item._id}`, {
+        method: 'PUT',
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ availabilityStatus: newStatus === 'In Stock' }),
       });
 
       const contentType = response.headers.get('content-type');
@@ -123,7 +131,7 @@ export default function MenuManagementScreen({ navigation }) {
       }
     } catch (error) {
       console.error('Error updating stock status:', error);
-      fetchDishes(); // Rollback on error
+      fetchDishes();
     }
   };
 
@@ -136,6 +144,7 @@ export default function MenuManagementScreen({ navigation }) {
     setEditImage(item.image || '');
     setEditCategory(item.category || 'Lunch');
     setEditStyle(item.style || 'Modern');
+    setEditPrepTime(item.preparationTime ? item.preparationTime.toString() : '15');
     setEditModalVisible(true);
   };
 
@@ -143,16 +152,17 @@ export default function MenuManagementScreen({ navigation }) {
     try {
       const updatedData = {
         name: editName,
-        desc: editDesc,
+        description: editDesc,
         price: parseFloat(editPrice) || 0,
         rating: parseFloat(editRating) || 4.5,
         image: editImage,
         category: editCategory,
         style: editStyle,
+        preparationTime: parseInt(editPrepTime, 10) || 15,
       };
 
       const token = await AsyncStorage.getItem('token');
-      const response = await fetch(`${API_URL}/dishes/${editId}`, {
+      const response = await fetch(`${API_URL}/${editId}`, {
         method: 'PUT',
         headers: { 
           'Content-Type': 'application/json',
@@ -188,17 +198,18 @@ export default function MenuManagementScreen({ navigation }) {
 
       const newDishData = {
         name: newName,
-        desc: newDesc,
+        description: newDesc,
         price: parseFloat(newPrice) || 0,
         rating: parseFloat(newRating) || 4.8,
         image: newImage || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c',
         category: newCategory,
         style: newStyle,
-        status: 'In Stock',
+        preparationTime: parseInt(newPrepTime, 10) || 15,
+        availabilityStatus: true,
       };
 
       const token = await AsyncStorage.getItem('token');
-      const response = await fetch(`${API_URL}/dishes`, {
+      const response = await fetch(`${API_URL}`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -212,17 +223,19 @@ export default function MenuManagementScreen({ navigation }) {
         throw new Error('Server returned non-JSON response during creation.');
       }
 
+      const data = await response.json();
+
       if (response.ok) {
         setNewName('');
         setNewDesc('');
         setNewPrice('');
         setNewRating('');
         setNewImage('');
+        setNewPrepTime('15');
         setAddModalVisible(false);
         fetchDishes();
       } else {
-        const data = await response.json();
-        Alert.alert('Error', data.message || 'Failed to add dish to Render server');
+        Alert.alert('Error', data.message || data.error || 'Failed to add dish to Render server');
       }
     } catch (error) {
       console.error('Error adding dish:', error);
@@ -239,7 +252,7 @@ export default function MenuManagementScreen({ navigation }) {
         onPress: async () => {
           try {
             const token = await AsyncStorage.getItem('token');
-            const response = await fetch(`${API_URL}/dishes/${id}`, { 
+            const response = await fetch(`${API_URL}/${id}`, { 
               method: 'DELETE',
               headers: {
                 'Authorization': `Bearer ${token}`
@@ -264,7 +277,7 @@ export default function MenuManagementScreen({ navigation }) {
   const filteredItems = items.filter((item) => {
     const matchesSearch = (item.name && item.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
                           (item.desc && item.desc.toLowerCase().includes(searchQuery.toLowerCase()));
-    const matchesStyle = item.style === selectedStyle;
+    const matchesStyle = (item.style || 'Modern') === selectedStyle;
     const matchesCategory = selectedCategory === 'All' || item.category === selectedCategory;
     return matchesSearch && matchesStyle && matchesCategory;
   });
@@ -276,7 +289,6 @@ export default function MenuManagementScreen({ navigation }) {
 
         <ScrollView showsVerticalScrollIndicator={false} className="flex-1 pt-12 px-5 pb-24">
           
-          {/* Header */}
           <View className="mb-4">
             <View className="flex-row items-center mb-3">
               <TouchableOpacity 
@@ -300,7 +312,6 @@ export default function MenuManagementScreen({ navigation }) {
             </TouchableOpacity>
           </View>
 
-          {/* Search Bar */}
           <View className="flex-row items-center bg-white border border-[#EAE3DE] rounded-2xl px-4 py-3 mb-4 shadow-xs">
             <Ionicons name="search-outline" size={18} color="#757575" />
             <TextInput 
@@ -312,7 +323,6 @@ export default function MenuManagementScreen({ navigation }) {
             />
           </View>
 
-          {/* Modern & Traditional Filter Tabs */}
           <View className="flex-row space-x-2 mb-4">
             {['Modern', 'Traditional'].map((style) => (
               <TouchableOpacity
@@ -327,7 +337,6 @@ export default function MenuManagementScreen({ navigation }) {
             ))}
           </View>
 
-          {/* Categories Horizontal Scroll */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-6 max-h-12">
             {categories.map((cat, idx) => {
               const isSelected = selectedCategory === cat;
@@ -343,7 +352,6 @@ export default function MenuManagementScreen({ navigation }) {
             })}
           </ScrollView>
 
-          {/* Menu Items List */}
           <View className="mb-10">
             <Text className="text-xs font-bold text-gray-400 mb-2">{selectedCategory} • {selectedStyle} Selection ({filteredItems.length})</Text>
             {filteredItems.map((item) => (
@@ -376,7 +384,6 @@ export default function MenuManagementScreen({ navigation }) {
                   </View>
                 </View>
 
-                {/* Bottom Action Buttons */}
                 <View className="flex-row space-x-2 pt-2 border-t border-gray-100">
                   <TouchableOpacity 
                     onPress={() => {
@@ -418,7 +425,6 @@ export default function MenuManagementScreen({ navigation }) {
           </View>
         </ScrollView>
 
-        {/* Dish Detail Modal */}
         <Modal animationType="fade" transparent={true} visible={detailModalVisible} onRequestClose={() => setDetailModalVisible(false)}>
           <View className="flex-1 bg-black/60 justify-center items-center px-5">
             <View className="bg-white w-full max-w-[380px] rounded-3xl p-6 shadow-2xl border border-gray-100">
@@ -465,7 +471,6 @@ export default function MenuManagementScreen({ navigation }) {
           </View>
         </Modal>
 
-        {/* Edit Dish Modal */}
         <Modal animationType="fade" transparent={true} visible={editModalVisible} onRequestClose={() => setEditModalVisible(false)}>
           <View className="flex-1 bg-black/50 justify-center items-center px-5">
             <View className="bg-white w-full max-w-[380px] rounded-3xl p-6 shadow-2xl border border-gray-100 max-h-[90%]">
@@ -498,6 +503,16 @@ export default function MenuManagementScreen({ navigation }) {
                   keyboardType="numeric"
                   value={editPrice}
                   onChangeText={setEditPrice}
+                  className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D] mb-3"
+                />
+
+                <Text className="text-xs font-bold text-gray-700 mb-1">Preparation Time (minutes)</Text>
+                <TextInput 
+                  placeholder="e.g. 15"
+                  placeholderTextColor="#9CA3AF"
+                  keyboardType="numeric"
+                  value={editPrepTime}
+                  onChangeText={setEditPrepTime}
                   className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D] mb-3"
                 />
 
@@ -559,7 +574,6 @@ export default function MenuManagementScreen({ navigation }) {
           </View>
         </Modal>
 
-        {/* Add Dish Modal with Dual Image Option (URL or Device) */}
         <Modal animationType="fade" transparent={true} visible={addModalVisible} onRequestClose={() => setAddModalVisible(false)}>
           <View className="flex-1 bg-black/50 justify-center items-center px-5">
             <View className="bg-white w-full max-w-[380px] rounded-3xl p-6 shadow-2xl border border-gray-100 max-h-[90%]">
@@ -595,6 +609,16 @@ export default function MenuManagementScreen({ navigation }) {
                   className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D] mb-3"
                 />
 
+                <Text className="text-xs font-bold text-gray-700 mb-1">Preparation Time (minutes)</Text>
+                <TextInput 
+                  placeholder="e.g. 15"
+                  placeholderTextColor="#9CA3AF"
+                  keyboardType="numeric"
+                  value={newPrepTime}
+                  onChangeText={setNewPrepTime}
+                  className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D] mb-3"
+                />
+
                 <Text className="text-xs font-bold text-gray-700 mb-1">Rating Score</Text>
                 <TextInput 
                   placeholder="e.g. 4.8"
@@ -604,7 +628,6 @@ export default function MenuManagementScreen({ navigation }) {
                   className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D] mb-3"
                 />
 
-                {/* Image Selection Option Switch */}
                 <Text className="text-xs font-bold text-gray-700 mb-1">Dish Image Source</Text>
                 <View className="flex-row space-x-2 mb-3">
                   <TouchableOpacity 

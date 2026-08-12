@@ -59,6 +59,7 @@ function AppNavigator() {
         <Stack.Screen name="CustomerLanding" component={CustomerLandingScreen} />
         <Stack.Screen name="MenuScreen" component={MenuScreen} />
         <Stack.Screen name="FoodDetailScreen" component={FoodDetailScreen} />
+        <Stack.Screen name="CartScreen" component={CartScreen} />
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="Signup" component={SignupScreen} />
       </Stack.Navigator>

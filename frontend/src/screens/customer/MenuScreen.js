@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StatusBar, Image, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useContext } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StatusBar, Image, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BACKEND_URL } from '../../api/backend';
+import { AuthContext } from '../../context/AuthContext';
 
 export default function MenuScreen({ navigation }) {
+  const { user } = useContext(AuthContext);
   const [selectedCategory, setSelectedCategory] = useState('Breakfast');
   const [selectedStyle, setSelectedStyle] = useState('Modern');
   const [menuItems, setMenuItems] = useState([]);
@@ -70,10 +72,21 @@ export default function MenuScreen({ navigation }) {
   };
 
   const handleQuickCheckout = (item) => {
+    if (!user) {
+      Alert.alert(
+        'Sign In Required 🔒',
+        'Please sign in to place an order.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Sign In', onPress: () => navigation.navigate('Login') },
+        ]
+      );
+      return;
+    }
     const total = item.price + 3.99;
-    navigation.navigate('CheckoutScreen', { 
-      total: total, 
-      cartItems: [{ ...item, quantity: 1, options: 'Regular' }] 
+    navigation.navigate('CheckoutScreen', {
+      total: total,
+      cartItems: [{ ...item, quantity: 1, options: 'Regular' }],
     });
   };
 
@@ -98,20 +111,30 @@ export default function MenuScreen({ navigation }) {
               </View>
             </View>
 
-            {/* Right Action Icons Group (Cart & Profile) */}
+            {/* Right Action Icons Group (Cart & Profile/Login) */}
             <View className="flex-row space-x-2">
-              <TouchableOpacity 
-                onPress={() => navigation.navigate('CartScreen')} 
+              <TouchableOpacity
+                onPress={() => navigation.navigate('CartScreen')}
                 className="w-10 h-10 bg-white rounded-full border border-[#EAE3DE] items-center justify-center shadow-xs mr-2"
               >
                 <Ionicons name="cart-outline" size={20} color="#1F130D" />
               </TouchableOpacity>
-              <TouchableOpacity 
-                onPress={() => navigation.navigate('CustomerProfileScreen')} 
-                className="w-10 h-10 bg-white rounded-full border border-[#EAE3DE] items-center justify-center shadow-xs"
-              >
-                <Ionicons name="person-outline" size={20} color="#1F130D" />
-              </TouchableOpacity>
+              {user ? (
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('CustomerProfileScreen')}
+                  className="w-10 h-10 bg-[#B8520B] rounded-full items-center justify-center shadow-xs"
+                >
+                  <Ionicons name="person" size={18} color="white" />
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('Login')}
+                  className="h-10 bg-[#B8520B] px-4 rounded-full items-center justify-center shadow-xs flex-row"
+                >
+                  <Ionicons name="log-in-outline" size={16} color="white" style={{ marginRight: 4 }} />
+                  <Text className="text-white text-[11px] font-black">Sign In</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
 
@@ -241,29 +264,43 @@ export default function MenuScreen({ navigation }) {
           </View>
         </ScrollView>
 
-        {/* Bottom Mobile Navigation Bar */}
-        <View className="absolute bottom-0 left-0 right-0 bg-white border-t border-[#EAE3DE] px-6 py-2.5 flex-row justify-between items-center shadow-lg">
-          <TouchableOpacity onPress={() => navigation.navigate('CustomerLanding')} className="items-center">
-            <Ionicons name="home-outline" size={18} color="#757575" />
-            <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Home</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('OrderHistoryScreen')} className="items-center">
-            <Ionicons name="receipt-outline" size={18} color="#757575" />
-            <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Orders</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('MenuScreen')} className="items-center">
-            <Ionicons name="restaurant" size={18} color="#B8520B" />
-            <Text className="text-[9px] font-bold text-[#B8520B] mt-0.5">Menu</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('CartScreen')} className="items-center">
-            <Ionicons name="cart-outline" size={18} color="#757575" />
-            <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Cart</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('CustomerProfileScreen')} className="items-center">
-            <Ionicons name="person-outline" size={18} color="#757575" />
-            <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Profile</Text>
-          </TouchableOpacity>
-        </View>
+          {/* Bottom Mobile Navigation Bar */}
+          <View className="absolute bottom-0 left-0 right-0 bg-white border-t border-[#EAE3DE] px-6 py-2.5 flex-row justify-between items-center shadow-lg">
+            <TouchableOpacity onPress={() => navigation.navigate('CustomerLanding')} className="items-center">
+              <Ionicons name="home-outline" size={18} color="#757575" />
+              <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Home</Text>
+            </TouchableOpacity>
+            {user ? (
+              <TouchableOpacity onPress={() => navigation.navigate('OrderHistoryScreen')} className="items-center">
+                <Ionicons name="receipt-outline" size={18} color="#757575" />
+                <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Orders</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity onPress={() => navigation.navigate('Login')} className="items-center">
+                <Ionicons name="log-in-outline" size={18} color="#757575" />
+                <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Sign In</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity className="items-center">
+              <Ionicons name="restaurant" size={18} color="#B8520B" />
+              <Text className="text-[9px] font-bold text-[#B8520B] mt-0.5">Menu</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => navigation.navigate('CartScreen')} className="items-center">
+              <Ionicons name="cart-outline" size={18} color="#757575" />
+              <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Cart</Text>
+            </TouchableOpacity>
+            {user ? (
+              <TouchableOpacity onPress={() => navigation.navigate('CustomerProfileScreen')} className="items-center">
+                <Ionicons name="person-outline" size={18} color="#757575" />
+                <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Profile</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity onPress={() => navigation.navigate('Signup')} className="items-center">
+                <Ionicons name="person-add-outline" size={18} color="#757575" />
+                <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Sign Up</Text>
+              </TouchableOpacity>
+            )}
+          </View>
       </View>
     </View>
   );
