@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StatusBar, Modal, TextInput, Alert, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BACKEND_URL } from '../../api/backend';
 
 export default function ReviewManagementScreen({ navigation }) {
@@ -9,10 +10,15 @@ export default function ReviewManagementScreen({ navigation }) {
   const [replyText, setReplyText] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
 
+  const authHeaders = async (extra = {}) => {
+    const token = await AsyncStorage.getItem('token');
+    return { Authorization: `Bearer ${token}`, ...extra };
+  };
+
   useEffect(() => {
     const fetchReviews = async () => {
       try {
-        const res = await fetch(`${BACKEND_URL}/api/reviews`);
+        const res = await fetch(`${BACKEND_URL}/api/reviews`, { headers: await authHeaders() });
         const data = await res.json();
         if (Array.isArray(data)) setReviews(data);
       } catch (err) {
@@ -32,7 +38,7 @@ export default function ReviewManagementScreen({ navigation }) {
     try {
       const res = await fetch(`${BACKEND_URL}/api/reviews/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ status })
       });
       const j = await res.json();
@@ -49,7 +55,7 @@ export default function ReviewManagementScreen({ navigation }) {
     try {
       const res = await fetch(`${BACKEND_URL}/api/reviews/${selected._id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ comment: replyText })
       });
       const j = await res.json();
@@ -63,17 +69,35 @@ export default function ReviewManagementScreen({ navigation }) {
     }
   };
 
-  const handleDelete = (id) => {
-    Alert.alert('Delete Review', 'Are you sure?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => {
-        try {
-          const res = await fetch(`${BACKEND_URL}/api/reviews/${id}`, { method: 'DELETE' });
-          const j = await res.json();
-          if (j.success) setReviews(prev => prev.filter(r => r._id !== id));
-        } catch (err) { console.error('Delete review error', err); }
-      } }
-    ]);
+  const confirmDelete = (id) => {
+    if (Platform.OS === 'web') {
+      if (window.confirm('Are you sure you want to delete this review?')) {
+        handleDelete(id);
+      }
+    } else {
+      Alert.alert('Delete Review', 'Are you sure?', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => handleDelete(id) }
+      ]);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/reviews/${id}`, {
+        method: 'DELETE',
+        headers: await authHeaders()
+      });
+      const j = await res.json();
+      if (j.success) {
+        setReviews(prev => prev.filter(r => r._id !== id));
+      } else {
+        Alert.alert('Error', j.message || 'Failed to delete review');
+      }
+    } catch (err) {
+      console.error('Delete review error', err);
+      Alert.alert('Error', 'Network error while deleting review');
+    }
   };
 
   return (
@@ -116,7 +140,7 @@ export default function ReviewManagementScreen({ navigation }) {
                     <TouchableOpacity onPress={() => changeStatus(r._id, r.status === 'Approved' ? 'Rejected' : 'Approved')} className="px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 active:scale-95">
                       <Text className="text-xs font-bold text-emerald-600">Toggle</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => handleDelete(r._id)} className="px-3 py-1.5 rounded-xl bg-rose-50 border border-rose-200 active:scale-95">
+                    <TouchableOpacity onPress={() => confirmDelete(r._id)} className="px-3 py-1.5 rounded-xl bg-rose-50 border border-rose-200 active:scale-95">
                       <Text className="text-xs font-bold text-rose-600">Delete</Text>
                     </TouchableOpacity>
                   </View>

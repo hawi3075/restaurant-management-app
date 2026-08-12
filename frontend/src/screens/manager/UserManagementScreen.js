@@ -98,42 +98,44 @@ export default function UserManagementScreen({ navigation }) {
     }
   };
 
-  const handleDeleteUser = async (userId) => {
-    Alert.alert(
-      'Delete User',
-      'Are you sure you want to delete this user account?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const token = await AsyncStorage.getItem('token');
-              const response = await fetch(`${API_URL}/api/users/${userId}`, {
-                method: 'DELETE',
-                headers: {
-                  'Authorization': `Bearer ${token}`
-                }
-              });
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [userToDelete, setUserToDelete] = useState(null);
 
-              const contentType = response.headers.get('content-type');
-              if (!contentType || !contentType.includes('application/json')) {
-                throw new Error('Server returned non-JSON response during deletion.');
-              }
+  const confirmDeleteUser = (user) => {
+    setUserToDelete(user);
+    setDeleteModalVisible(true);
+  };
 
-              const data = await response.json();
-              if (!response.ok) throw new Error(data.message || 'Failed to delete user.');
+  const handleDeleteUser = async () => {
+    if (!userToDelete) return;
+    const userId = userToDelete._id;
 
-              Alert.alert('Success', 'User deleted successfully.');
-              fetchUsers();
-            } catch (error) {
-              Alert.alert('Error', error.message);
-            }
-          }
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const response = await fetch(`${API_URL}/api/users/${userId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
         }
-      ]
-    );
+      });
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server returned non-JSON response during deletion.');
+      }
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to delete user.');
+
+      Alert.alert('Success', 'User deleted successfully.');
+      setDeleteModalVisible(false);
+      setUserToDelete(null);
+      fetchUsers();
+    } catch (error) {
+      Alert.alert('Error', error.message);
+      setDeleteModalVisible(false);
+      setUserToDelete(null);
+    }
   };
 
   const filteredUsers = users.filter(u => 
@@ -221,7 +223,7 @@ export default function UserManagementScreen({ navigation }) {
                   </TouchableOpacity>
 
                   <TouchableOpacity 
-                    onPress={() => handleDeleteUser(item._id)}
+                    onPress={() => confirmDeleteUser(item)}
                     className="px-3 py-1.5 bg-red-50 rounded-xl flex-row items-center border border-red-100"
                   >
                     <Ionicons name="trash-outline" size={14} color="#DC2626" style={{ marginRight: 4 }} />
@@ -276,6 +278,36 @@ export default function UserManagementScreen({ navigation }) {
                   <Text className="text-white text-xs font-bold">Save User Changes</Text>
                 )}
               </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Custom Delete Confirmation Modal */}
+        <Modal animationType="fade" transparent={true} visible={deleteModalVisible} onRequestClose={() => setDeleteModalVisible(false)}>
+          <View className="flex-1 bg-black/60 justify-center items-center px-5">
+            <View className="bg-white w-full max-w-[380px] rounded-3xl p-6 shadow-2xl border border-gray-100 items-center">
+              <View className="w-12 h-12 rounded-full bg-rose-50 border border-rose-100 items-center justify-center mb-3">
+                <Ionicons name="trash-outline" size={24} color="#E11D48" />
+              </View>
+              <Text className="text-lg font-black text-[#1F130D] mb-1 text-center">Delete User?</Text>
+              <Text className="text-xs text-gray-500 text-center mb-6 px-2">
+                Are you sure you want to remove <Text className="font-bold text-[#1F130D]">{userToDelete?.name || 'this user'}</Text> from the system? This action cannot be undone.
+              </Text>
+
+              <View className="flex-row space-x-3 w-full">
+                <TouchableOpacity
+                  onPress={() => setDeleteModalVisible(false)}
+                  className="flex-1 bg-gray-100 py-3.5 rounded-2xl items-center active:scale-95"
+                >
+                  <Text className="font-bold text-gray-700 text-sm">Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleDeleteUser}
+                  className="flex-1 bg-rose-600 py-3.5 rounded-2xl items-center shadow-md shadow-rose-600/30 active:scale-95"
+                >
+                  <Text className="font-bold text-white text-sm">Delete</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </Modal>

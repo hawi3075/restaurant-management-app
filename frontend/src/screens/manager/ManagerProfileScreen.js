@@ -150,9 +150,15 @@ export default function ManagerProfileScreen({ navigation }) {
               </View>
             ) : (
               <View className="items-center">
-                <Text className="text-xl font-black text-slate-900 mb-1">{name}</Text>
-                <Text className="text-xs font-semibold text-slate-500 mb-0.5">{email}</Text>
-                <Text className="text-xs font-bold text-orange-500">{phone}</Text>
+                <Text className="text-xl font-black text-slate-900 mb-2">{name}</Text>
+                <View className="flex-row items-center bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200 mb-1.5">
+                  <Ionicons name="mail-outline" size={12} color="#64748B" style={{ marginRight: 4 }} />
+                  <Text className="text-xs font-semibold text-slate-600">{email}</Text>
+                </View>
+                <View className="flex-row items-center bg-orange-50 px-3 py-1.5 rounded-full border border-orange-200">
+                  <Ionicons name="call-outline" size={12} color="#F97316" style={{ marginRight: 4 }} />
+                  <Text className="text-xs font-bold text-orange-600">{phone}</Text>
+                </View>
               </View>
             )}
           </View>

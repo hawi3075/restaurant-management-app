@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Modal, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Modal, Alert, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { BACKEND_URL } from '../../api/backend';
 
-// Updated with your actual Render backend URL
-const API_URL = 'https://restaurant-management-app-wqmp.onrender.com';
+const API_URL = BACKEND_URL;
 
 export default function InventoryManagementScreen({ navigation }) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -16,84 +17,46 @@ export default function InventoryManagementScreen({ navigation }) {
   const [editQuantity, setEditQuantity] = useState('');
   const [editUnit, setEditUnit] = useState('Kg');
   const [editSupplier, setEditSupplier] = useState('');
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null);
 
   const categories = ['All', 'Ingredients', 'Beverages', 'Packaging', 'Cleaning'];
 
-  const [inventoryItems, setInventoryItems] = useState([
-    { 
-      id: '1', 
-      name: 'White Truffle Oil', 
-      category: 'Ingredients', 
-      quantity: 2, 
-      unit: 'Liters', 
-      status: 'Low Stock', 
-      supplier: 'Gourmet Imports Ltd.', 
-      cost: '$45.00' 
-    },
-    { 
-      id: '2', 
-      name: 'Arborio Rice', 
-      category: 'Ingredients', 
-      quantity: 25, 
-      unit: 'Kg', 
-      status: 'Optimal', 
-      supplier: 'Milan Provisions', 
-      cost: '$3.50/kg' 
-    },
-    { 
-      id: '3', 
-      name: 'Fresh Forest Mushrooms', 
-      category: 'Ingredients', 
-      quantity: 5, 
-      unit: 'Kg', 
-      status: 'Medium', 
-      supplier: 'Local Farm Co.', 
-      cost: '$12.00/kg' 
-    },
-    { 
-      id: '4', 
-      name: 'Sparkling Water Bottles', 
-      category: 'Beverages', 
-      quantity: 120, 
-      unit: 'Bottles', 
-      status: 'Optimal', 
-      supplier: 'AquaPure Distributors', 
-      cost: '$1.20' 
-    },
-    { 
-      id: '5', 
-      name: 'Eco-Friendly Takeaway Boxes', 
-      category: 'Packaging', 
-      quantity: 15, 
-      unit: 'Boxes', 
-      status: 'Low Stock', 
-      supplier: 'GreenPack Solutions', 
-      cost: '$0.50' 
+  const [inventoryItems, setInventoryItems] = useState([]);
+
+  const authHeaders = async (extra = {}) => {
+    const token = await AsyncStorage.getItem('token');
+    return { Authorization: `Bearer ${token}`, ...extra };
+  };
+
+  const mapInventoryDoc = (i) => ({
+    id: String(i._id || i.id),
+    name: i.ingredientName || i.name,
+    category: i.category || 'Ingredients',
+    quantity: i.quantity,
+    unit: i.unit,
+    status: i.quantity < (i.minimumLevel || 5) ? (i.quantity < 5 ? 'Low Stock' : 'Medium') : 'Optimal',
+    supplier: i.supplier || '',
+    cost: i.unitCost || ''
+  });
+
+  const fetchInventory = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/inventory`, { headers: await authHeaders() });
+      if (!res.ok) {
+        console.error(`Failed to fetch inventory (status ${res.status})`);
+        return;
+      }
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setInventoryItems(data.map(mapInventoryDoc));
+      }
+    } catch (err) {
+      console.error('Failed to fetch inventory', err);
     }
-  ]);
+  };
 
   useEffect(() => {
-    const fetchInventory = async () => {
-      try {
-        const res = await fetch(`${API_URL}/api/inventory`);
-        const data = await res.json();
-        if (Array.isArray(data)) {
-          const mapped = data.map(i => ({
-            id: String(i._id || i.id),
-            name: i.ingredientName,
-            category: 'Ingredients',
-            quantity: i.quantity,
-            unit: i.unit,
-            status: i.quantity < (i.minimumLevel || 5) ? (i.quantity < 5 ? 'Low Stock' : 'Medium') : 'Optimal',
-            supplier: i.supplier || '',
-            cost: i.unitCost || ''
-          }));
-          setInventoryItems(mapped);
-        }
-      } catch (err) {
-        console.error('Failed to fetch inventory', err);
-      }
-    };
     fetchInventory();
   }, []);
 
@@ -117,50 +80,41 @@ export default function InventoryManagementScreen({ navigation }) {
     }
   };
 
-  const handleAddItem = () => {
+  const handleAddItem = async () => {
     if (!newName || !newQuantity) return;
     const qty = parseInt(newQuantity) || 0;
     const payload = {
       name: newName,
+      category: newCategory, // FIX: Included category so items don't drop off filters
       quantity: qty,
       unit: newUnit,
       supplier: newSupplier,
       minimumLevel: 5
     };
-    fetch(`${API_URL}/api/inventory`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    }).then(r => r.json()).then(j => {
-      if (j.success && j.item) {
-        const i = j.item;
-        const mapped = {
-          id: String(i._id || i.id),
-          name: i.ingredientName,
-          category: 'Ingredients',
-          quantity: i.quantity,
-          unit: i.unit,
-          status: i.quantity < (i.minimumLevel || 5) ? (i.quantity < 5 ? 'Low Stock' : 'Medium') : 'Optimal',
-          supplier: i.supplier || '',
-          cost: ''
-        };
-        setInventoryItems(prev => [mapped, ...prev]);
+    try {
+      const res = await fetch(`${API_URL}/api/inventory`, {
+        method: 'POST',
+        headers: await authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(payload)
+      });
+      const j = await res.json().catch(() => null);
+      if (res.ok && j && j.item) {
+        setInventoryItems(prev => [mapInventoryDoc(j.item), ...prev]);
         setNewName('');
         setNewQuantity('');
         setNewSupplier('');
         setNewCost('');
         setAddModalVisible(false);
       } else {
-        alert('Failed to add inventory item');
+        Alert.alert('Error', (j && j.message) || `Failed to add inventory item (status ${res.status})`);
       }
-    }).catch(err => {
+    } catch (err) {
       console.error('Add inventory error', err);
-      alert('Failed to add inventory item');
-    });
+      Alert.alert('Error', 'Failed to add inventory item');
+    }
   };
 
-  const updateQuantity = (id, amount) => {
-    // Optimistic update
+  const updateQuantity = async (id, amount) => {
     setInventoryItems(prev => prev.map(item => {
       if (item.id === id) {
         const updatedQty = Math.max(0, item.quantity + amount);
@@ -172,13 +126,20 @@ export default function InventoryManagementScreen({ navigation }) {
       return item;
     }));
 
-    fetch(`${API_URL}/api/inventory/${id}/adjust`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ amount })
-    }).then(r => r.json()).then(j => {
-      if (!j.success) console.warn('Failed to adjust inventory', j);
-    }).catch(err => console.error('Adjust error', err));
+    try {
+      const res = await fetch(`${API_URL}/api/inventory/${id}/adjust`, {
+        method: 'POST',
+        headers: await authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ amount })
+      });
+      if (!res.ok) {
+        console.warn(`Failed to adjust inventory (status ${res.status})`);
+        fetchInventory();
+      }
+    } catch (err) {
+      console.error('Adjust error', err);
+      fetchInventory();
+    }
   };
 
   const openEditItem = (item) => {
@@ -191,23 +152,41 @@ export default function InventoryManagementScreen({ navigation }) {
   };
 
   const confirmDeleteItem = (id) => {
-    Alert.alert('Delete Item', 'Are you sure you want to delete this inventory item?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => handleDeleteItem(id) }
-    ]);
+    const item = inventoryItems.find(i => String(i.id) === String(id));
+    setItemToDelete(item);
+    setDeleteModalVisible(true);
   };
 
-  const handleDeleteItem = async (id) => {
+  const handleDeleteItem = async () => {
+    if (!itemToDelete) return;
+    const id = itemToDelete.id;
+
     try {
-      console.log('Deleting inventory id=', id);
-      const res = await fetch(`${API_URL}/api/inventory/${id}`, { method: 'DELETE' });
-      const j = await res.json();
-      console.log('Delete response', j);
-      if (j.success) setInventoryItems(prev => prev.filter(i => String(i.id || i._id) !== String(id)));
-      else Alert.alert('Error', j.message || 'Failed to delete');
+      const res = await fetch(`${API_URL}/api/inventory/${id}`, {
+        method: 'DELETE',
+        headers: await authHeaders(),
+      });
+
+      if (res.ok) {
+        setInventoryItems(prev => prev.filter(i => String(i.id) !== String(id)));
+        setDeleteModalVisible(false);
+        setItemToDelete(null);
+        Alert.alert('Success', 'Inventory item deleted successfully!');
+      } else {
+        let message = `Failed to delete (status ${res.status})`;
+        try {
+          const j = await res.json();
+          message = j.message || message;
+        } catch (e) {}
+        setDeleteModalVisible(false);
+        setItemToDelete(null);
+        Alert.alert('Error', message);
+      }
     } catch (err) {
       console.error('Delete inventory error', err);
-      Alert.alert('Error', 'Failed to delete');
+      setDeleteModalVisible(false);
+      setItemToDelete(null);
+      Alert.alert('Error', 'Network error while deleting item');
     }
   };
 
@@ -220,38 +199,28 @@ export default function InventoryManagementScreen({ navigation }) {
         unit: editUnit,
         supplier: editSupplier
       };
-      const id = selectedItem.id || selectedItem._id;
+      const id = selectedItem.id;
       const res = await fetch(`${API_URL}/api/inventory/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(payload)
       });
-      const j = await res.json();
-      if (j.success && j.item) {
-        const i = j.item;
-        const mapped = {
-          id: String(i._id || i.id),
-          name: i.ingredientName,
-          category: 'Ingredients',
-          quantity: i.quantity,
-          unit: i.unit,
-          status: i.quantity < (i.minimumLevel || 5) ? (i.quantity < 5 ? 'Low Stock' : 'Medium') : 'Optimal',
-          supplier: i.supplier || '',
-          cost: i.unitCost || ''
-        };
-        setInventoryItems(prev => prev.map(it => (it.id === mapped.id || it._id === mapped.id ? mapped : it)));
+      const j = await res.json().catch(() => null);
+      if (res.ok && j && j.item) {
+        const mapped = mapInventoryDoc(j.item);
+        setInventoryItems(prev => prev.map(it => (it.id === mapped.id ? mapped : it)));
         setEditModalVisible(false);
       } else {
-        alert('Failed to update item');
+        Alert.alert('Error', (j && j.message) || `Failed to update item (status ${res.status})`);
       }
     } catch (err) {
       console.error('Update inventory error', err);
-      alert('Failed to update item');
+      Alert.alert('Error', 'Failed to update item');
     }
   };
 
   const filteredItems = inventoryItems.filter(item => {
-    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           item.supplier.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = selectedCategory === 'All' || item.category === selectedCategory;
     return matchesSearch && matchesCategory;
@@ -263,12 +232,11 @@ export default function InventoryManagementScreen({ navigation }) {
         <StatusBar barStyle="dark-content" backgroundColor="#F8F9FC" />
 
         <ScrollView showsVerticalScrollIndicator={false} className="flex-1 pt-12 px-5 pb-24">
-          
           {/* Header */}
           <View className="flex-row justify-between items-center mb-4">
             <View className="flex-row items-center">
-              <TouchableOpacity 
-                onPress={() => navigation.goBack()} 
+              <TouchableOpacity
+                onPress={() => navigation.goBack()}
                 className="w-10 h-10 bg-white rounded-full border border-[#EAE3DE] items-center justify-center shadow-xs mr-3 active:scale-95"
               >
                 <Ionicons name="arrow-back" size={18} color="#1F130D" />
@@ -279,8 +247,8 @@ export default function InventoryManagementScreen({ navigation }) {
               </View>
             </View>
 
-            <TouchableOpacity 
-              onPress={() => setAddModalVisible(true)} 
+            <TouchableOpacity
+              onPress={() => setAddModalVisible(true)}
               className="bg-[#B8520B] px-4 py-2.5 rounded-2xl flex-row items-center shadow-md shadow-[#B8520B]/30 active:scale-95"
             >
               <Ionicons name="add" size={16} color="white" style={{ marginRight: 4 }} />
@@ -291,8 +259,8 @@ export default function InventoryManagementScreen({ navigation }) {
           {/* Search Bar */}
           <View className="flex-row items-center bg-white border border-[#EAE3DE] rounded-2xl px-4 py-3 mb-4 shadow-xs">
             <Ionicons name="search-outline" size={18} color="#757575" />
-            <TextInput 
-              placeholder="Search stock items or suppliers..." 
+            <TextInput
+              placeholder="Search stock items or suppliers..."
               placeholderTextColor="#9CA3AF"
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -305,7 +273,7 @@ export default function InventoryManagementScreen({ navigation }) {
             {categories.map((cat, idx) => {
               const isSelected = selectedCategory === cat;
               return (
-                <TouchableOpacity 
+                <TouchableOpacity
                   key={idx}
                   onPress={() => setSelectedCategory(cat)}
                   className={`mr-3 px-5 py-2.5 rounded-2xl border justify-center ${isSelected ? 'bg-[#B8520B] border-[#B8520B]' : 'bg-white border-[#EAE3DE]'}`}
@@ -322,8 +290,8 @@ export default function InventoryManagementScreen({ navigation }) {
             {filteredItems.map((item) => {
               const statusStyle = getStatusStyle(item.status);
               return (
-                <View 
-                  key={item.id} 
+                <View
+                  key={item.id}
                   className="bg-white p-4 rounded-3xl border border-[#EAE3DE] mb-4 shadow-xs"
                 >
                   <View className="flex-row justify-between items-start mb-2">
@@ -344,21 +312,21 @@ export default function InventoryManagementScreen({ navigation }) {
 
                     {/* Quick Adjustment & Detail Buttons */}
                     <View className="flex-row items-center space-x-2">
-                      <TouchableOpacity 
+                      <TouchableOpacity
                         onPress={() => updateQuantity(item.id, -1)}
                         className="w-8 h-8 bg-gray-100 rounded-xl items-center justify-center border border-gray-200 active:scale-95"
                       >
                         <Ionicons name="remove" size={14} color="#1F130D" />
                       </TouchableOpacity>
 
-                      <TouchableOpacity 
+                      <TouchableOpacity
                         onPress={() => updateQuantity(item.id, 1)}
                         className="w-8 h-8 bg-[#FEF7F3] rounded-xl items-center justify-center border border-[#B8520B]/30 active:scale-95"
                       >
                         <Ionicons name="add" size={14} color="#B8520B" />
                       </TouchableOpacity>
 
-                      <TouchableOpacity 
+                      <TouchableOpacity
                         onPress={() => {
                           setSelectedItem(item);
                           setDetailModalVisible(true);
@@ -387,107 +355,57 @@ export default function InventoryManagementScreen({ navigation }) {
           </View>
         </ScrollView>
 
-        {/* Item Detail Modal */}
-        <Modal animationType="fade" transparent={true} visible={detailModalVisible} onRequestClose={() => setDetailModalVisible(false)}>
-          <View className="flex-1 bg-black/60 justify-center items-center px-5">
-            <View className="bg-white w-full max-w-[380px] rounded-3xl p-6 shadow-2xl border border-gray-100">
-              {selectedItem && (
-                <View>
-                  <View className="items-center mb-4">
-                    <View className="w-16 h-16 bg-[#FEF7F3] rounded-2xl items-center justify-center mb-3 border border-[#B8520B]/30">
-                      <Ionicons name="cube-outline" size={28} color="#B8520B" />
-                    </View>
-                    <Text className="text-xl font-black text-[#1F130D] text-center">{selectedItem.name}</Text>
-                    <Text className="text-xs text-gray-400 mt-0.5">{selectedItem.category}</Text>
-                  </View>
-
-                  <View className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-2.5 mb-5">
-                    <View className="flex-row justify-between">
-                      <Text className="text-xs text-gray-500">Stock Quantity:</Text>
-                      <Text className="text-xs font-bold text-[#1F130D]">{selectedItem.quantity} {selectedItem.unit}</Text>
-                    </View>
-                    <View className="flex-row justify-between">
-                      <Text className="text-xs text-gray-500">Status:</Text>
-                      <Text className="text-xs font-bold text-[#B8520B]">{selectedItem.status}</Text>
-                    </View>
-                    <View className="flex-row justify-between">
-                      <Text className="text-xs text-gray-500">Supplier:</Text>
-                      <Text className="text-xs font-bold text-[#1F130D]">{selectedItem.supplier}</Text>
-                    </View>
-                    <View className="flex-row justify-between">
-                      <Text className="text-xs text-gray-500">Unit Cost:</Text>
-                      <Text className="text-xs font-black text-[#B8520B]">{selectedItem.cost}</Text>
-                    </View>
-                  </View>
-
-                  <TouchableOpacity 
-                    onPress={() => setDetailModalVisible(false)} 
-                    className="w-full bg-[#B8520B] py-3.5 rounded-2xl items-center shadow-md shadow-[#B8520B]/30"
-                  >
-                    <Text className="font-bold text-white text-sm">Close Details</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-          </View>
-        </Modal>
-
-        {/* Edit Item Modal */}
-        <Modal animationType="fade" transparent={true} visible={editModalVisible} onRequestClose={() => setEditModalVisible(false)}>
-          <View className="flex-1 bg-black/50 justify-center items-center px-5">
-            <View className="bg-white w-full max-w-[380px] rounded-3xl p-6 shadow-2xl border border-gray-100 max-h-[90%]">
-              <ScrollView showsVerticalScrollIndicator={false}>
-                <Text className="text-lg font-black text-[#1F130D] mb-1">Edit Inventory Item</Text>
-
-                <Text className="text-xs font-bold text-gray-700 mb-1">Item Name</Text>
-                <TextInput value={editName} onChangeText={setEditName} className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D] mb-3" />
-
-                <View className="flex-row space-x-2 mb-3">
-                  <View className="flex-1">
-                    <Text className="text-xs font-bold text-gray-700 mb-1">Quantity</Text>
-                    <TextInput value={editQuantity} onChangeText={setEditQuantity} keyboardType="numeric" className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D]" />
-                  </View>
-                  <View className="flex-1">
-                    <Text className="text-xs font-bold text-gray-700 mb-1">Unit</Text>
-                    <TextInput value={editUnit} onChangeText={setEditUnit} className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D]" />
-                  </View>
-                </View>
-
-                <Text className="text-xs font-bold text-gray-700 mb-1">Supplier</Text>
-                <TextInput value={editSupplier} onChangeText={setEditSupplier} className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D] mb-4" />
-
-                <View className="flex-row space-x-3">
-                  <TouchableOpacity onPress={() => setEditModalVisible(false)} className="flex-1 bg-gray-100 py-3.5 rounded-2xl items-center">
-                    <Text className="font-bold text-gray-700 text-sm">Cancel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={handleSaveEdit} className="flex-1 bg-[#B8520B] py-3.5 rounded-2xl items-center shadow-md shadow-[#B8520B]/20">
-                    <Text className="font-bold text-white text-sm">Save</Text>
-                  </TouchableOpacity>
-                </View>
-              </ScrollView>
-            </View>
-          </View>
-        </Modal>
-
         {/* Add Item Modal */}
         <Modal animationType="fade" transparent={true} visible={addModalVisible} onRequestClose={() => setAddModalVisible(false)}>
           <View className="flex-1 bg-black/50 justify-center items-center px-5">
             <View className="bg-white w-full max-w-[380px] rounded-3xl p-6 shadow-2xl border border-gray-100 max-h-[90%]">
               <ScrollView showsVerticalScrollIndicator={false}>
-                <Text className="text-lg font-black text-[#1F130D] mb-1">Add Inventory Stock</Text>
-                <Text className="text-xs text-gray-500 mb-4">Register new stock items and quantities.</Text>
+                <Text className="text-lg font-black text-[#1F130D] mb-1">Add Inventory Item</Text>
+                <Text className="text-xs text-gray-500 mb-4">Add new stock to your inventory database.</Text>
 
                 <Text className="text-xs font-bold text-gray-700 mb-1">Item Name</Text>
-                <TextInput 
-                  placeholder="e.g. Organic Olive Oil"
+                <TextInput
+                  placeholder="e.g. Fresh Tomatoes"
                   placeholderTextColor="#9CA3AF"
                   value={newName}
                   onChangeText={setNewName}
                   className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D] mb-3"
                 />
 
+                <Text className="text-xs font-bold text-gray-700 mb-1">Quantity</Text>
+                <TextInput
+                  placeholder="e.g. 50"
+                  placeholderTextColor="#9CA3AF"
+                  keyboardType="numeric"
+                  value={newQuantity}
+                  onChangeText={setNewQuantity}
+                  className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D] mb-3"
+                />
+
+                <Text className="text-xs font-bold text-gray-700 mb-1">Unit</Text>
+                <View className="flex-row space-x-2 mb-3">
+                  {['Kg', 'Liters', 'Units', 'Boxes'].map((unit) => (
+                    <TouchableOpacity
+                      key={unit}
+                      onPress={() => setNewUnit(unit)}
+                      className={`flex-1 py-2.5 rounded-xl border items-center ${newUnit === unit ? 'bg-[#B8520B] border-[#B8520B]' : 'bg-gray-50 border-gray-200'}`}
+                    >
+                      <Text className={`text-xs font-bold ${newUnit === unit ? 'text-white' : 'text-gray-700'}`}>{unit}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <Text className="text-xs font-bold text-gray-700 mb-1">Supplier</Text>
+                <TextInput
+                  placeholder="e.g. Fresh Foods Co."
+                  placeholderTextColor="#9CA3AF"
+                  value={newSupplier}
+                  onChangeText={setNewSupplier}
+                  className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D] mb-3"
+                />
+
                 <Text className="text-xs font-bold text-gray-700 mb-1">Category</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-3">
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-5">
                   {['Ingredients', 'Beverages', 'Packaging', 'Cleaning'].map((cat) => (
                     <TouchableOpacity
                       key={cat}
@@ -499,58 +417,152 @@ export default function InventoryManagementScreen({ navigation }) {
                   ))}
                 </ScrollView>
 
-                <View className="flex-row space-x-2 mb-3">
-                  <View className="flex-1">
-                    <Text className="text-xs font-bold text-gray-700 mb-1">Quantity</Text>
-                    <TextInput 
-                      placeholder="e.g. 10"
-                      placeholderTextColor="#9CA3AF"
-                      keyboardType="numeric"
-                      value={newQuantity}
-                      onChangeText={setNewQuantity}
-                      className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D]"
-                    />
-                  </View>
-                  <View className="flex-1">
-                    <Text className="text-xs font-bold text-gray-700 mb-1">Unit</Text>
-                    <TextInput 
-                      placeholder="e.g. Kg / Liters"
-                      placeholderTextColor="#9CA3AF"
-                      value={newUnit}
-                      onChangeText={setNewUnit}
-                      className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D]"
-                    />
-                  </View>
-                </View>
-
-                <Text className="text-xs font-bold text-gray-700 mb-1">Supplier Name</Text>
-                <TextInput 
-                  placeholder="e.g. Global Foods Inc."
-                  placeholderTextColor="#9CA3AF"
-                  value={newSupplier}
-                  onChangeText={setNewSupplier}
-                  className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D] mb-3"
-                />
-
-                <Text className="text-xs font-bold text-gray-700 mb-1">Unit Cost ($)</Text>
-                <TextInput 
-                  placeholder="e.g. 15.00"
-                  placeholderTextColor="#9CA3AF"
-                  keyboardType="numeric"
-                  value={newCost}
-                  onChangeText={setNewCost}
-                  className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D] mb-5"
-                />
-
                 <View className="flex-row space-x-3">
                   <TouchableOpacity onPress={() => setAddModalVisible(false)} className="flex-1 bg-gray-100 py-3.5 rounded-2xl items-center">
                     <Text className="font-bold text-gray-700 text-sm">Cancel</Text>
                   </TouchableOpacity>
                   <TouchableOpacity onPress={handleAddItem} className="flex-1 bg-[#B8520B] py-3.5 rounded-2xl items-center shadow-md shadow-[#B8520B]/20">
-                    <Text className="font-bold text-white text-sm">Save Item</Text>
+                    <Text className="font-bold text-white text-sm">Add Item</Text>
                   </TouchableOpacity>
                 </View>
               </ScrollView>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Detail Modal */}
+        <Modal animationType="fade" transparent={true} visible={detailModalVisible} onRequestClose={() => setDetailModalVisible(false)}>
+          <View className="flex-1 bg-black/60 justify-center items-center px-5">
+            <View className="bg-white w-full max-w-[380px] rounded-3xl p-6 shadow-2xl border border-gray-100">
+              {selectedItem && (
+                <View>
+                  <View className="items-center mb-4">
+                    <View className="w-16 h-16 rounded-2xl bg-[#FEF7F3] items-center justify-center mb-3 border border-[#B8520B]/30">
+                      <Ionicons name="cube-outline" size={32} color="#B8520B" />
+                    </View>
+                    <Text className="text-xl font-black text-[#1F130D] text-center">{selectedItem.name}</Text>
+                    <Text className="text-xs text-gray-500 text-center mt-1">Inventory Item Details</Text>
+                  </View>
+
+                  <View className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-2 mb-5">
+                    <View className="flex-row justify-between">
+                      <Text className="text-xs text-gray-500">Category:</Text>
+                      <Text className="text-xs font-bold text-[#1F130D]">{selectedItem.category}</Text>
+                    </View>
+                    <View className="flex-row justify-between">
+                      <Text className="text-xs text-gray-500">Quantity:</Text>
+                      <Text className="text-xs font-bold text-[#1F130D]">{selectedItem.quantity} {selectedItem.unit}</Text>
+                    </View>
+                    <View className="flex-row justify-between">
+                      <Text className="text-xs text-gray-500">Supplier:</Text>
+                      <Text className="text-xs font-bold text-[#1F130D]">{selectedItem.supplier}</Text>
+                    </View>
+                    <View className="flex-row justify-between">
+                      <Text className="text-xs text-gray-500">Status:</Text>
+                      <Text className={`text-xs font-bold ${selectedItem.status === 'Low Stock' ? 'text-rose-600' : selectedItem.status === 'Medium' ? 'text-amber-600' : 'text-emerald-600'}`}>{selectedItem.status}</Text>
+                    </View>
+                  </View>
+
+                  <TouchableOpacity
+                    onPress={() => setDetailModalVisible(false)}
+                    className="w-full bg-[#B8520B] py-3.5 rounded-2xl items-center shadow-md shadow-[#B8520B]/30"
+                  >
+                    <Text className="font-bold text-white text-sm">Close Details</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          </View>
+        </Modal>
+
+        {/* Edit Modal */}
+        <Modal animationType="fade" transparent={true} visible={editModalVisible} onRequestClose={() => setEditModalVisible(false)}>
+          <View className="flex-1 bg-black/50 justify-center items-center px-5">
+            <View className="bg-white w-full max-w-[380px] rounded-3xl p-6 shadow-2xl border border-gray-100 max-h-[90%]">
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <Text className="text-lg font-black text-[#1F130D] mb-1">Edit Inventory Item</Text>
+                <Text className="text-xs text-gray-500 mb-4">Update stock information in the database.</Text>
+
+                <Text className="text-xs font-bold text-gray-700 mb-1">Item Name</Text>
+                <TextInput
+                  placeholder="e.g. Fresh Tomatoes"
+                  placeholderTextColor="#9CA3AF"
+                  value={editName}
+                  onChangeText={setEditName}
+                  className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D] mb-3"
+                />
+
+                <Text className="text-xs font-bold text-gray-700 mb-1">Quantity</Text>
+                <TextInput
+                  placeholder="e.g. 50"
+                  placeholderTextColor="#9CA3AF"
+                  keyboardType="numeric"
+                  value={editQuantity}
+                  onChangeText={setEditQuantity}
+                  className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D] mb-3"
+                />
+
+                <Text className="text-xs font-bold text-gray-700 mb-1">Unit</Text>
+                <View className="flex-row space-x-2 mb-3">
+                  {['Kg', 'Liters', 'Units', 'Boxes'].map((unit) => (
+                    <TouchableOpacity
+                      key={unit}
+                      onPress={() => setEditUnit(unit)}
+                      className={`flex-1 py-2.5 rounded-xl border items-center ${editUnit === unit ? 'bg-[#B8520B] border-[#B8520B]' : 'bg-gray-50 border-gray-200'}`}
+                    >
+                      <Text className={`text-xs font-bold ${editUnit === unit ? 'text-white' : 'text-gray-700'}`}>{unit}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <Text className="text-xs font-bold text-gray-700 mb-1">Supplier</Text>
+                <TextInput
+                  placeholder="e.g. Fresh Foods Co."
+                  placeholderTextColor="#9CA3AF"
+                  value={editSupplier}
+                  onChangeText={setEditSupplier}
+                  className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D] mb-5"
+                />
+
+                <View className="flex-row space-x-3">
+                  <TouchableOpacity onPress={() => setEditModalVisible(false)} className="flex-1 bg-gray-100 py-3.5 rounded-2xl items-center">
+                    <Text className="font-bold text-gray-700 text-sm">Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={handleSaveEdit} className="flex-1 bg-[#B8520B] py-3.5 rounded-2xl items-center shadow-md shadow-[#B8520B]/20">
+                    <Text className="font-bold text-white text-sm">Save Changes</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Custom Delete Confirmation Modal */}
+        <Modal animationType="fade" transparent={true} visible={deleteModalVisible} onRequestClose={() => setDeleteModalVisible(false)}>
+          <View className="flex-1 bg-black/60 justify-center items-center px-5">
+            <View className="bg-white w-full max-w-[380px] rounded-3xl p-6 shadow-2xl border border-gray-100 items-center">
+              <View className="w-12 h-12 rounded-full bg-rose-50 border border-rose-100 items-center justify-center mb-3">
+                <Ionicons name="trash-outline" size={24} color="#E11D48" />
+              </View>
+              <Text className="text-lg font-black text-[#1F130D] mb-1 text-center">Delete Inventory Item?</Text>
+              <Text className="text-xs text-gray-500 text-center mb-6 px-2">
+                Are you sure you want to remove <Text className="font-bold text-[#1F130D]">{itemToDelete?.name}</Text> from your inventory? This action cannot be undone.
+              </Text>
+
+              <View className="flex-row space-x-3 w-full">
+                <TouchableOpacity
+                  onPress={() => setDeleteModalVisible(false)}
+                  className="flex-1 bg-gray-100 py-3.5 rounded-2xl items-center active:scale-95"
+                >
+                  <Text className="font-bold text-gray-700 text-sm">Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleDeleteItem}
+                  className="flex-1 bg-rose-600 py-3.5 rounded-2xl items-center shadow-md shadow-rose-600/30 active:scale-95"
+                >
+                  <Text className="font-bold text-white text-sm">Delete</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </Modal>

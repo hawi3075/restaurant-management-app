@@ -13,13 +13,20 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: "*",
-    methods: ["GET", "POST"]
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
   }
 });
 
-// Middleware
-app.use(express.json());
-app.use(cors());
+// Middleware - Enable CORS globally with full method support
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+// Increase JSON body limit to handle base64 image uploads without 413 Payload Too Large errors
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Import Routes
 const authRoutes = require('./routes/authRoutes');
@@ -42,7 +49,7 @@ app.use('/api/staff', staffRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/support', supportRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api/admin', adminRoutes); // <-- Mounts both /metrics and /orders endpoints
+app.use('/api/admin', adminRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/tables', tableRoutes);
 app.use('/api/payments', paymentRoutes);
