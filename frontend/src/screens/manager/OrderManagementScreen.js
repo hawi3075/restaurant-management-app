@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StatusBar, ActivityIndicator, Image, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import io from 'socket.io-client';
-import { BACKEND_URL } from '../api/backend';
+import { BACKEND_URL } from '../../api/backend';
 
 export default function OrderManagementScreen({ navigation }) {
   const [orders, setOrders] = useState([]);
