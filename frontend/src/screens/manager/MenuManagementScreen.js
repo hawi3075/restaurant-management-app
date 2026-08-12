@@ -394,7 +394,7 @@ export default function MenuManagementScreen({ navigation }) {
                     </View>
                     <Text className="text-xs text-gray-400 mt-1" numberOfLines={1}>{item.desc}</Text>
                     <View className="flex-row justify-between items-center mt-2">
-                      <Text className="font-black text-sm text-[#1F130D]">${item.price ? item.price.toFixed(2) : '0.00'}</Text>
+                      <Text className="font-black text-sm text-[#1F130D]">ብር {item.price ? item.price.toFixed(2) : '0.00'}</Text>
                       <View className="flex-row items-center bg-[#FEF7F3] px-2 py-0.5 rounded-full border border-[#B8520B]/30">
                         <Ionicons name="star" size={10} color="#B8520B" />
                         <Text className="text-[10px] font-bold text-[#B8520B] ml-1">{item.rating || '4.5'}</Text>
@@ -502,7 +502,7 @@ export default function MenuManagementScreen({ navigation }) {
                     </View>
                     <View className="flex-row justify-between">
                       <Text className="text-xs text-gray-500">Price:</Text>
-                      <Text className="text-xs font-black text-[#B8520B]">${selectedDish.price ? selectedDish.price.toFixed(2) : '0.00'}</Text>
+                      <Text className="text-xs font-black text-[#B8520B]">ብር {selectedDish.price ? selectedDish.price.toFixed(2) : '0.00'}</Text>
                     </View>
                     <View className="flex-row justify-between">
                       <Text className="text-xs text-gray-500">Stock Status:</Text>
@@ -548,9 +548,9 @@ export default function MenuManagementScreen({ navigation }) {
                   className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D] mb-3"
                 />
 
-                <Text className="text-xs font-bold text-gray-700 mb-1">Price ($)</Text>
+                <Text className="text-xs font-bold text-gray-700 mb-1">Price (ብር Birr)</Text>
                 <TextInput
-                  placeholder="e.g. 22.50"
+                  placeholder="e.g. 850.00"
                   placeholderTextColor="#9CA3AF"
                   keyboardType="numeric"
                   value={editPrice}
@@ -652,9 +652,9 @@ export default function MenuManagementScreen({ navigation }) {
                   className="bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-sm text-[#1F130D] mb-3"
                 />
 
-                <Text className="text-xs font-bold text-gray-700 mb-1">Price ($)</Text>
+                <Text className="text-xs font-bold text-gray-700 mb-1">Price (ብር Birr)</Text>
                 <TextInput
-                  placeholder="e.g. 22.50"
+                  placeholder="e.g. 850.00"
                   placeholderTextColor="#9CA3AF"
                   keyboardType="numeric"
                   value={newPrice}

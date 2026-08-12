@@ -2,10 +2,11 @@ import React, { useState, useEffect, useContext } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StatusBar, Alert, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthContext } from '../../context/AuthContext';
+import { BACKEND_URL } from '../../api/backend';
 
-// Updated with your actual Render backend URL
-const API_URL = 'https://restaurant-management-app-wqmp.onrender.com';
+const API_URL = BACKEND_URL;
 
 export default function ManagerProfileScreen({ navigation }) {
   const [isEditing, setIsEditing] = useState(false);
@@ -38,30 +39,86 @@ export default function ManagerProfileScreen({ navigation }) {
     }
   };
 
-  const handleSave = () => {
-    // save to backend
-    fetch(`${API_URL}/api/auth/profile`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, phone })
-    }).then(r => r.json()).then(j => {
+  const handleSave = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      
+      if (!token) {
+        Alert.alert('Error', 'No authentication token found. Please log in again.');
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/api/auth/profile`, {
+        method: 'PUT',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-user-email': email
+        },
+        body: JSON.stringify({ name, email, phone })
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to update profile');
+      }
+
+      // Update local storage with new user data
+      const updatedUser = { ...(authContext?.user || {}), name, email, phone };
+      await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+      
+      // Update AuthContext with new user data
+      if (authContext && authContext.login) {
+        await authContext.login(token, updatedUser);
+      }
+
       setIsEditing(false);
       Alert.alert('Success', 'Profile updated successfully!');
-    }).catch(err => {
+    } catch (err) {
       console.error('Profile update error', err);
-      Alert.alert('Error', 'Failed to update profile');
-    });
+      Alert.alert('Error', err.message || 'Failed to update profile');
+    }
   };
 
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/auth/profile`);
-        const j = await res.json();
-        if (j.success && j.user) {
-          setName(j.user.name || '');
-          setEmail(j.user.email || '');
-          setPhone(j.user.phone || '');
+        const token = await AsyncStorage.getItem('token');
+        const ctxUser = authContext?.user;
+        
+        // First try to load from context or AsyncStorage
+        if (ctxUser && ctxUser.email) {
+          setName(ctxUser.name || '');
+          setEmail(ctxUser.email || '');
+          setPhone(ctxUser.phone || '');
+        }
+
+        // Then fetch fresh data from backend if token exists
+        if (!token) {
+          console.log('No token found, using context data only');
+          return;
+        }
+
+        const response = await fetch(`${API_URL}/api/auth/profile`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+            'x-user-email': ctxUser?.email || ''
+          }
+        });
+
+        const data = await response.json();
+        
+        if (response.ok && data.user) {
+          setName(data.user.name || '');
+          setEmail(data.user.email || '');
+          setPhone(data.user.phone || '');
+          
+          // Update local storage with fresh data
+          const updatedUser = { ...(ctxUser || {}), ...data.user };
+          await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
         }
       } catch (err) {
         console.error('Fetch profile error', err);

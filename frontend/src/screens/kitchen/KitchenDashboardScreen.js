@@ -1,15 +1,17 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StatusBar, Image, Modal, TextInput, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import io from 'socket.io-client';
+import { AuthContext } from '../../context/AuthContext';
 import { BACKEND_URL } from '../../api/backend';
 
 const API_URL = BACKEND_URL;
 const SOCKET_URL = API_URL;
 
 export default function KitchenDashboardScreen({ route, navigation }) {
+  const authContext = useContext(AuthContext);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [chefName, setChefName] = useState('Chef Alex');
   const [chefEmail, setChefEmail] = useState('kitchen@restaurant.com');
@@ -128,15 +130,23 @@ export default function KitchenDashboardScreen({ route, navigation }) {
   const handleLogout = async () => {
     try {
       setProfileModalVisible(false);
-      await AsyncStorage.removeItem('token');
-      await AsyncStorage.removeItem('user');
+      
+      // Use AuthContext logout if available
+      if (authContext && authContext.logout) {
+        await authContext.logout();
+      } else {
+        await AsyncStorage.removeItem('token');
+        await AsyncStorage.removeItem('user');
+      }
+      
+      // Navigate to login screen
       navigation.reset({
         index: 0,
         routes: [{ name: 'Login' }],
       });
     } catch (error) {
       console.error('Logout Error:', error);
-      Alert.alert('Error', 'Failed to log out properly.');
+      Alert.alert('Error', 'Failed to log out properly. Please try again.');
     }
   };
 

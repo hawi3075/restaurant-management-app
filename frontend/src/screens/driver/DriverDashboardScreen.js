@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StatusBar, Image, Modal, TextInput, ActivityIndicator, Linking, Animated, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StatusBar, Image, Modal, TextInput, ActivityIndicator, Linking, Animated, Platform, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import io from 'socket.io-client';
 import { BACKEND_URL } from '../../api/backend';
@@ -161,12 +162,19 @@ export default function DriverDashboardScreen({ route, navigation }) {
 
   const handleSaveProfile = async () => {
     try {
-      const token = authContext?.token || '';
-      const response = await fetch(`${BACKEND_URL}/api/users/profile`, {
+      const token = authContext?.token || await AsyncStorage.getItem('token');
+      
+      if (!token) {
+        Alert.alert('Error', 'No authentication token found. Please log in again.');
+        return;
+      }
+
+      const response = await fetch(`${BACKEND_URL}/api/auth/profile`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'x-user-email': driverEmail
         },
         body: JSON.stringify({
           name: driverName,
@@ -178,11 +186,28 @@ export default function DriverDashboardScreen({ route, navigation }) {
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Failed to update profile');
 
+      // Update local storage with new user data
+      const updatedUser = { 
+        ...(authContext?.user || {}), 
+        name: driverName, 
+        email: driverEmail, 
+        phone: driverPhone, 
+        profileImage: driverImage,
+        avatar: driverImage
+      };
+      
+      await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+      
+      // Update AuthContext with new user data
+      if (authContext && authContext.login) {
+        await authContext.login(token, updatedUser);
+      }
+
       showAlertBanner('✨ Profile updated successfully!');
       setProfileModalVisible(false);
     } catch (error) {
       console.error('Save Profile Error:', error);
-      alert(error.message || 'Could not save profile settings.');
+      Alert.alert('Error', error.message || 'Could not save profile settings.');
     }
   };
 

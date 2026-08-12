@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StatusBar, TextInput, Modal, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StatusBar, TextInput, Modal, ActivityIndicator, Alert, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthContext } from '../../context/AuthContext';
 import { BACKEND_URL } from '../../api/backend';
@@ -19,6 +20,7 @@ export default function CustomerProfileScreen({ route, navigation }) {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
+  const [profileImage, setProfileImage] = useState(null);
 
   // Support message, success banner, & responses state
   const [supportMessage, setSupportMessage] = useState('');
@@ -33,6 +35,17 @@ export default function CustomerProfileScreen({ route, navigation }) {
   const [supportModalVisible, setSupportModalVisible] = useState(false);
   const [reviewsModalVisible, setReviewsModalVisible] = useState(false);
 
+  // Safety check: if no token exists or user is not logged in, bounce them out immediately
+  useEffect(() => {
+    const checkAuthAndRedirect = async () => {
+      const token = await AsyncStorage.getItem('token');
+      if (!token && !isLoggedIn) {
+        navigation.replace('CustomerLanding');
+      }
+    };
+    checkAuthAndRedirect();
+  }, [isLoggedIn, navigation]);
+
   // Fetch real profile data and support history on load
   useEffect(() => {
     fetchUserProfile();
@@ -46,29 +59,45 @@ export default function CustomerProfileScreen({ route, navigation }) {
     return () => clearInterval(interval);
   }, []);
 
+  const handlePickImage = async () => {
+    // Request permissions
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    
+    if (permissionResult.granted === false) {
+      Alert.alert('Permission Required', 'Permission to access camera roll is required!');
+      return;
+    }
+
+    const pickerResult = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 1,
+    });
+
+    if (!pickerResult.canceled) {
+      setProfileImage(pickerResult.assets[0].uri);
+    }
+  };
+
   const fetchUserProfile = async () => {
     try {
       setIsLoading(true);
       let token = await AsyncStorage.getItem('token');
-      const ctxUser = authContext?.user;
-      if (ctxUser && ctxUser.email) {
-        setName(ctxUser.name || '');
-        setEmail(ctxUser.email || '');
-        setPhone(ctxUser.phone || '+1 234 567 890');
-        setAddress(ctxUser.address || '123 Main Street, Apt 4B');
+
+      // Fallback/check AuthContext user if available immediately
+      if (authContext?.user) {
+        setName(authContext.user.name || '');
+        setEmail(authContext.user.email || '');
+        setPhone(authContext.user.phone || '');
+        setAddress(authContext.user.address || '');
       }
 
       if (!token) {
-        if (route?.params?.user) {
-          const u = route.params.user;
-          setName(u.name || '');
-          setEmail(u.email || '');
-          setPhone(u.phone || '+1 234 567 890');
-          setAddress(u.address || '123 Main Street, Apt 4B');
-          setIsLoading(false);
-          return;
-        }
-        throw new Error('No authentication token found.');
+        // If there's no token, redirect cleanly back to landing instead of throwing/showing profile UI
+        setIsLoading(false);
+        navigation.replace('CustomerLanding');
+        return;
       }
 
       const response = await fetch(`${API_URL}/api/auth/profile`, {
@@ -83,15 +112,22 @@ export default function CustomerProfileScreen({ route, navigation }) {
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Failed to fetch profile.');
 
-      setName(data.user.name || '');
-      setEmail(data.user.email || '');
-      setPhone(data.user.phone || '+1 234 567 890');
-      setAddress(data.user.address || '123 Main Street, Apt 4B');
+      const userData = data.user || data;
+      setName(userData.name || authContext?.user?.name || '');
+      setEmail(userData.email || authContext?.user?.email || '');
+      setPhone(userData.phone || authContext?.user?.phone || '');
+      setAddress(userData.address || authContext?.user?.address || '');
     } catch (error) {
       console.error('Fetch Profile Error:', error);
-      setName('John Doe');
-      setEmail('john.doe@example.com');
-      setPhone('+1 234 567 890');
+      // If offline or endpoint issue, we rely on authContext user already populated above
+      if (!name && !email && authContext?.user) {
+        setName(authContext.user.name || '');
+        setEmail(authContext.user.email || '');
+        setPhone(authContext.user.phone || '');
+        setAddress(authContext.user.address || '');
+      } else {
+        Alert.alert('Error', error.message || 'Failed to load profile data from server.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -112,8 +148,8 @@ export default function CustomerProfileScreen({ route, navigation }) {
       });
 
       const data = await response.json();
-      if (response.ok && data.tickets) {
-        const fetchedTickets = data.tickets;
+      if (response.ok && (data.tickets || Array.isArray(data))) {
+        const fetchedTickets = data.tickets || data;
         
         // Count how many tickets have manager responses
         const respondedCount = fetchedTickets.filter(t => (t.managerResponse || t.reply) && (t.managerResponse || t.reply).trim() !== '').length;
@@ -186,6 +222,17 @@ export default function CustomerProfileScreen({ route, navigation }) {
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Failed to update address.');
 
+      // Update local storage with new address
+      const updatedUser = { ...(authContext?.user || {}), name, email, phone, address };
+      try {
+        await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+        if (authContext && authContext.login) {
+          await authContext.login(token, updatedUser);
+        }
+      } catch (e) {
+        console.warn('Failed to persist updated address locally', e);
+      }
+
       Alert.alert('Success', 'Delivery address updated successfully!');
       setAddressModalVisible(false);
     } catch (error) {
@@ -241,6 +288,8 @@ export default function CustomerProfileScreen({ route, navigation }) {
       console.warn('Logout cleanup error', e);
     }
 
+    // Matches the route name registered in App.js:
+    // <Stack.Screen name="CustomerLanding" component={CustomerLandingScreen} />
     navigation.reset({
       index: 0,
       routes: [{ name: 'CustomerLanding', params: { isLoggedIn: false } }],
@@ -260,9 +309,23 @@ export default function CustomerProfileScreen({ route, navigation }) {
       <View className="w-full max-w-[440px] flex-1 bg-[#F8F9FC] relative shadow-2xl">
         <StatusBar barStyle="dark-content" backgroundColor="#F8F9FC" />
 
-        {/* Top Header */}
+        {/* Top Header with Back Button */}
         <View className="pt-12 px-5 pb-4 bg-white border-b border-[#EAE3DE] flex-row justify-between items-center">
-          <Text className="text-xl font-black text-[#1F130D]">My Profile</Text>
+          <View className="flex-row items-center space-x-3">
+            <TouchableOpacity 
+              onPress={() => {
+                if (navigation.canGoBack()) {
+                  navigation.goBack();
+                } else {
+                  navigation.navigate('CustomerLanding');
+                }
+              }}
+              className="w-9 h-9 bg-gray-100 rounded-xl items-center justify-center border border-gray-200"
+            >
+              <Ionicons name="arrow-back" size={18} color="#1F130D" />
+            </TouchableOpacity>
+            <Text className="text-xl font-black text-[#1F130D]">My Profile</Text>
+          </View>
           <TouchableOpacity onPress={() => setEditModalVisible(true)}>
             <Text className="text-xs font-bold text-[#B8520B]">Edit Profile</Text>
           </TouchableOpacity>
@@ -273,12 +336,24 @@ export default function CustomerProfileScreen({ route, navigation }) {
           
           {/* User Info Card */}
           <View className="bg-white rounded-3xl p-5 border border-[#EAE3DE] items-center mb-5 shadow-xs">
-            <View className="w-16 h-16 bg-[#FEF7F3] rounded-full border border-[#B8520B]/30 items-center justify-center mb-3">
-              <Ionicons name="person" size={28} color="#B8520B" />
-            </View>
-            <Text className="text-base font-black text-[#1F130D] mb-0.5">{name}</Text>
-            <Text className="text-xs text-gray-400 mb-1">{email}</Text>
-            <Text className="text-xs text-gray-400 mb-3">{phone}</Text>
+            <TouchableOpacity 
+              onPress={handlePickImage}
+              className="relative w-20 h-20 rounded-full bg-[#FEF7F3] border-2 border-[#B8520B]/30 items-center justify-center mb-3 shadow-sm overflow-hidden"
+            >
+              {profileImage ? (
+                <Image source={{ uri: profileImage }} className="w-full h-full rounded-full" />
+              ) : (
+                <Ionicons name="person" size={32} color="#B8520B" />
+              )}
+              
+              <View className="absolute bottom-0 right-0 bg-[#B8520B] w-6 h-6 rounded-full items-center justify-center border-2 border-white shadow-md">
+                <Ionicons name="camera" size={12} color="#FFFFFF" />
+              </View>
+            </TouchableOpacity>
+
+            <Text className="text-base font-black text-[#1F130D] mb-0.5">{name || 'No Name Set'}</Text>
+            <Text className="text-xs text-gray-400 mb-1">{email || 'No Email Set'}</Text>
+            <Text className="text-xs text-gray-400 mb-3">{phone || 'No Phone Set'}</Text>
             <View className="bg-[#FEF7F3] px-3 py-1 rounded-full border border-[#B8520B]/20">
               <Text className="text-[10px] font-bold text-[#B8520B]">Gold Member</Text>
             </View>
@@ -319,7 +394,7 @@ export default function CustomerProfileScreen({ route, navigation }) {
             >
               <View className="flex-row items-center">
                 <View className="w-8 h-8 bg-[#FEF7F3] rounded-xl items-center justify-center mr-3">
-                  <Ionicons name="star-outline" size={16} color="#B8520B" />
+                  <Ionicons name="star" size={16} color="#B8520B" />
                 </View>
                 <Text className="text-xs font-bold text-[#1F130D]">Your Reviews</Text>
               </View>
@@ -344,13 +419,15 @@ export default function CustomerProfileScreen({ route, navigation }) {
             </TouchableOpacity>
           </View>
 
-          {/* Logout Button */}
+          {/* Enhanced Logout Button with Gradient/Shadow Effect */}
           <TouchableOpacity 
             onPress={handleLogout}
-            className="bg-red-50 border border-red-200 py-3.5 rounded-2xl items-center mb-6 active:opacity-90 flex-row justify-center"
+            className="bg-red-500 border border-red-600 py-4 rounded-2xl items-center mb-6 shadow-md shadow-red-500/20 active:opacity-90 flex-row justify-center space-x-2"
           >
-            <Ionicons name="log-out-outline" size={16} color="#DC2626" style={{ marginRight: 6 }} />
-            <Text className="text-red-600 font-bold text-xs">Log Out</Text>
+            <View className="w-7 h-7 bg-white/20 rounded-full items-center justify-center mr-1">
+              <Ionicons name="log-out" size={16} color="#FFFFFF" />
+            </View>
+            <Text className="text-white font-black text-xs tracking-wide">Log Out</Text>
           </TouchableOpacity>
 
         </ScrollView>
@@ -404,13 +481,21 @@ export default function CustomerProfileScreen({ route, navigation }) {
           <View className="flex-1 bg-black/50 justify-end items-center">
             <View className="bg-white w-full max-w-[440px] rounded-t-3xl p-6 max-h-[70%]">
               <View className="flex-row justify-between items-center mb-4">
-                <Text className="text-base font-black text-[#1F130D]">Your Reviews</Text>
+                <View className="flex-row items-center space-x-2">
+                  <View className="w-7 h-7 bg-[#FEF7F3] rounded-lg items-center justify-center mr-1">
+                    <Ionicons name="star" size={16} color="#B8520B" />
+                  </View>
+                  <Text className="text-base font-black text-[#1F130D]">Your Reviews</Text>
+                </View>
                 <TouchableOpacity onPress={() => setReviewsModalVisible(false)}>
                   <Ionicons name="close" size={20} color="#1F130D" />
                 </TouchableOpacity>
               </View>
               <ScrollView showsVerticalScrollIndicator={false}>
-                <View className="bg-[#F8F9FC] p-3.5 rounded-2xl border border-[#EAE3DE] items-center">
+                <View className="bg-[#F8F9FC] p-4 rounded-2xl border border-[#EAE3DE] items-center py-8">
+                  <View className="w-12 h-12 bg-amber-50 rounded-full items-center justify-center mb-2 border border-amber-200">
+                    <Ionicons name="star-outline" size={24} color="#D97706" />
+                  </View>
                   <Text className="text-xs font-bold text-[#1F130D] mb-1">No saved reviews yet</Text>
                   <Text className="text-[11px] text-gray-500 text-center">Your submitted food reviews will appear here once you start rating dishes.</Text>
                 </View>
@@ -434,7 +519,6 @@ export default function CustomerProfileScreen({ route, navigation }) {
                 <Text className="text-xs font-bold text-[#1F130D] mb-1">Write your support message</Text>
                 <Text className="text-[11px] text-gray-500 mb-3">Describe your issue below. Your message will be routed directly to the manager support page.</Text>
                 
-                {/* Green Success Banner */}
                 {supportSuccessMsg ? (
                   <View className="bg-green-50 border border-green-200 p-3 rounded-xl mb-3 flex-row items-center">
                     <Ionicons name="checkmark-circle" size={16} color="#15803D" style={{ marginRight: 6 }} />
@@ -467,7 +551,6 @@ export default function CustomerProfileScreen({ route, navigation }) {
                   )}
                 </TouchableOpacity>
 
-                {/* Manager Responses Section */}
                 <Text className="text-xs font-bold text-[#1F130D] mb-2 uppercase tracking-wider">Your Support Conversations</Text>
                 {supportTickets.length === 0 ? (
                   <View className="bg-[#F8F9FC] p-4 rounded-2xl border border-[#EAE3DE] items-center mb-4">
@@ -489,13 +572,11 @@ export default function CustomerProfileScreen({ route, navigation }) {
                           </View>
                         </View>
 
-                        {/* Customer Message */}
                         <View className="bg-white p-2.5 rounded-xl border border-gray-200 mb-2">
                           <Text className="text-[10px] font-bold text-[#B8520B] mb-0.5">You:</Text>
                           <Text className="text-xs text-[#1F130D]">{ticket.message}</Text>
                         </View>
 
-                        {/* Manager Reply Display */}
                         {replyText ? (
                           <View className="bg-green-50 p-2.5 rounded-xl border border-green-200">
                             <Text className="text-[10px] font-bold text-green-800 mb-0.5">Manager Response:</Text>

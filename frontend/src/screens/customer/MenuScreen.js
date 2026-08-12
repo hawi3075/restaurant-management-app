@@ -34,13 +34,25 @@ export default function MenuScreen({ navigation }) {
 
       // Map items and ensure image URLs are fully qualified with BACKEND_URL if they are relative paths
       const formattedItems = items.map((item, index) => {
-        let imageUrl = item.image;
+        let imageUrl = item.image || item.imageUrl;
+        
+        // Handle different image URL formats
         if (imageUrl) {
-          if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
+          // If it's a data URI (base64), use it directly
+          if (imageUrl.startsWith('data:image')) {
+            // Use as is
+          }
+          // If it's already a full URL, use it directly
+          else if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+            // Use as is
+          }
+          // If it's a relative path, prepend BACKEND_URL
+          else {
             imageUrl = `${BACKEND_URL}${imageUrl.startsWith('/') ? '' : '/'}${imageUrl}`;
           }
         } else {
-          imageUrl = 'https://images.unsplash.com/photo-1541544741938-0af808871cc0?auto=format&fit=crop&w=400&q=80';
+          // Fallback image if no image is provided
+          imageUrl = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=400&q=80';
         }
 
         return {

@@ -62,6 +62,7 @@ function AppNavigator() {
         <Stack.Screen name="CartScreen" component={CartScreen} />
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="Signup" component={SignupScreen} />
+        <Stack.Screen name="CustomerProfileScreen" component={CustomerProfileScreen} />
       </Stack.Navigator>
     );
   }
@@ -73,7 +74,7 @@ function AppNavigator() {
   // MANAGER / ADMIN
   if (role === 'manager' || role === 'admin') {
     return (
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="ManagerDashboard">
         <Stack.Screen name="ManagerDashboard" component={ManagerDashboardScreen} />
         <Stack.Screen name="ManagerProfileScreen" component={ManagerProfileScreen} />
         <Stack.Screen name="OrderManagementScreen" component={OrderManagementScreen} />
@@ -90,7 +91,7 @@ function AppNavigator() {
   // KITCHEN
   if (role === 'kitchen') {
     return (
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="KitchenDashboard">
         <Stack.Screen name="KitchenDashboard" component={KitchenDashboardScreen} />
       </Stack.Navigator>
     );
@@ -99,7 +100,7 @@ function AppNavigator() {
   // WAITER
   if (role === 'waiter') {
     return (
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="WaiterDashboard">
         <Stack.Screen name="WaiterDashboard" component={WaiterDashboardScreen} />
         <Stack.Screen name="WaiterLiveOrders" component={WaiterLiveOrdersScreen} />
       </Stack.Navigator>
@@ -109,15 +110,15 @@ function AppNavigator() {
   // DRIVER
   if (role === 'driver') {
     return (
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="DriverDashboard">
         <Stack.Screen name="DriverDashboard" component={DriverDashboardScreen} />
       </Stack.Navigator>
     );
   }
 
-  // LOGGED-IN CUSTOMER STACK
+  // LOGGED-IN CUSTOMER STACK (Ensures CustomerLanding is the absolute initial route)
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="CustomerLanding">
       <Stack.Screen name="CustomerLanding" component={CustomerLandingScreen} />
       <Stack.Screen name="MenuScreen" component={MenuScreen} />
       <Stack.Screen name="FoodDetailScreen" component={FoodDetailScreen} />
@@ -132,7 +133,7 @@ function AppNavigator() {
 export default function App() {
   return (
     <AuthProvider>
-      <NavigationContainer>
+      <NavigationContainer linking={{ enabled: false }}>
         <AppNavigator />
       </NavigationContainer>
     </AuthProvider>

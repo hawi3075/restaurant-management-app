@@ -1,461 +1,542 @@
-import React, { useEffect, useState, useContext } from 'react';
-import {
-  View, Text, TouchableOpacity, ScrollView,
-  StatusBar, Image, ActivityIndicator, Alert, Platform, Modal,
-} from 'react-native';
+import React, { useState, useEffect, useContext } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StatusBar, TextInput, Modal, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthContext } from '../../context/AuthContext';
 import { BACKEND_URL } from '../../api/backend';
 
-export default function CustomerLandingScreen({ navigation }) {
-  const { user, logout } = useContext(AuthContext);
+// Replace 'https://your-live-backend-url.com' with your actual deployed production URL (e.g., Render, Railway, Heroku)
+const LIVE_BACKEND_URL = 'https://your-live-backend-url.com';
 
-  const [featuredItems, setFeaturedItems] = useState([]);
-  const [isLoading, setIsLoading]         = useState(true);
-  const [cartCount, setCartCount]         = useState(0);
-  const [showLogoutModal, setShowLogoutModal] = useState(false);
+const API_URL = BACKEND_URL || (__DEV__ ? 'http://localhost:5000' : LIVE_BACKEND_URL);
 
-  const categories = [
-    { name: 'Breakfast', icon: 'sunny-outline' },
-    { name: 'Lunch',     icon: 'restaurant-outline' },
-    { name: 'Dinner',    icon: 'moon-outline' },
-    { name: 'Drinks',    icon: 'cafe-outline' },
-    { name: 'Desserts',  icon: 'ice-cream-outline' },
-  ];
+export default function CustomerProfileScreen({ route, navigation }) {
+  const isLoggedIn = route?.params?.isLoggedIn ?? true;
+  const authContext = useContext(AuthContext);
 
-  // ── Load on mount ────────────────────────────────────────────────────────
+  const [isLoading, setIsLoading] = useState(true);
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
+
+  // Support message, success banner, & responses state
+  const [supportMessage, setSupportMessage] = useState('');
+  const [isSubmittingSupport, setIsSubmittingSupport] = useState(false);
+  const [supportSuccessMsg, setSupportSuccessMsg] = useState('');
+  const [supportTickets, setSupportTickets] = useState([]);
+  const [lastCheckedResponseCount, setLastCheckedResponseCount] = useState(0);
+
+  // Modal states
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [addressModalVisible, setAddressModalVisible] = useState(false);
+  const [supportModalVisible, setSupportModalVisible] = useState(false);
+  const [reviewsModalVisible, setReviewsModalVisible] = useState(false);
+
+  // Fetch real profile data and support history on load
   useEffect(() => {
-    fetchFeaturedItems();
-    loadCartCount();
+    fetchUserProfile();
+    fetchSupportTickets();
+
+    // Poll for manager responses every 10 seconds
+    const interval = setInterval(() => {
+      fetchSupportTickets(true);
+    }, 10000);
+
+    return () => clearInterval(interval);
   }, []);
 
-  // Refresh cart count whenever screen comes back into focus
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', loadCartCount);
-    return unsubscribe;
-  }, [navigation]);
-
-  const loadCartCount = async () => {
-    try {
-      const stored = await AsyncStorage.getItem('cart');
-      const items  = stored ? JSON.parse(stored) : [];
-      setCartCount(items.reduce((sum, i) => sum + (i.quantity || 1), 0));
-    } catch (_) {}
-  };
-
-  const fetchFeaturedItems = async () => {
+  const fetchUserProfile = async () => {
     try {
       setIsLoading(true);
-      const res  = await fetch(`${BACKEND_URL}/api/menu?category=Lunch`);
-      const data = await res.json();
-      const raw  = data.items || data || [];
+      let token = await AsyncStorage.getItem('token');
 
-      const formatted = raw.slice(0, 6).map((item, i) => ({
-        id:    item._id || item.id || i,
-        name:   item.name || 'Delicious Dish',
-        price:  item.price || 15.00,
-        rating: item.rating?.toString() || '4.8',
-        desc:   item.description || item.desc || '',
-        image:  item.image && item.image.startsWith('http')
-                ? item.image
-                : 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=400&q=80',
-      }));
-      setFeaturedItems(formatted);
-    } catch (e) {
-      console.error('Landing fetch error:', e);
+      // Fallback/check AuthContext user if available immediately
+      if (authContext?.user) {
+        setName(authContext.user.name || '');
+        setEmail(authContext.user.email || '');
+        setPhone(authContext.user.phone || '');
+        setAddress(authContext.user.address || '');
+      }
+
+      if (!token) {
+        throw new Error('No authentication token found.');
+      }
+
+      const response = await fetch(`${API_URL}/api/auth/profile`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-user-email': authContext?.user?.email || ''
+        }
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to fetch profile.');
+
+      const userData = data.user || data;
+      setName(userData.name || authContext?.user?.name || '');
+      setEmail(userData.email || authContext?.user?.email || '');
+      setPhone(userData.phone || authContext?.user?.phone || '');
+      setAddress(userData.address || authContext?.user?.address || '');
+    } catch (error) {
+      console.error('Fetch Profile Error:', error);
+      // If offline or endpoint issue, we rely on authContext user already populated above
+      if (!name && !email && authContext?.user) {
+        setName(authContext.user.name || '');
+        setEmail(authContext.user.email || '');
+        setPhone(authContext.user.phone || '');
+        setAddress(authContext.user.address || '');
+      } else {
+        Alert.alert('Error', error.message || 'Failed to load profile data from server.');
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
-  // ── Cart helpers ─────────────────────────────────────────────────────────
-  const handleAddToCart = async (item) => {
+  const fetchSupportTickets = async (isPolling = false) => {
     try {
-      const stored = await AsyncStorage.getItem('cart');
-      let cart     = stored ? JSON.parse(stored) : [];
-      const exists = cart.find(i => String(i.id) === String(item.id));
-      if (exists) {
-        cart = cart.map(i =>
-          String(i.id) === String(item.id) ? { ...i, quantity: i.quantity + 1 } : i
-        );
+      const token = await AsyncStorage.getItem('token');
+      if (!token) return;
+
+      const response = await fetch(`${API_URL}/api/support/my-tickets`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-user-email': authContext?.user?.email || ''
+        }
+      });
+
+      const data = await response.json();
+      if (response.ok && (data.tickets || Array.isArray(data))) {
+        const fetchedTickets = data.tickets || data;
+        
+        // Count how many tickets have manager responses
+        const respondedCount = fetchedTickets.filter(t => (t.managerResponse || t.reply) && (t.managerResponse || t.reply).trim() !== '').length;
+
+        // If polling and we found new manager responses, trigger alert
+        if (isPolling && lastCheckedResponseCount > 0 && respondedCount > lastCheckedResponseCount) {
+          Alert.alert('New Support Response', 'The manager has written a response to your support message!');
+        }
+
+        setLastCheckedResponseCount(respondedCount);
+        setSupportTickets(fetchedTickets);
+      }
+    } catch (error) {
+      console.error('Fetch Support Tickets Error:', error);
+    }
+  };
+
+  const handleUpdateProfile = async () => {
+    try {
+      setIsLoading(true);
+      const token = await AsyncStorage.getItem('token');
+
+      const response = await fetch(`${API_URL}/api/auth/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-user-email': authContext?.user?.email || ''
+        },
+        body: JSON.stringify({ name, email, phone })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to update profile.');
+
+      const updatedUser = { ...(authContext?.user || {}), name, email, phone, address };
+      try {
+        await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+        if (authContext && authContext.login) {
+          await authContext.login(token, updatedUser);
+        }
+      } catch (e) {
+        console.warn('Failed to persist updated user locally', e);
+      }
+
+      Alert.alert('Success', 'Profile updated successfully!');
+      setEditModalVisible(false);
+    } catch (error) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleUpdateAddress = async () => {
+    try {
+      setIsLoading(true);
+      const token = await AsyncStorage.getItem('token');
+
+      const response = await fetch(`${API_URL}/api/auth/address`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-user-email': authContext?.user?.email || ''
+        },
+        body: JSON.stringify({ address })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to update address.');
+
+      // Update local storage with new address
+      const updatedUser = { ...(authContext?.user || {}), name, email, phone, address };
+      try {
+        await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+        if (authContext && authContext.login) {
+          await authContext.login(token, updatedUser);
+        }
+      } catch (e) {
+        console.warn('Failed to persist updated address locally', e);
+      }
+
+      Alert.alert('Success', 'Delivery address updated successfully!');
+      setAddressModalVisible(false);
+    } catch (error) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSendSupportMessage = async () => {
+    if (!supportMessage.trim()) {
+      Alert.alert('Error', 'Please enter a support message before sending.');
+      return;
+    }
+
+    try {
+      setIsSubmittingSupport(true);
+      setSupportSuccessMsg('');
+      const token = await AsyncStorage.getItem('token');
+
+      const response = await fetch(`${API_URL}/api/support`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-user-email': authContext?.user?.email || ''
+        },
+        body: JSON.stringify({ message: supportMessage, name, email })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to send support message.');
+
+      setSupportSuccessMsg('Send successfully! Your message has been routed to the manager support page.');
+      setSupportMessage('');
+      fetchSupportTickets(); // Refresh tickets list
+    } catch (error) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setIsSubmittingSupport(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      if (authContext && authContext.logout) {
+        await authContext.logout();
       } else {
-        cart.unshift({ ...item, quantity: 1, options: 'Regular' });
+        await AsyncStorage.removeItem('token');
+        await AsyncStorage.removeItem('user');
       }
-      await AsyncStorage.setItem('cart', JSON.stringify(cart));
-      const total = cart.reduce((s, i) => s + (i.quantity || 1), 0);
-      setCartCount(total);
-      Alert.alert('Added to Cart 🛒', `${item.name} has been added to your cart.`);
     } catch (e) {
-      console.error('Add to cart error:', e);
+      console.warn('Logout cleanup error', e);
     }
+
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'CustomerLanding', params: { isLoggedIn: false } }],
+    });
   };
 
-  const handleGoToCart = () => {
-    navigation.navigate('CartScreen');
-  };
+  if (isLoading && !name) {
+    return (
+      <View className="flex-1 bg-[#F8F9FC] items-center justify-center">
+        <ActivityIndicator size="large" color="#B8520B" />
+      </View>
+    );
+  }
 
-  // ── Logout ───────────────────────────────────────────────────────────────
-  const performLogout = async () => {
-    setShowLogoutModal(false);
-    try {
-      if (logout) {
-        await logout();
-      }
-    } catch (err) {
-      console.error('Logout execution error:', err);
-    }
-  };
-
-  const handleLogoutPress = () => {
-    setShowLogoutModal(true);
-  };
-
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <View className="flex-1 bg-[#F8F9FC] items-center">
-      <View className="w-full max-w-[440px] flex-1 relative shadow-2xl">
-        <StatusBar barStyle="light-content" backgroundColor="#1F130D" />
+      <View className="w-full max-w-[440px] flex-1 bg-[#F8F9FC] relative shadow-2xl">
+        <StatusBar barStyle="dark-content" backgroundColor="#F8F9FC" />
 
-        <ScrollView showsVerticalScrollIndicator={false} className="flex-1 pb-24">
-
-          {/* ══ HERO ══════════════════════════════════════════════════════ */}
-          <View className="bg-[#1F130D] px-5 pt-12 pb-8 relative overflow-hidden">
-            {/* Decorative icon */}
-            <View className="absolute right-[-30] top-[-20] opacity-10">
-              <Ionicons name="restaurant" size={190} color="#B8520B" />
-            </View>
-
-            {/* Top nav row */}
-            <View className="flex-row justify-between items-center mb-6">
-              <View>
-                <Text className="text-[10px] font-black text-[#B8520B] uppercase tracking-widest">
-                  Welcome to
-                </Text>
-                <Text className="text-xl font-black text-white">ROMS Restaurant 🍽️</Text>
-              </View>
-
-              <View className="flex-row items-center space-x-2">
-                {/* Cart badge */}
-                <TouchableOpacity
-                  onPress={handleGoToCart}
-                  className="w-10 h-10 bg-[#B8520B]/20 rounded-2xl items-center justify-center border border-[#B8520B]/40 relative"
-                >
-                  <Ionicons name="cart-outline" size={20} color="#B8520B" />
-                  {cartCount > 0 && (
-                    <View className="absolute -top-1 -right-1 w-4 h-4 bg-[#B8520B] rounded-full items-center justify-center">
-                      <Text className="text-white text-[9px] font-black">{cartCount}</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-
-                {/* Auth button */}
-                {user ? (
-                  <TouchableOpacity
-                    onPress={() => navigation.navigate('CustomerProfileScreen')}
-                    className="w-10 h-10 bg-[#B8520B] rounded-2xl items-center justify-center"
-                  >
-                    <Ionicons name="person" size={18} color="white" />
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity
-                    onPress={() => navigation.navigate('Login')}
-                    className="bg-[#B8520B] px-4 py-2 rounded-2xl"
-                  >
-                    <Text className="text-white text-[11px] font-black">Sign In</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-
-            {/* Headline */}
-            <Text className="text-3xl font-black text-white leading-tight mb-2">
-              Fresh Food,{'\n'}
-              <Text className="text-[#B8520B]">Fast Delivery</Text>
-            </Text>
-            <Text className="text-slate-400 text-xs font-medium mb-5 leading-relaxed">
-              Order your favourite meals — dine-in or delivered right to your door.
-            </Text>
-
-            {/* CTA buttons */}
-            <View className="flex-row space-x-3">
-              <TouchableOpacity
-                onPress={() => navigation.navigate('MenuScreen')}
-                className="flex-1 bg-[#B8520B] py-3 rounded-2xl items-center flex-row justify-center"
-              >
-                <Ionicons name="restaurant-outline" size={16} color="white" style={{ marginRight: 6 }} />
-                <Text className="text-white font-black text-sm">Browse Menu</Text>
-              </TouchableOpacity>
-
-              {!user ? (
-                <TouchableOpacity
-                  onPress={() => navigation.navigate('Signup')}
-                  className="flex-1 bg-white/10 border border-white/20 py-3 rounded-2xl items-center flex-row justify-center"
-                >
-                  <Ionicons name="person-add-outline" size={16} color="white" style={{ marginRight: 6 }} />
-                  <Text className="text-white font-black text-sm">Sign Up</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity
-                  onPress={() => navigation.navigate('OrderHistoryScreen')}
-                  className="flex-1 bg-white/10 border border-white/20 py-3 rounded-2xl items-center flex-row justify-center"
-                >
-                  <Ionicons name="receipt-outline" size={16} color="white" style={{ marginRight: 6 }} />
-                  <Text className="text-white font-black text-sm">My Orders</Text>
-                </TouchableOpacity>
-              )}
-            </View>
+        {/* Top Header with Back Button */}
+        <View className="pt-12 px-5 pb-4 bg-white border-b border-[#EAE3DE] flex-row justify-between items-center">
+          <View className="flex-row items-center space-x-3">
+            <TouchableOpacity 
+              onPress={() => navigation.goBack()}
+              className="w-9 h-9 bg-gray-100 rounded-xl items-center justify-center border border-gray-200"
+            >
+              <Ionicons name="arrow-back" size={18} color="#1F130D" />
+            </TouchableOpacity>
+            <Text className="text-xl font-black text-[#1F130D]">My Profile</Text>
           </View>
-
-          {/* ══ USER GREETING CARD (logged-in only) ═══════════════════════ */}
-          {user && (
-            <View className="mx-5 mt-4 bg-white rounded-2xl border border-[#EAE3DE] p-4 flex-row items-center shadow-xs">
-              <View className="w-10 h-10 bg-[#B8520B]/10 rounded-2xl items-center justify-center mr-3 border border-[#B8520B]/20">
-                <Ionicons name="person" size={18} color="#B8520B" />
-              </View>
-              <View className="flex-1">
-                <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Logged in as</Text>
-                <Text className="text-sm font-black text-[#1F130D]" numberOfLines={1}>
-                  {user.name || user.email}
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={handleLogoutPress}
-                className="flex-row items-center px-3 py-2 bg-[#FEF3EC] rounded-xl border border-[#B8520B]/30 active:bg-[#B8520B]/10"
-              >
-                <Ionicons name="log-out-outline" size={13} color="#B8520B" style={{ marginRight: 4 }} />
-                <Text className="text-[10px] font-black text-[#B8520B]">Logout</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* ══ CATEGORIES ════════════════════════════════════════════════ */}
-          <View className="px-5 mt-6">
-            <Text className="text-xs font-black text-gray-400 uppercase tracking-wider mb-3">
-              Browse by Category
-            </Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {categories.map((cat, i) => (
-                <TouchableOpacity
-                  key={i}
-                  onPress={() => navigation.navigate('MenuScreen')}
-                  className="items-center mr-4"
-                >
-                  <View className="w-14 h-14 bg-white rounded-2xl border-2 border-[#EAE3DE] items-center justify-center mb-1 shadow-xs">
-                    <Ionicons name={cat.icon} size={22} color="#B8520B" />
-                  </View>
-                  <Text className="text-[10px] font-bold text-[#1F130D]">{cat.name}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-
-          {/* ══ FEATURED DISHES ═══════════════════════════════════════════ */}
-          <View className="px-5 mt-6">
-            <View className="flex-row justify-between items-center mb-3">
-              <Text className="text-xs font-black text-gray-400 uppercase tracking-wider">
-                Featured Dishes
-              </Text>
-              <TouchableOpacity onPress={() => navigation.navigate('MenuScreen')}>
-                <Text className="text-xs font-bold text-[#B8520B]">See All →</Text>
-              </TouchableOpacity>
-            </View>
-
-            {isLoading ? (
-              <View className="py-14 items-center">
-                <ActivityIndicator size="large" color="#B8520B" />
-              </View>
-            ) : featuredItems.length === 0 ? (
-              <View className="py-12 items-center">
-                <Ionicons name="restaurant-outline" size={32} color="#B8520B" />
-                <Text className="text-xs text-gray-400 mt-2 text-center">
-                  No featured items right now.{'\n'}Tap "Browse Menu" to see everything.
-                </Text>
-              </View>
-            ) : (
-              featuredItems.map((item) => (
-                <View
-                  key={item.id}
-                  className="bg-white rounded-2xl border border-[#EAE3DE] mb-3 overflow-hidden shadow-xs"
-                >
-                  <View className="flex-row">
-                    <Image
-                      source={{ uri: item.image }}
-                      style={{ width: 96, height: 96, backgroundColor: '#F3F4F6' }}
-                      resizeMode="cover"
-                    />
-                    <View className="flex-1 p-3 justify-between">
-                      <View>
-                        <View className="flex-row justify-between items-start">
-                          <Text
-                            className="font-black text-sm text-[#1F130D] flex-1 pr-2"
-                            numberOfLines={1}
-                          >
-                            {item.name}
-                          </Text>
-                          <View className="flex-row items-center bg-[#FEF7F3] px-1.5 py-0.5 rounded-full border border-[#B8520B]/20">
-                            <Ionicons name="star" size={9} color="#B8520B" />
-                            <Text className="text-[9px] font-black text-[#B8520B] ml-0.5">
-                              {item.rating}
-                            </Text>
-                          </View>
-                        </View>
-                        {!!item.desc && (
-                          <Text className="text-[10px] text-gray-400 mt-1" numberOfLines={2}>
-                            {item.desc}
-                          </Text>
-                        )}
-                      </View>
-                      <View className="flex-row justify-between items-center mt-2">
-                        <Text className="font-black text-sm text-[#1F130D]">
-                          ${item.price.toFixed(2)}
-                        </Text>
-                        <TouchableOpacity
-                          onPress={() => handleAddToCart(item)}
-                          className="flex-row items-center bg-[#B8520B] px-3 py-1.5 rounded-xl"
-                        >
-                          <Ionicons name="add" size={12} color="white" />
-                          <Text className="text-white text-[10px] font-black ml-1">Add</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </View>
-                </View>
-              ))
-            )}
-          </View>
-
-          {/* ══ SIGN-UP PROMO CARD (guest only) ══════════════════════════ */}
-          {!user && (
-            <View className="mx-5 mt-4 mb-4 bg-[#1F130D] rounded-3xl p-5 relative overflow-hidden">
-              <View className="absolute right-[-20] bottom-[-20] opacity-10">
-                <Ionicons name="star" size={120} color="#B8520B" />
-              </View>
-              <Text className="text-[10px] font-black text-[#B8520B] uppercase tracking-widest mb-1">
-                Create Account
-              </Text>
-              <Text className="text-white text-lg font-black mb-1">
-                Join for Exclusive{'\n'}
-                <Text className="text-[#B8520B]">Offers & Rewards 🎁</Text>
-              </Text>
-              <Text className="text-slate-400 text-xs mb-4 leading-relaxed">
-                Sign up now and get priority order tracking, saved addresses, and exclusive member deals.
-              </Text>
-              <TouchableOpacity
-                onPress={() => navigation.navigate('Signup')}
-                className="bg-[#B8520B] py-3 rounded-2xl items-center"
-              >
-                <Text className="text-white font-black text-sm">Create Free Account</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </ScrollView>
-
-        {/* ══ BOTTOM NAV BAR ════════════════════════════════════════════ */}
-        <View className="absolute bottom-0 left-0 right-0 bg-white border-t border-[#EAE3DE] px-6 py-2.5 flex-row justify-between items-center shadow-lg">
-          {/* Home — always active on this screen */}
-          <View className="items-center">
-            <Ionicons name="home" size={18} color="#B8520B" />
-            <Text className="text-[9px] font-bold text-[#B8520B] mt-0.5">Home</Text>
-          </View>
-
-          {/* Menu */}
-          <TouchableOpacity
-            onPress={() => navigation.navigate('MenuScreen')}
-            className="items-center"
-          >
-            <Ionicons name="restaurant-outline" size={18} color="#757575" />
-            <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Menu</Text>
+          <TouchableOpacity onPress={() => setEditModalVisible(true)}>
+            <Text className="text-xs font-bold text-[#B8520B]">Edit Profile</Text>
           </TouchableOpacity>
-
-          {/* Cart with badge */}
-          <TouchableOpacity onPress={handleGoToCart} className="items-center relative">
-            <Ionicons name="cart-outline" size={18} color="#757575" />
-            {cartCount > 0 && (
-              <View className="absolute -top-1 -right-2 w-3.5 h-3.5 bg-[#B8520B] rounded-full items-center justify-center">
-                <Text className="text-white text-[8px] font-black">{cartCount}</Text>
-              </View>
-            )}
-            <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Cart</Text>
-          </TouchableOpacity>
-
-          {/* Orders / Sign In */}
-          {user ? (
-            <TouchableOpacity
-              onPress={() => navigation.navigate('OrderHistoryScreen')}
-              className="items-center"
-            >
-              <Ionicons name="receipt-outline" size={18} color="#757575" />
-              <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Orders</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              onPress={() => navigation.navigate('Login')}
-              className="items-center"
-            >
-              <Ionicons name="log-in-outline" size={18} color="#757575" />
-              <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Sign In</Text>
-            </TouchableOpacity>
-          )}
-
-          {/* Profile / Sign Up */}
-          {user ? (
-            <TouchableOpacity
-              onPress={() => navigation.navigate('CustomerProfileScreen')}
-              className="items-center"
-            >
-              <Ionicons name="person-outline" size={18} color="#757575" />
-              <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Profile</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              onPress={() => navigation.navigate('Signup')}
-              className="items-center"
-            >
-              <Ionicons name="person-add-outline" size={18} color="#757575" />
-              <Text className="text-[9px] font-semibold text-gray-500 mt-0.5">Sign Up</Text>
-            </TouchableOpacity>
-          )}
         </View>
 
-        {/* ══ CUSTOM LOGOUT CONFIRMATION MODAL ═══════════════════════════ */}
-        <Modal
-          visible={showLogoutModal}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setShowLogoutModal(false)}
-        >
-          <View className="flex-1 bg-black/50 items-center justify-center px-8">
-            <View className="w-full max-w-[320px] bg-white rounded-3xl p-6 items-center">
-              {/* Icon badge */}
-              <View className="w-14 h-14 bg-[#FEF3EC] rounded-2xl items-center justify-center mb-4 border border-[#B8520B]/20">
-                <Ionicons name="log-out-outline" size={26} color="#B8520B" />
-              </View>
+        {/* Profile Content */}
+        <ScrollView showsVerticalScrollIndicator={false} className="px-5 pt-4 pb-24">
+          
+          {/* User Info Card */}
+          <View className="bg-white rounded-3xl p-5 border border-[#EAE3DE] items-center mb-5 shadow-xs">
+            <View className="w-16 h-16 bg-[#FEF7F3] rounded-full border border-[#B8520B]/30 items-center justify-center mb-3">
+              <Ionicons name="person" size={28} color="#B8520B" />
+            </View>
+            <Text className="text-base font-black text-[#1F130D] mb-0.5">{name || 'No Name Set'}</Text>
+            <Text className="text-xs text-gray-400 mb-1">{email || 'No Email Set'}</Text>
+            <Text className="text-xs text-gray-400 mb-3">{phone || 'No Phone Set'}</Text>
+            <View className="bg-[#FEF7F3] px-3 py-1 rounded-full border border-[#B8520B]/20">
+              <Text className="text-[10px] font-bold text-[#B8520B]">Gold Member</Text>
+            </View>
+          </View>
 
-              <Text className="text-lg font-black text-[#1F130D] mb-1 text-center">
-                Log Out?
-              </Text>
-              <Text className="text-xs text-gray-400 text-center mb-6 leading-relaxed">
-                Are you sure you want to logout of your account?
-              </Text>
+          {/* Account Settings Menu */}
+          <Text className="text-xs font-bold text-gray-400 uppercase mb-2 ml-1 tracking-wider">Account Settings</Text>
+          <View className="bg-white rounded-2xl border border-[#EAE3DE] mb-5 overflow-hidden shadow-xs">
+            <TouchableOpacity 
+              onPress={() => navigation.navigate('OrderHistoryScreen')}
+              className="flex-row items-center justify-between p-4 border-b border-[#F8F9FC]"
+            >
+              <View className="flex-row items-center">
+                <View className="w-8 h-8 bg-[#FEF7F3] rounded-xl items-center justify-center mr-3">
+                  <Ionicons name="receipt-outline" size={16} color="#B8520B" />
+                </View>
+                <Text className="text-xs font-bold text-[#1F130D]">My Orders</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={14} color="#9E9E9E" />
+            </TouchableOpacity>
 
-              <View className="flex-row w-full space-x-3">
-                <TouchableOpacity
-                  onPress={() => setShowLogoutModal(false)}
-                  className="flex-1 bg-gray-100 py-3 rounded-2xl items-center border border-gray-200"
-                >
-                  <Text className="text-xs font-black text-gray-600">Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={performLogout}
-                  className="flex-1 bg-[#B8520B] py-3 rounded-2xl items-center"
-                >
-                  <Text className="text-xs font-black text-white">Logout</Text>
+            <TouchableOpacity 
+              onPress={() => setAddressModalVisible(true)}
+              className="flex-row items-center justify-between p-4 border-b border-[#F8F9FC]"
+            >
+              <View className="flex-row items-center">
+                <View className="w-8 h-8 bg-[#FEF7F3] rounded-xl items-center justify-center mr-3">
+                  <Ionicons name="location-outline" size={16} color="#B8520B" />
+                </View>
+                <Text className="text-xs font-bold text-[#1F130D]">Delivery Addresses</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={14} color="#9E9E9E" />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              onPress={() => setReviewsModalVisible(true)}
+              className="flex-row items-center justify-between p-4"
+            >
+              <View className="flex-row items-center">
+                <View className="w-8 h-8 bg-[#FEF7F3] rounded-xl items-center justify-center mr-3">
+                  <Ionicons name="star" size={16} color="#B8520B" />
+                </View>
+                <Text className="text-xs font-bold text-[#1F130D]">Your Reviews</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={14} color="#9E9E9E" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Preferences & Support */}
+          <Text className="text-xs font-bold text-gray-400 uppercase mb-2 ml-1 tracking-wider">Preferences & Support</Text>
+          <View className="bg-white rounded-2xl border border-[#EAE3DE] mb-6 overflow-hidden shadow-xs">
+            <TouchableOpacity 
+              onPress={() => setSupportModalVisible(true)}
+              className="flex-row items-center justify-between p-4"
+            >
+              <View className="flex-row items-center">
+                <View className="w-8 h-8 bg-gray-100 rounded-xl items-center justify-center mr-3">
+                  <Ionicons name="help-circle-outline" size={16} color="#757575" />
+                </View>
+                <Text className="text-xs font-bold text-[#1F130D]">Help & Support</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={14} color="#9E9E9E" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Enhanced Logout Button with Gradient/Shadow Effect */}
+          <TouchableOpacity 
+            onPress={handleLogout}
+            className="bg-red-500 border border-red-600 py-4 rounded-2xl items-center mb-6 shadow-md shadow-red-500/20 active:opacity-90 flex-row justify-center space-x-2"
+          >
+            <View className="w-7 h-7 bg-white/20 rounded-full items-center justify-center mr-1">
+              <Ionicons name="log-out" size={16} color="#FFFFFF" />
+            </View>
+            <Text className="text-white font-black text-xs tracking-wide">Log Out</Text>
+          </TouchableOpacity>
+
+        </ScrollView>
+
+        {/* --- MODALS FOR INTERACTION --- */}
+
+        {/* Edit Profile Modal */}
+        <Modal visible={editModalVisible} animationType="slide" transparent={true}>
+          <View className="flex-1 bg-black/50 justify-end items-center">
+            <View className="bg-white w-full max-w-[440px] rounded-t-3xl p-6">
+              <View className="flex-row justify-between items-center mb-4">
+                <Text className="text-base font-black text-[#1F130D]">Edit Profile</Text>
+                <TouchableOpacity onPress={() => setEditModalVisible(false)}>
+                  <Ionicons name="close" size={20} color="#1F130D" />
                 </TouchableOpacity>
               </View>
+              <Text className="text-[11px] font-bold text-gray-500 mb-1">Full Name</Text>
+              <TextInput className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs mb-3 text-[#1F130D]" value={name} onChangeText={setName} />
+              <Text className="text-[11px] font-bold text-gray-500 mb-1">Email Address</Text>
+              <TextInput className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs mb-3 text-[#1F130D]" value={email} onChangeText={setEmail} />
+              <Text className="text-[11px] font-bold text-gray-500 mb-1">Phone Number</Text>
+              <TextInput className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs mb-5 text-[#1F130D]" value={phone} onChangeText={setPhone} />
+              <TouchableOpacity onPress={handleUpdateProfile} className="bg-[#B8520B] py-3.5 rounded-xl items-center">
+                <Text className="text-white text-xs font-bold">Save Changes</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </Modal>
+
+        {/* Delivery Address Modal */}
+        <Modal visible={addressModalVisible} animationType="slide" transparent={true}>
+          <View className="flex-1 bg-black/50 justify-end items-center">
+            <View className="bg-white w-full max-w-[440px] rounded-t-3xl p-6">
+              <View className="flex-row justify-between items-center mb-4">
+                <Text className="text-base font-black text-[#1F130D]">Delivery Address</Text>
+                <TouchableOpacity onPress={() => setAddressModalVisible(false)}>
+                  <Ionicons name="close" size={20} color="#1F130D" />
+                </TouchableOpacity>
+              </View>
+              <Text className="text-[11px] font-bold text-gray-500 mb-1">Saved Address</Text>
+              <TextInput className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs mb-5 text-[#1F130D]" value={address} onChangeText={setAddress} multiline />
+              <TouchableOpacity onPress={handleUpdateAddress} className="bg-[#B8520B] py-3.5 rounded-xl items-center">
+                <Text className="text-white text-xs font-bold">Update Address</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Your Reviews Modal */}
+        <Modal visible={reviewsModalVisible} animationType="slide" transparent={true}>
+          <View className="flex-1 bg-black/50 justify-end items-center">
+            <View className="bg-white w-full max-w-[440px] rounded-t-3xl p-6 max-h-[70%]">
+              <View className="flex-row justify-between items-center mb-4">
+                <View className="flex-row items-center space-x-2">
+                  <View className="w-7 h-7 bg-[#FEF7F3] rounded-lg items-center justify-center mr-1">
+                    <Ionicons name="star" size={16} color="#B8520B" />
+                  </View>
+                  <Text className="text-base font-black text-[#1F130D]">Your Reviews</Text>
+                </View>
+                <TouchableOpacity onPress={() => setReviewsModalVisible(false)}>
+                  <Ionicons name="close" size={20} color="#1F130D" />
+                </TouchableOpacity>
+              </View>
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <View className="bg-[#F8F9FC] p-4 rounded-2xl border border-[#EAE3DE] items-center py-8">
+                  <View className="w-12 h-12 bg-amber-50 rounded-full items-center justify-center mb-2 border border-amber-200">
+                    <Ionicons name="star-outline" size={24} color="#D97706" />
+                  </View>
+                  <Text className="text-xs font-bold text-[#1F130D] mb-1">No saved reviews yet</Text>
+                  <Text className="text-[11px] text-gray-500 text-center">Your submitted food reviews will appear here once you start rating dishes.</Text>
+                </View>
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Help & Support Modal */}
+        <Modal visible={supportModalVisible} animationType="slide" transparent={true}>
+          <View className="flex-1 bg-black/50 justify-end items-center">
+            <View className="bg-white w-full max-w-[440px] rounded-t-3xl p-6 max-h-[85%]">
+              <View className="flex-row justify-between items-center mb-4">
+                <Text className="text-base font-black text-[#1F130D]">Help & Support</Text>
+                <TouchableOpacity onPress={() => setSupportModalVisible(false)}>
+                  <Ionicons name="close" size={20} color="#1F130D" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <Text className="text-xs font-bold text-[#1F130D] mb-1">Write your support message</Text>
+                <Text className="text-[11px] text-gray-500 mb-3">Describe your issue below. Your message will be routed directly to the manager support page.</Text>
+                
+                {supportSuccessMsg ? (
+                  <View className="bg-green-50 border border-green-200 p-3 rounded-xl mb-3 flex-row items-center">
+                    <Ionicons name="checkmark-circle" size={16} color="#15803D" style={{ marginRight: 6 }} />
+                    <Text className="text-green-700 text-xs font-bold flex-1">{supportSuccessMsg}</Text>
+                  </View>
+                ) : null}
+
+                <TextInput 
+                  className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs mb-3 text-[#1F130D] h-24" 
+                  placeholder="Type your message here..."
+                  placeholderTextColor="#9E9E9E"
+                  multiline
+                  textAlignVertical="top"
+                  value={supportMessage}
+                  onChangeText={(text) => {
+                    setSupportMessage(text);
+                    if (supportSuccessMsg) setSupportSuccessMsg('');
+                  }} 
+                />
+
+                <TouchableOpacity 
+                  onPress={handleSendSupportMessage} 
+                  disabled={isSubmittingSupport}
+                  className="bg-[#B8520B] py-3 rounded-xl items-center flex-row justify-center mb-5"
+                >
+                  {isSubmittingSupport ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text className="text-white text-xs font-bold">Send Message to Manager</Text>
+                  )}
+                </TouchableOpacity>
+
+                <Text className="text-xs font-bold text-[#1F130D] mb-2 uppercase tracking-wider">Your Support Conversations</Text>
+                {supportTickets.length === 0 ? (
+                  <View className="bg-[#F8F9FC] p-4 rounded-2xl border border-[#EAE3DE] items-center mb-4">
+                    <Text className="text-[11px] text-gray-500">No support tickets submitted yet.</Text>
+                  </View>
+                ) : (
+                  supportTickets.map((ticket, index) => {
+                    const replyText = ticket.managerResponse || ticket.reply;
+                    return (
+                      <View key={ticket._id || index} className="bg-[#F8F9FC] p-3.5 rounded-2xl border border-[#EAE3DE] mb-3">
+                        <View className="flex-row justify-between items-center mb-1">
+                          <Text className="text-[10px] font-bold text-gray-400">
+                            {ticket.createdAt ? new Date(ticket.createdAt).toLocaleDateString() : 'Recent'}
+                          </Text>
+                          <View className={`px-2 py-0.5 rounded-full ${replyText ? 'bg-green-100' : 'bg-yellow-100'}`}>
+                            <Text className={`text-[9px] font-bold ${replyText ? 'text-green-700' : 'text-yellow-700'}`}>
+                              {replyText ? 'Resolved / Replied' : 'Pending'}
+                            </Text>
+                          </View>
+                        </View>
+
+                        <View className="bg-white p-2.5 rounded-xl border border-gray-200 mb-2">
+                          <Text className="text-[10px] font-bold text-[#B8520B] mb-0.5">You:</Text>
+                          <Text className="text-xs text-[#1F130D]">{ticket.message}</Text>
+                        </View>
+
+                        {replyText ? (
+                          <View className="bg-green-50 p-2.5 rounded-xl border border-green-200">
+                            <Text className="text-[10px] font-bold text-green-800 mb-0.5">Manager Response:</Text>
+                            <Text className="text-xs text-gray-800">{replyText}</Text>
+                          </View>
+                        ) : (
+                          <Text className="text-[10px] text-gray-400 italic mt-1">Waiting for manager response...</Text>
+                        )}
+                      </View>
+                    );
+                  })
+                )}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+
       </View>
     </View>
   );
