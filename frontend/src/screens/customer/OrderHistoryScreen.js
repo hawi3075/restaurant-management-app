@@ -187,15 +187,25 @@ export default function OrderHistoryScreen({ route, navigation }) {
               let itemNames = 'Order Item';
               let firstItemImage = 'https://images.unsplash.com/photo-1541544741938-0af808871cc0?auto=format&fit=crop&w=400&q=80';
               
-              if (order.orderItems && order.orderItems.length > 0) {
+              // Robust check for images across different database naming conventions
+              if (order.image || order.imageUrl || order.img || order.photo) {
+                firstItemImage = order.image || order.imageUrl || order.img || order.photo;
+              } else if (order.orderItems && order.orderItems.length > 0) {
+                const firstItem = order.orderItems[0];
                 itemNames = order.orderItems.map(i => `${i.quantity || 1}x ${i.name || i.menuItem?.name || 'Dish'}`).join(', ');
-                firstItemImage = order.orderItems[0].image || order.orderItems[0].menuItem?.image || firstItemImage;
+                
+                firstItemImage = 
+                  firstItem.image || 
+                  firstItem.imageUrl || 
+                  firstItem.img || 
+                  firstItem.photo || 
+                  firstItem.menuItem?.image || 
+                  firstItem.menuItem?.imageUrl || 
+                  firstItem.menuItem?.img || 
+                  firstItem.menuItem?.photo || 
+                  firstItemImage;
               } else if (order.items) {
                 itemNames = order.items;
-              }
-
-              if (order.image) {
-                firstItemImage = order.image;
               }
 
               const orderIdDisplay = `#${order._id ? String(order._id).slice(-6).toUpperCase() : (order.id || '000000')}`;

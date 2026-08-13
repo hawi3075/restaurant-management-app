@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Order = require('../models/Order');
+const MenuItem = require('../models/MenuItem');
 
 // --- GET USER ORDERS (GET /api/orders/user) ---
 router.get('/user', async (req, res) => {
@@ -30,11 +31,11 @@ router.get('/user', async (req, res) => {
       deliveryAddress: order.deliveryAddress || null,
       orderItems: order.orderItems || [],
       items: order.orderItems && order.orderItems.length > 0 
-        ? order.orderItems.map(item => `${item.quantity || 1}x ${item.name || item.menuItem?.name || 'Item'}`).join(', ')
+        ? order.orderItems.map(item => `${item.quantity || 1}x ${item.name || 'Item'}`).join(', ')
         : '1x Custom Meal',
       totalAmount: order.totalAmount || 0,
       total: `$${(order.totalAmount || 0).toFixed(2)}`,
-      image: order.orderItems?.[0]?.image || order.orderItems?.[0]?.menuItem?.image || 'https://images.unsplash.com/photo-1541544741938-0af808871cc0?auto=format&fit=crop&w=400&q=80',
+      image: order.orderItems?.[0]?.image || 'https://images.unsplash.com/photo-1541544741938-0af808871cc0?auto=format&fit=crop&w=400&q=80',
       deliveryStatus: order.status === 'Served' ? 'Delivered' : order.status === 'Ready' ? 'Ready for Pickup' : order.status === 'Preparing' ? 'Cooking' : 'Pending'
     }));
 
@@ -101,13 +102,33 @@ router.post('/', async (req, res) => {
       paymentStatus 
     } = req.body;
 
+    // Resolve each cart line against the current menu item and snapshot its
+    // name/image/price onto the order, so order history stays accurate even
+    // if the menu item is later renamed, re-priced, or deleted.
+    // NOTE: image field name (image/imageUrl/photo) is guessed defensively —
+    // replace with the single real field once the MenuItem schema is confirmed.
+    const resolvedItems = await Promise.all((orderItems || []).map(async (item) => {
+      let menu = null;
+      if (item.menuItem) {
+        menu = await MenuItem.findById(item.menuItem).lean();
+      }
+
+      return {
+        menuItem: item.menuItem || null,
+        name: item.name || menu?.name || 'Item',
+        image: item.image || menu?.image || menu?.imageUrl || menu?.photo || undefined,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice ?? menu?.price ?? 0
+      };
+    }));
+
     const newOrder = new Order({
       customer,
       serviceType: serviceType || 'dine-in',
       table: table || null,
       waiter: waiter || null,
       deliveryAddress: deliveryAddress || { street: 'Main Road', city: 'Adama', latitude: 8.5410, longitude: 39.2705 },
-      orderItems: orderItems || [],
+      orderItems: resolvedItems,
       totalAmount: totalAmount || 0,
       specialInstructions: specialInstructions || '',
       paymentMethod: paymentMethod || 'telebirr',

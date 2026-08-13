@@ -20,7 +20,8 @@ const orderSchema = new mongoose.Schema({
   orderItems: [
     {
       menuItem: { type: mongoose.Schema.Types.ObjectId, ref: 'MenuItem', required: false },
-      name: { type: String },
+      name: { type: String, required: true },
+      image: { type: String },
       quantity: { type: Number, required: true },
       unitPrice: { type: Number, required: true }
     }
