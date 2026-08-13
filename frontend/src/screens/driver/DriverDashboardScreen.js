@@ -285,7 +285,7 @@ export default function DriverDashboardScreen({ route, navigation }) {
           time: order.createdAt ? new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recent',
           status: mappedStatus,
           items: orderItems,
-          total: `$${finalTotal.toFixed(2)}`,
+          total: `Br ${finalTotal.toFixed(2)}`,
         };
       });
 
@@ -511,7 +511,7 @@ export default function DriverDashboardScreen({ route, navigation }) {
                       </View>
                       <Text className="text-xs font-medium text-[#1F130D]">{item.name}</Text>
                     </View>
-                    <Text className="text-xs font-bold text-gray-600">${(item.unitPrice * item.quantity).toFixed(2)}</Text>
+                    <Text className="text-xs font-bold text-gray-600">Br {(item.unitPrice * item.quantity).toFixed(2)}</Text>
                   </View>
                 ))}
               </View>

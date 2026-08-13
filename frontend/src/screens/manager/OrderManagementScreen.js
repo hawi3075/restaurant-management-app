@@ -93,7 +93,7 @@ export default function OrderManagementScreen({ navigation }) {
               </View>
               <View className="flex-1 bg-emerald-50 p-4 rounded-3xl border border-emerald-200">
                 <Text className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Total Revenue</Text>
-                <Text className="text-xl font-black text-[#1F130D] mt-1">${totalRevenueSum.toFixed(2)}</Text>
+                <Text className="text-xl font-black text-[#1F130D] mt-1">ETB {totalRevenueSum.toFixed(2)}</Text>
               </View>
             </View>
           )}
@@ -168,7 +168,7 @@ export default function OrderManagementScreen({ navigation }) {
                               )}
                               <View className="flex-1">
                                 <Text className="text-xs font-black text-[#1F130D]" numberOfLines={1}>{foodName}</Text>
-                                <Text className="text-[10px] font-bold text-gray-500">Qty: {qty} x ${Number(price).toFixed(2)}</Text>
+                                <Text className="text-[10px] font-bold text-gray-500">Qty: {qty} x ETB {Number(price).toFixed(2)}</Text>
                               </View>
                             </View>
                           </View>
@@ -179,7 +179,7 @@ export default function OrderManagementScreen({ navigation }) {
                     {/* Total Amount Footer */}
                     <View className="border-t border-gray-100 pt-3 mt-3 flex-row items-center justify-between">
                       <Text className="text-xs font-black text-gray-400 uppercase">Total Amount</Text>
-                      <Text className="text-base font-black text-[#B8520B]">${totalMoney}</Text>
+                      <Text className="text-base font-black text-[#B8520B]">ETB {totalMoney}</Text>
                     </View>
                   </View>
                 );

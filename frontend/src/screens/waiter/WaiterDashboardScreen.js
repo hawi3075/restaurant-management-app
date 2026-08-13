@@ -154,8 +154,6 @@ export default function WaiterDashboardScreen({ route, navigation }) {
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const selectedUri = result.assets[0].uri;
-        
-        // If it's a remote URL or needs direct upload, handle it. If local URI on mobile, upload to cloud/server if required, or preview directly:
         setWaiterImage(selectedUri);
       }
     } catch (error) {
@@ -167,9 +165,6 @@ export default function WaiterDashboardScreen({ route, navigation }) {
     try {
       const token = authContext?.token || '';
       
-      // If waiterImage is a local file URI (e.g. file:///... from image picker), you may need to upload it via FormData 
-      // to your Render backend storage endpoint first, or pass it if your backend accepts base64/URI strings.
-      // Below handles standard JSON payload update:
       const response = await fetch(`${BACKEND_URL}/api/users/profile`, {
         method: 'PUT',
         headers: {
@@ -247,7 +242,7 @@ export default function WaiterDashboardScreen({ route, navigation }) {
           time: order.createdAt ? new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recent',
           status: mappedStatus,
           items: orderItems,
-          total: `$${finalTotal.toFixed(2)}`,
+          total: `Br ${finalTotal.toFixed(2)}`,
           isDelivery,
         };
       });
@@ -279,7 +274,6 @@ export default function WaiterDashboardScreen({ route, navigation }) {
       if (!response.ok) throw new Error(data.message || 'Failed to update order status');
 
       if (newStatus === 'Served') {
-        // Move from active queue to served list
         const servedOrder = orders.find((o) => o.id === id);
         if (servedOrder) {
           setServedOrders((prev) => [{ ...servedOrder, status: 'Served', servedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }, ...prev]);
@@ -437,7 +431,7 @@ export default function WaiterDashboardScreen({ route, navigation }) {
                       </View>
                       <Text className="text-xs font-medium text-[#1F130D]">{item.name}</Text>
                     </View>
-                    <Text className="text-xs font-bold text-gray-600">${(item.unitPrice * item.quantity).toFixed(2)}</Text>
+                    <Text className="text-xs font-bold text-gray-600">Br {(item.unitPrice * item.quantity).toFixed(2)}</Text>
                   </View>
                 ))}
               </View>
@@ -500,7 +494,7 @@ export default function WaiterDashboardScreen({ route, navigation }) {
                           </View>
                           <Text className="text-xs font-medium text-[#1F130D]">{item.name}</Text>
                         </View>
-                        <Text className="text-xs font-bold text-gray-600">${(item.unitPrice * item.quantity).toFixed(2)}</Text>
+                        <Text className="text-xs font-bold text-gray-600">Br {(item.unitPrice * item.quantity).toFixed(2)}</Text>
                       </View>
                     ))}
                   </View>

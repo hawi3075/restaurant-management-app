@@ -22,6 +22,10 @@ export default function CustomerProfileScreen({ route, navigation }) {
   const [address, setAddress] = useState('');
   const [profileImage, setProfileImage] = useState(null);
 
+  // Reviews state
+  const [myReviews, setMyReviews] = useState([]);
+  const [isLoadingReviews, setIsLoadingReviews] = useState(false);
+
   // Support message, success banner, & responses state
   const [supportMessage, setSupportMessage] = useState('');
   const [isSubmittingSupport, setIsSubmittingSupport] = useState(false);
@@ -46,10 +50,11 @@ export default function CustomerProfileScreen({ route, navigation }) {
     checkAuthAndRedirect();
   }, [isLoggedIn, navigation]);
 
-  // Fetch real profile data and support history on load
+  // Fetch real profile data, support history, and reviews on load
   useEffect(() => {
     fetchUserProfile();
     fetchSupportTickets();
+    fetchMyReviews();
 
     // Poll for manager responses every 10 seconds
     const interval = setInterval(() => {
@@ -60,7 +65,6 @@ export default function CustomerProfileScreen({ route, navigation }) {
   }, []);
 
   const handlePickImage = async () => {
-    // Request permissions
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     
     if (permissionResult.granted === false) {
@@ -94,7 +98,6 @@ export default function CustomerProfileScreen({ route, navigation }) {
       }
 
       if (!token) {
-        // If there's no token, redirect cleanly back to landing instead of throwing/showing profile UI
         setIsLoading(false);
         navigation.replace('CustomerLanding');
         return;
@@ -119,7 +122,6 @@ export default function CustomerProfileScreen({ route, navigation }) {
       setAddress(userData.address || authContext?.user?.address || '');
     } catch (error) {
       console.error('Fetch Profile Error:', error);
-      // If offline or endpoint issue, we rely on authContext user already populated above
       if (!name && !email && authContext?.user) {
         setName(authContext.user.name || '');
         setEmail(authContext.user.email || '');
@@ -130,6 +132,32 @@ export default function CustomerProfileScreen({ route, navigation }) {
       }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchMyReviews = async () => {
+    try {
+      setIsLoadingReviews(true);
+      const token = await AsyncStorage.getItem('token');
+      if (!token) return;
+
+      const response = await fetch(`${API_URL}/api/reviews/my-reviews`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-user-email': authContext?.user?.email || ''
+        }
+      });
+
+      const data = await response.json();
+      if (response.ok && (data.reviews || Array.isArray(data))) {
+        setMyReviews(data.reviews || data);
+      }
+    } catch (error) {
+      console.error('Fetch Reviews Error:', error);
+    } finally {
+      setIsLoadingReviews(false);
     }
   };
 
@@ -150,11 +178,8 @@ export default function CustomerProfileScreen({ route, navigation }) {
       const data = await response.json();
       if (response.ok && (data.tickets || Array.isArray(data))) {
         const fetchedTickets = data.tickets || data;
-        
-        // Count how many tickets have manager responses
         const respondedCount = fetchedTickets.filter(t => (t.managerResponse || t.reply) && (t.managerResponse || t.reply).trim() !== '').length;
 
-        // If polling and we found new manager responses, trigger alert
         if (isPolling && lastCheckedResponseCount > 0 && respondedCount > lastCheckedResponseCount) {
           Alert.alert('New Support Response', 'The manager has written a response to your support message!');
         }
@@ -222,7 +247,6 @@ export default function CustomerProfileScreen({ route, navigation }) {
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Failed to update address.');
 
-      // Update local storage with new address
       const updatedUser = { ...(authContext?.user || {}), name, email, phone, address };
       try {
         await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
@@ -268,7 +292,7 @@ export default function CustomerProfileScreen({ route, navigation }) {
 
       setSupportSuccessMsg('Send successfully! Your message has been routed to the manager support page.');
       setSupportMessage('');
-      fetchSupportTickets(); // Refresh tickets list
+      fetchSupportTickets();
     } catch (error) {
       Alert.alert('Error', error.message);
     } finally {
@@ -356,7 +380,16 @@ export default function CustomerProfileScreen({ route, navigation }) {
 
             <Text className="text-base font-black text-[#1F130D] mb-0.5">{name || 'No Name Set'}</Text>
             <Text className="text-xs text-gray-400 mb-1">{email || 'No Email Set'}</Text>
-            <Text className="text-xs text-gray-400 mb-3">{phone || 'No Phone Set'}</Text>
+            <Text className="text-xs text-gray-400 mb-2">{phone || 'No Phone Set'}</Text>
+            
+            {/* Display saved delivery address pill preview */}
+            <View className="bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-200 mb-3 w-full items-center">
+              <Text className="text-[10px] font-bold text-gray-400 uppercase">Delivery Address</Text>
+              <Text className="text-xs text-[#1F130D] font-medium text-center" numberOfLines={1}>
+                {address || 'No address saved yet. Tap Delivery Addresses to set.'}
+              </Text>
+            </View>
+
             <View className="bg-[#FEF7F3] px-3 py-1 rounded-full border border-[#B8520B]/20">
               <Text className="text-[10px] font-bold text-[#B8520B]">Gold Member</Text>
             </View>
@@ -422,7 +455,7 @@ export default function CustomerProfileScreen({ route, navigation }) {
             </TouchableOpacity>
           </View>
 
-          {/* Enhanced Logout Button with Gradient/Shadow Effect */}
+          {/* Logout Button */}
           <TouchableOpacity 
             onPress={handleLogout}
             className="bg-red-500 border border-red-600 py-4 rounded-2xl items-center mb-6 shadow-md shadow-red-500/20 active:opacity-90 flex-row justify-center space-x-2"
@@ -471,7 +504,15 @@ export default function CustomerProfileScreen({ route, navigation }) {
                 </TouchableOpacity>
               </View>
               <Text className="text-[11px] font-bold text-gray-500 mb-1">Saved Address</Text>
-              <TextInput className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs mb-5 text-[#1F130D]" value={address} onChangeText={setAddress} multiline />
+              <TextInput 
+                className="bg-[#F8F9FC] border border-[#EAE3DE] p-3 rounded-xl text-xs mb-5 text-[#1F130D] h-24" 
+                value={address} 
+                onChangeText={setAddress} 
+                placeholder="Enter street, house number, area/neighborhood..."
+                placeholderTextColor="#9E9E9E"
+                multiline 
+                textAlignVertical="top"
+              />
               <TouchableOpacity onPress={handleUpdateAddress} className="bg-[#B8520B] py-3.5 rounded-xl items-center">
                 <Text className="text-white text-xs font-bold">Update Address</Text>
               </TouchableOpacity>
@@ -479,10 +520,10 @@ export default function CustomerProfileScreen({ route, navigation }) {
           </View>
         </Modal>
 
-        {/* Your Reviews Modal */}
+        {/* Your Reviews Modal (Dynamic & Fixed) */}
         <Modal visible={reviewsModalVisible} animationType="slide" transparent={true}>
           <View className="flex-1 bg-black/50 justify-end items-center">
-            <View className="bg-white w-full max-w-[440px] rounded-t-3xl p-6 max-h-[70%]">
+            <View className="bg-white w-full max-w-[440px] rounded-t-3xl p-6 max-h-[75%]">
               <View className="flex-row justify-between items-center mb-4">
                 <View className="flex-row items-center space-x-2">
                   <View className="w-7 h-7 bg-[#FEF7F3] rounded-lg items-center justify-center mr-1">
@@ -494,14 +535,42 @@ export default function CustomerProfileScreen({ route, navigation }) {
                   <Ionicons name="close" size={20} color="#1F130D" />
                 </TouchableOpacity>
               </View>
+
               <ScrollView showsVerticalScrollIndicator={false}>
-                <View className="bg-[#F8F9FC] p-4 rounded-2xl border border-[#EAE3DE] items-center py-8">
-                  <View className="w-12 h-12 bg-amber-50 rounded-full items-center justify-center mb-2 border border-amber-200">
-                    <Ionicons name="star-outline" size={24} color="#D97706" />
+                {isLoadingReviews ? (
+                  <View className="py-10 items-center justify-center">
+                    <ActivityIndicator size="small" color="#B8520B" />
+                    <Text className="text-xs text-gray-400 mt-2">Loading your reviews...</Text>
                   </View>
-                  <Text className="text-xs font-bold text-[#1F130D] mb-1">No saved reviews yet</Text>
-                  <Text className="text-[11px] text-gray-500 text-center">Your submitted food reviews will appear here once you start rating dishes.</Text>
-                </View>
+                ) : myReviews.length === 0 ? (
+                  <View className="bg-[#F8F9FC] p-4 rounded-2xl border border-[#EAE3DE] items-center py-8">
+                    <View className="w-12 h-12 bg-amber-50 rounded-full items-center justify-center mb-2 border border-amber-200">
+                      <Ionicons name="star-outline" size={24} color="#D97706" />
+                    </View>
+                    <Text className="text-xs font-bold text-[#1F130D] mb-1">No saved reviews yet</Text>
+                    <Text className="text-[11px] text-gray-500 text-center">Your submitted food reviews will appear here once you start rating dishes.</Text>
+                  </View>
+                ) : (
+                  <View className="space-y-3 pb-6">
+                    {myReviews.map((rev, idx) => (
+                      <View key={rev._id || idx} className="bg-[#F8F9FC] p-3.5 rounded-2xl border border-[#EAE3DE]">
+                        <View className="flex-row justify-between items-center mb-1.5">
+                          <Text className="text-xs font-black text-[#1F130D]" numberOfLines={1}>
+                            {rev.foodName || rev.itemTitle || rev.foodItem?.name || 'Food Item'}
+                          </Text>
+                          <View className="flex-row items-center bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200">
+                            <Ionicons name="star" size={12} color="#D97706" style={{ marginRight: 3 }} />
+                            <Text className="text-[10px] font-black text-amber-700">{rev.rating || 5}</Text>
+                          </View>
+                        </View>
+                        <Text className="text-xs text-gray-600 mb-2">{rev.comment || rev.reviewText || 'No comment provided.'}</Text>
+                        <Text className="text-[10px] text-gray-400">
+                          {rev.createdAt ? new Date(rev.createdAt).toLocaleDateString() : 'Recent'}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
               </ScrollView>
             </View>
           </View>

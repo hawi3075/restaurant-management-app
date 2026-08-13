@@ -10,8 +10,6 @@ export default function FoodDetailScreen({ route, navigation }) {
   const { user } = useContext(AuthContext);
   const foodItem = route?.params?.foodItem || null;
 
-  const [selectedSize, setSelectedSize] = useState('Regular');
-  const [quantity, setQuantity] = useState(1);
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [userRating, setUserRating] = useState(5);
   const [userComment, setUserComment] = useState('');
@@ -51,7 +49,7 @@ export default function FoodDetailScreen({ route, navigation }) {
   const handleAddToCart = () => {
     if (!foodItem) return;
     navigation.navigate('CartScreen', { 
-      addedItem: { ...foodItem, quantity, options: selectedSize } 
+      addedItem: { ...foodItem, quantity: 1, options: 'Regular' } 
     });
   };
 
@@ -73,11 +71,11 @@ export default function FoodDetailScreen({ route, navigation }) {
       return;
     }
 
-    const itemPrice = foodItem.price * quantity;
+    const itemPrice = foodItem.price;
     const total = itemPrice + 3.99;
     navigation.navigate('CheckoutScreen', { 
       total: total, 
-      cartItems: [{ ...foodItem, quantity, options: selectedSize }] 
+      cartItems: [{ ...foodItem, quantity: 1, options: 'Regular' }] 
     });
   };
 
@@ -174,59 +172,12 @@ export default function FoodDetailScreen({ route, navigation }) {
               <View className="flex-row justify-between items-start mb-2">
                 <Text className="text-xl font-black text-[#1F130D] flex-1 mr-3 leading-tight">{foodItem.name}</Text>
                 <View className="bg-[#FEF7F3] px-3.5 py-1.5 rounded-2xl border border-[#B8520B]/20">
-                  <Text className="text-sm font-black text-[#B8520B]">${(foodItem.price * quantity).toFixed(2)}</Text>
+                  <Text className="text-sm font-black text-[#B8520B]">Birr {foodItem.price.toFixed(2)}</Text>
                 </View>
               </View>
 
               <Text className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Description</Text>
               <Text className="text-xs text-gray-600 leading-relaxed mb-6">{foodItem.desc}</Text>
-
-              {/* Size Selector */}
-              <Text className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">Choose Portion Size</Text>
-              <View className="flex-row space-x-3 mb-6">
-                {['Regular', 'Large'].map((size) => {
-                  const isSelected = selectedSize === size;
-                  return (
-                    <TouchableOpacity
-                      key={size}
-                      onPress={() => setSelectedSize(size)}
-                      className={`flex-1 py-3 rounded-2xl border items-center justify-center transition-all ${
-                        isSelected 
-                          ? 'bg-[#FEF7F3] border-[#B8520B] shadow-sm shadow-[#B8520B]/10' 
-                          : 'bg-[#F8F9FC] border-[#EAE3DE]'
-                      }`}
-                    >
-                      <Text className={`font-black text-xs ${isSelected ? 'text-[#B8520B]' : 'text-gray-500'}`}>{size}</Text>
-                      <Text className={`text-[9px] mt-0.5 ${isSelected ? 'text-[#B8520B]/80 font-bold' : 'text-gray-400'}`}>
-                        {size === 'Regular' ? 'Standard serving' : '+ $2.00 extra portion'}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              {/* Quantity Counter Row */}
-              <View className="flex-row justify-between items-center mb-6 bg-[#F8F9FC] p-3.5 rounded-2xl border border-[#EAE3DE]">
-                <View>
-                  <Text className="text-xs font-black text-[#1F130D]">Quantity</Text>
-                  <Text className="text-[10px] text-gray-400">Select how many items you want</Text>
-                </View>
-                <View className="flex-row items-center space-x-3 bg-white px-3 py-1.5 rounded-xl border border-[#EAE3DE] shadow-xs">
-                  <TouchableOpacity 
-                    onPress={() => setQuantity(Math.max(1, quantity - 1))}
-                    className="w-7 h-7 bg-[#F8F9FC] rounded-lg border border-[#EAE3DE] items-center justify-center active:bg-gray-100"
-                  >
-                    <Ionicons name="remove" size={14} color="#1F130D" />
-                  </TouchableOpacity>
-                  <Text className="font-black text-xs text-[#1F130D] px-2">{quantity}</Text>
-                  <TouchableOpacity 
-                    onPress={() => setQuantity(quantity + 1)}
-                    className="w-7 h-7 bg-[#F8F9FC] rounded-lg border border-[#EAE3DE] items-center justify-center active:bg-gray-100"
-                  >
-                    <Ionicons name="add" size={14} color="#1F130D" />
-                  </TouchableOpacity>
-                </View>
-              </View>
 
               {/* Action Buttons */}
               <View className="flex-row space-x-3">

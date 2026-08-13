@@ -67,7 +67,7 @@ export default function CartScreen({ route, navigation }) {
 
   const handleSingleItemCheckout = (item) => {
     requireLogin(() => {
-      const singleItemTotal = (item.price * item.quantity) + 3.99;
+      const singleItemTotal = (item.price * item.quantity) + 150.00; // Adjusted delivery fee placeholder in Birr
       navigation.navigate('CheckoutScreen', {
         total: singleItemTotal,
         cartItems: [item],
@@ -76,7 +76,7 @@ export default function CartScreen({ route, navigation }) {
   };
 
   const subtotal = cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
-  const deliveryFee = subtotal > 0 ? 3.99 : 0;
+  const deliveryFee = subtotal > 0 ? 150.00 : 0; // Standard delivery fee in Birr
   const total = subtotal > 0 ? subtotal + deliveryFee : 0;
 
   return (
@@ -126,7 +126,7 @@ export default function CartScreen({ route, navigation }) {
                         </TouchableOpacity>
                       </View>
                       <Text className="text-[10px] text-gray-400 mt-0.5">{item.options}</Text>
-                      <Text className="text-xs font-black text-[#B8520B] mt-1">${(item.price * item.quantity).toFixed(2)}</Text>
+                      <Text className="text-xs font-black text-[#B8520B] mt-1">Br {(item.price * item.quantity).toFixed(2)}</Text>
                     </View>
                   </View>
 
@@ -158,15 +158,15 @@ export default function CartScreen({ route, navigation }) {
                 <Text className="text-xs font-black text-[#1F130D] mb-3">Order Summary (All Items)</Text>
                 <View className="flex-row justify-between mb-2">
                   <Text className="text-xs text-gray-500">Subtotal</Text>
-                  <Text className="text-xs font-bold text-[#1F130D]">${subtotal.toFixed(2)}</Text>
+                  <Text className="text-xs font-bold text-[#1F130D]">Br {subtotal.toFixed(2)}</Text>
                 </View>
                 <View className="flex-row justify-between mb-3 pb-3 border-b border-[#F8F9FC]">
                   <Text className="text-xs text-gray-500">Delivery Fee</Text>
-                  <Text className="text-xs font-bold text-[#1F130D]">${deliveryFee.toFixed(2)}</Text>
+                  <Text className="text-xs font-bold text-[#1F130D]">Br {deliveryFee.toFixed(2)}</Text>
                 </View>
                 <View className="flex-row justify-between items-center mb-4">
                   <Text className="text-sm font-black text-[#1F130D]">Total Amount</Text>
-                  <Text className="text-base font-black text-[#B8520B]">${total.toFixed(2)}</Text>
+                  <Text className="text-base font-black text-[#B8520B]">Br {total.toFixed(2)}</Text>
                 </View>
 
                 {/* Checkout All Button — redirects straight to Login if signed out */}

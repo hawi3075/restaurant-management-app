@@ -266,7 +266,7 @@ export default function CustomerLandingScreen({ navigation }) {
                   </TouchableOpacity>
                 )}
               </View>
-            </View>
+          </View>
 
             <Text className="text-3xl font-black text-white leading-tight mb-2">
               Fresh Food,{'\n'}
@@ -439,7 +439,7 @@ export default function CustomerLandingScreen({ navigation }) {
                         <View className="mt-auto pt-1">
                           <View className="flex-row justify-between items-center mb-1.5">
                             <Text className="font-black text-xs text-[#1F130D]">
-                              ${item.price.toFixed(2)}
+                              Br {item.price.toFixed(2)}
                             </Text>
 
                             <View className="flex-row items-center space-x-1">

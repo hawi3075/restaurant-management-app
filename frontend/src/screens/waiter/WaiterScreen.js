@@ -47,7 +47,7 @@ export default function WaiterScreen() {
         </View>
         <View className="bg-white flex-1 p-4 rounded-2xl border border-[#EAE3DE] ml-2 shadow-xs">
           <Text className="text-gray-400 text-[10px] font-bold uppercase">Tips Today</Text>
-          <Text className="text-xl font-black text-green-600 mt-1">$142</Text>
+          <Text className="text-xl font-black text-green-600 mt-1">Br 142.00</Text>
         </View>
       </View>
 

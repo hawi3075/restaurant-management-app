@@ -34,6 +34,18 @@ export default function KitchenDashboardScreen({ route, navigation }) {
         }
       }
 
+      const orderItems = (order.orderItems || order.items || []).map((item) => {
+        const unitPrice = Number(item.unitPrice || item.price || item.menuItem?.price) || 0;
+        return {
+          name: `${item.quantity || 1}x ${item.name || item.menuItem?.name || item.title || 'Item'}`,
+          note: item.note ? `Note: ${item.note}` : (unitPrice > 0 ? `ETB ${unitPrice.toFixed(2)}` : 'Regular'),
+          totalPrice: unitPrice * (Number(item.quantity) || 1)
+        };
+      });
+
+      const calculatedTotal = orderItems.reduce((sum, item) => sum + item.totalPrice, 0);
+      const finalTotal = Number(order.totalAmount || order.total || calculatedTotal || 0);
+
       return {
         id: order._id || order.id || `k${index + 1}`,
         table: order.table?.tableNumber ? `Table ${String(order.table.tableNumber).padStart(2, '0')}` : (order.table || 'Walk-in'),
@@ -43,10 +55,8 @@ export default function KitchenDashboardScreen({ route, navigation }) {
         deliveryAddress: formattedAddress,
         phone: order.phone || order.customerPhone || null,
         serviceType: order.serviceType || 'dine-in',
-        items: (order.orderItems || order.items || []).map((item) => ({
-          name: `${item.quantity || 1}x ${item.name || item.menuItem?.name || item.title || 'Item'}`,
-          note: item.note ? `Note: ${item.note}` : (item.unitPrice ? `ETB ${item.unitPrice.toFixed(2)}` : 'Regular')
-        })),
+        totalAmount: `ETB ${finalTotal.toFixed(2)}`,
+        items: orderItems,
         image: null
       };
     });
@@ -131,7 +141,6 @@ export default function KitchenDashboardScreen({ route, navigation }) {
     try {
       setProfileModalVisible(false);
       
-      // Use AuthContext logout if available
       if (authContext && authContext.logout) {
         await authContext.logout();
       } else {
@@ -139,7 +148,6 @@ export default function KitchenDashboardScreen({ route, navigation }) {
         await AsyncStorage.removeItem('user');
       }
       
-      // Navigate to login screen
       navigation.reset({
         index: 0,
         routes: [{ name: 'Login' }],
@@ -331,33 +339,40 @@ export default function KitchenDashboardScreen({ route, navigation }) {
                 ))}
               </View>
 
-              {/* Action Buttons */}
-              <View className="flex-row justify-end items-center pt-2.5 border-t border-[#F8F9FC] gap-2">
-                {order.status === 'Pending' && (
-                  <TouchableOpacity 
-                    onPress={() => updateOrderStatus(order.id, 'Preparing')}
-                    className="bg-[#B8520B] px-4 py-2 rounded-xl flex-row items-center active:scale-95 shadow-md shadow-[#B8520B]/30"
-                  >
-                    <Ionicons name="flame" size={14} color="white" style={{ marginRight: 4 }} />
-                    <Text className="text-xs font-bold text-white">Accept & Cook</Text>
-                  </TouchableOpacity>
-                )}
-                {order.status === 'Cooking' && (
-                  <TouchableOpacity 
-                    onPress={() => updateOrderStatus(order.id, 'Ready')}
-                    className="bg-emerald-600 px-4 py-2 rounded-xl flex-row items-center active:scale-95 shadow-md shadow-emerald-600/30"
-                  >
-                    <Ionicons name="checkmark-circle" size={14} color="white" style={{ marginRight: 4 }} />
-                    <Text className="text-xs font-bold text-white">Mark as Ready</Text>
-                  </TouchableOpacity>
-                )}
-                {order.status === 'Ready' && (
-                  <View className="bg-green-50 px-3 py-1.5 rounded-xl border border-green-200">
-                    <Text className="text-[10px] font-bold text-green-700">
-                      {order.serviceType === 'delivery' ? 'Ready for Driver Pickup' : 'Ready for Waiter Pickup'}
-                    </Text>
-                  </View>
-                )}
+              {/* Order Total & Action Buttons */}
+              <View className="flex-row justify-between items-center pt-2.5 border-t border-[#F8F9FC]">
+                <View>
+                  <Text className="text-[9px] font-bold text-gray-400 uppercase">Total Amount</Text>
+                  <Text className="text-xs font-black text-[#B8520B]">{order.totalAmount}</Text>
+                </View>
+
+                <View className="flex-row gap-2">
+                  {order.status === 'Pending' && (
+                    <TouchableOpacity 
+                      onPress={() => updateOrderStatus(order.id, 'Preparing')}
+                      className="bg-[#B8520B] px-4 py-2 rounded-xl flex-row items-center active:scale-95 shadow-md shadow-[#B8520B]/30"
+                    >
+                      <Ionicons name="flame" size={14} color="white" style={{ marginRight: 4 }} />
+                      <Text className="text-xs font-bold text-white">Accept & Cook</Text>
+                    </TouchableOpacity>
+                  )}
+                  {order.status === 'Cooking' && (
+                    <TouchableOpacity 
+                      onPress={() => updateOrderStatus(order.id, 'Ready')}
+                      className="bg-emerald-600 px-4 py-2 rounded-xl flex-row items-center active:scale-95 shadow-md shadow-emerald-600/30"
+                    >
+                      <Ionicons name="checkmark-circle" size={14} color="white" style={{ marginRight: 4 }} />
+                      <Text className="text-xs font-bold text-white">Mark as Ready</Text>
+                    </TouchableOpacity>
+                  )}
+                  {order.status === 'Ready' && (
+                    <View className="bg-green-50 px-3 py-1.5 rounded-xl border border-green-200">
+                      <Text className="text-[10px] font-bold text-green-700">
+                        {order.serviceType === 'delivery' ? 'Ready for Driver Pickup' : 'Ready for Waiter Pickup'}
+                      </Text>
+                    </View>
+                  )}
+                </View>
               </View>
             </View>
           ))}

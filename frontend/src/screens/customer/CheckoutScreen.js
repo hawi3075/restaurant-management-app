@@ -194,20 +194,6 @@ export default function CheckoutScreen({ route, navigation }) {
     ? cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
     : initialTotal;
 
-  const updateItemQuantity = (index, newQuantity) => {
-    const updated = [...cartItems];
-    const parsedQty = parseInt(newQuantity, 10);
-    
-    if (isNaN(parsedQty) || parsedQty <= 0) {
-      updated[index].quantity = 1;
-    } else {
-      updated[index].quantity = parsedQty;
-    }
-
-    setCartItems(updated);
-    AsyncStorage.setItem('cart', JSON.stringify(updated)).catch(err => console.error(err));
-  };
-
   useEffect(() => {
     const handleDeepLink = (event) => {
       if (event.url.includes('checkout') || event.url.includes('success') || event.url.includes('status=success')) {
@@ -242,7 +228,7 @@ export default function CheckoutScreen({ route, navigation }) {
 
       Alert.alert(
         'Telebirr Prompt Sent 📱',
-        `A payment request for $${Number(totalAmount).toFixed(2)} has been sent to your phone (${phone}). Please enter your Telebirr PIN on your device to authorize.`,
+        `A payment request for Birr ${Number(totalAmount).toFixed(2)} has been sent to your phone (${phone}). Please enter your Telebirr PIN on your device to authorize.`,
         [
           { 
             text: 'Simulate Success ✅', 
@@ -580,60 +566,24 @@ export default function CheckoutScreen({ route, navigation }) {
             )}
           </View>
 
-          {/* Order Amount Summary & Quantity Controls */}
+          {/* Order Amount Summary — single amount line for the specific food being checked out */}
           <Text className="text-xs font-bold text-gray-400 uppercase mb-2 ml-1 tracking-wider">Order Amount Summary</Text>
           <View className="bg-white rounded-2xl border border-[#EAE3DE] p-4 mb-5 shadow-xs">
-            {cartItems.length > 0 ? (
-              cartItems.map((item, index) => (
-                <View key={index} className="py-3 border-b border-gray-100">
-                  <View className="flex-row justify-between items-center mb-2">
-                    <Text className="text-xs font-bold text-[#1F130D] flex-1 pr-2" numberOfLines={1}>{item.name}</Text>
-                    <Text className="text-xs font-bold text-[#B8520B]">${(item.price * item.quantity).toFixed(2)}</Text>
-                  </View>
+            <View className="flex-row justify-between items-center py-1">
+              <Text className="text-xs font-bold text-[#1F130D] flex-1 pr-2" numberOfLines={1}>
+                {cartItems.length > 0 ? cartItems.map(i => i.name).join(', ') : 'Order Amount'}
+              </Text>
+              <Text className="text-xs font-bold text-[#B8520B]">Birr {totalAmount.toFixed(2)}</Text>
+            </View>
 
-                  <View className="flex-row justify-between items-center">
-                    <Text className="text-[10px] text-gray-400">Unit Price: ${item.price?.toFixed(2)}</Text>
-                    
-                    <View className="flex-row items-center space-x-2">
-                      <TouchableOpacity 
-                        onPress={() => updateItemQuantity(index, item.quantity - 1)}
-                        className="w-7 h-7 bg-gray-100 rounded-lg items-center justify-center border border-gray-200"
-                      >
-                        <Ionicons name="remove" size={14} color="#757575" />
-                      </TouchableOpacity>
-
-                      <TextInput
-                        className="w-10 h-7 bg-[#F8F9FC] border border-[#EAE3DE] rounded-lg text-center text-xs font-bold text-[#1F130D]"
-                        keyboardType="numeric"
-                        value={String(item.quantity)}
-                        onChangeText={(val) => updateItemQuantity(index, val)}
-                      />
-
-                      <TouchableOpacity 
-                        onPress={() => updateItemQuantity(index, item.quantity + 1)}
-                        className="w-7 h-7 bg-[#FEF7F3] rounded-lg items-center justify-center border border-[#B8520B]/30"
-                      >
-                        <Ionicons name="add" size={14} color="#B8520B" />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </View>
-              ))
-            ) : (
-              <View className="py-2">
-                <Text className="text-xs text-gray-400 italic mb-2">Standard Package</Text>
-                <Text className="text-xs font-bold text-[#1F130D]">Default Item</Text>
-              </View>
-            )}
-
-            <View className="flex-row justify-between items-center pt-3 mt-1">
+            <View className="flex-row justify-between items-center pt-3 mt-2">
               <Text className="text-xs text-gray-500">Service / Delivery Fee</Text>
               <Text className="text-xs font-bold text-gray-700">Free</Text>
             </View>
 
             <View className="flex-row justify-between items-center pt-3 mt-2 border-t border-[#EAE3DE]">
               <Text className="text-xs font-black text-[#1F130D]">Total Amount</Text>
-              <Text className="text-sm font-black text-[#B8520B]">${totalAmount.toFixed(2)}</Text>
+              <Text className="text-sm font-black text-[#B8520B]">Birr {totalAmount.toFixed(2)}</Text>
             </View>
           </View>
 
