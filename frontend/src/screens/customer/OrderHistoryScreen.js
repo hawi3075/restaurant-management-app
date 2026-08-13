@@ -42,19 +42,22 @@ export default function OrderHistoryScreen({ route, navigation }) {
     try {
       setIsLoading(true);
       const token = await AsyncStorage.getItem('token');
+      const userEmail = await AsyncStorage.getItem('userEmail'); // fallback lookup helper
 
       const response = await fetch(`${BACKEND_URL}/api/orders/user`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          ...(userEmail ? { 'x-user-email': userEmail } : {})
         }
       });
 
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Failed to fetch orders.');
 
-      const allOrders = data.orders || (Array.isArray(data) ? data : []);
+      // Safely grab array from response structure ({ success: true, orders: [...] } or direct array)
+      const allOrders = data.orders || data.data || (Array.isArray(data) ? data : []);
       
       const active = allOrders.filter(o => {
         const status = o.status || 'Pending';
@@ -208,7 +211,7 @@ export default function OrderHistoryScreen({ route, navigation }) {
                 }
               }
 
-              const totalVal = Number(order.totalAmount ?? (typeof order.total === 'string' ? order.total.replace('$', '') : order.total) ?? 0);
+              const totalVal = Number(order.totalAmount ?? (typeof order.total === 'string' ? order.total.replace('$', '').replace('ETB', '').trim() : order.total) ?? 0);
               const orderStatus = order.status || 'Pending';
 
               return (
@@ -243,7 +246,7 @@ export default function OrderHistoryScreen({ route, navigation }) {
                       {activeTab === 'history' && (
                         <TouchableOpacity 
                           onPress={() => handleOpenReviewModal(order)}
-                          className="bg-[#FEF7F3] border border-[#B8520B]/40 px-3 py-1.5 rounded-xl flex-row items-center"
+                          className="bg-[#FEF7F3] border border-[#B8520B]/40 px-3 py-1.5 rounded-xl flex-row items-center mr-2"
                         >
                           <Ionicons name="star-outline" size={11} color="#B8520B" style={{ marginRight: 3 }} />
                           <Text className="text-[10px] font-bold text-[#B8520B]">Write Review</Text>

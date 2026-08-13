@@ -5,9 +5,20 @@ const Order = require('../models/Order');
 // --- GET USER ORDERS (GET /api/orders/user) ---
 router.get('/user', async (req, res) => {
   try {
-    const orders = await Order.find().sort({ createdAt: -1 });
+    // Extract user identifier from auth middleware (req.user) or custom headers
+    let query = {};
+    if (req.user && req.user.id) {
+      query = { customer: req.user.id };
+    } else if (req.headers['x-user-email']) {
+      query = { 'customer.email': req.headers['x-user-email'] };
+    } else if (req.query.email) {
+      query = { 'customer.email': req.query.email };
+    }
+
+    const orders = await Order.find(query.customer || query['customer.email'] ? query : {}).sort({ createdAt: -1 });
 
     const formattedOrders = orders.map(order => ({
+      _id: order._id,
       id: order.orderId || `ORD-${order._id.toString().slice(-4).toUpperCase()}`,
       date: new Date(order.createdAt || Date.now()).toLocaleString('en-US', { 
         month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' 
@@ -17,11 +28,13 @@ router.get('/user', async (req, res) => {
       paymentMethod: order.paymentMethod || 'telebirr',
       serviceType: order.serviceType || 'dine-in',
       deliveryAddress: order.deliveryAddress || null,
+      orderItems: order.orderItems || [],
       items: order.orderItems && order.orderItems.length > 0 
-        ? order.orderItems.map(item => `${item.quantity || 1}x ${item.name || 'Item'}`).join(', ')
+        ? order.orderItems.map(item => `${item.quantity || 1}x ${item.name || item.menuItem?.name || 'Item'}`).join(', ')
         : '1x Custom Meal',
+      totalAmount: order.totalAmount || 0,
       total: `$${(order.totalAmount || 0).toFixed(2)}`,
-      image: order.orderItems?.[0]?.image || 'https://images.unsplash.com/photo-1541544741938-0af808871cc0?auto=format&fit=crop&w=400&q=80',
+      image: order.orderItems?.[0]?.image || order.orderItems?.[0]?.menuItem?.image || 'https://images.unsplash.com/photo-1541544741938-0af808871cc0?auto=format&fit=crop&w=400&q=80',
       deliveryStatus: order.status === 'Served' ? 'Delivered' : order.status === 'Ready' ? 'Ready for Pickup' : order.status === 'Preparing' ? 'Cooking' : 'Pending'
     }));
 
@@ -44,7 +57,6 @@ router.get('/incoming', async (req, res) => {
 });
 
 // --- GET ACTIVE DRIVER ORDERS (GET /api/orders/driver/active) ---
-// Returns ONLY delivery orders that are ready for pickup or out for delivery
 router.get('/driver/active', async (req, res) => {
   try {
     const orders = await Order.find({ 
@@ -59,7 +71,6 @@ router.get('/driver/active', async (req, res) => {
 });
 
 // --- GET ACTIVE WAITER ORDERS (GET /api/orders/waiter/active) ---
-// Returns ONLY non-delivery orders (dine-in, walk-in) that haven't been served
 router.get('/waiter/active', async (req, res) => {
   try {
     const orders = await Order.find({ 
