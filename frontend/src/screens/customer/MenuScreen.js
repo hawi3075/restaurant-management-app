@@ -11,7 +11,7 @@ export default function MenuScreen({ navigation }) {
   const [menuItems, setMenuItems] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const categories = ['Breakfast', 'Lunch', 'Dinner', 'Drinks', 'Desserts'];
+  const categories = ['Breakfast', 'Lunch', 'Dinner', 'Drinks', 'Desserts','fast food'];
 
   // In-memory cache so switching back to a category/style tab you've
   // already loaded is instant instead of re-hitting the network every
