@@ -288,8 +288,6 @@ export default function CustomerProfileScreen({ route, navigation }) {
       console.warn('Logout cleanup error', e);
     }
 
-    // Matches the route name registered in App.js:
-    // <Stack.Screen name="CustomerLanding" component={CustomerLandingScreen} />
     navigation.reset({
       index: 0,
       routes: [{ name: 'CustomerLanding', params: { isLoggedIn: false } }],
@@ -310,19 +308,24 @@ export default function CustomerProfileScreen({ route, navigation }) {
         <StatusBar barStyle="dark-content" backgroundColor="#F8F9FC" />
 
         {/* Top Header with Back Button */}
-        <View className="pt-12 px-5 pb-4 bg-white border-b border-[#EAE3DE] flex-row justify-between items-center">
+        <View className="pt-12 px-5 pb-4 bg-white border-b border-[#EAE3DE] flex-row justify-between items-center z-10">
           <View className="flex-row items-center space-x-3">
             <TouchableOpacity 
               onPress={() => {
-                if (navigation.canGoBack()) {
-                  navigation.goBack();
-                } else {
+                try {
+                  if (navigation.canGoBack()) {
+                    navigation.goBack();
+                  } else {
+                    navigation.navigate('CustomerLanding');
+                  }
+                } catch (e) {
                   navigation.navigate('CustomerLanding');
                 }
               }}
-              className="w-9 h-9 bg-gray-100 rounded-xl items-center justify-center border border-gray-200"
+              activeOpacity={0.7}
+              className="w-10 h-10 bg-gray-100 rounded-xl items-center justify-center border border-gray-200"
             >
-              <Ionicons name="arrow-back" size={18} color="#1F130D" />
+              <Ionicons name="arrow-back" size={20} color="#1F130D" />
             </TouchableOpacity>
             <Text className="text-xl font-black text-[#1F130D]">My Profile</Text>
           </View>

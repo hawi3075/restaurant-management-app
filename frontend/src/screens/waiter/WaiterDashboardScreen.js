@@ -20,6 +20,7 @@ export default function WaiterDashboardScreen({ route, navigation }) {
   const [isLoadingOrders, setIsLoadingOrders] = useState(true);
   const [activeTab, setActiveTab] = useState('All');
   const [orders, setOrders] = useState([]);
+  const [servedOrders, setServedOrders] = useState([]);
   
   // Top Banner Alert state
   const [topAlert, setTopAlert] = useState(null);
@@ -53,6 +54,14 @@ export default function WaiterDashboardScreen({ route, navigation }) {
     });
 
     socket.on('orderUpdated', (updatedOrder) => {
+      // Live alert when kitchen marks a dine-in order as Ready
+      const status = updatedOrder?.status || '';
+      const type = updatedOrder?.serviceType || updatedOrder?.orderType || '';
+      const isDineIn = type === 'dine-in' || type === 'dine_in' || (!updatedOrder?.deliveryAddress && !updatedOrder?.shippingAddress);
+      if (status === 'Ready' && isDineIn) {
+        const tableNum = updatedOrder?.table?.tableNumber || updatedOrder?.tableNumber || 'a table';
+        showAlertBanner(`🍽️ Food READY at ${tableNum} — please serve now!`);
+      }
       fetchOrders();
     });
 
@@ -222,6 +231,10 @@ export default function WaiterDashboardScreen({ route, navigation }) {
         const calculatedTotal = orderItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
         const finalTotal = Number(order.totalAmount || order.total || calculatedTotal || 0);
 
+        // Determine order type
+        const serviceType = order.serviceType || order.orderType || '';
+        const isDelivery = serviceType === 'delivery' || !!order.deliveryAddress || !!order.shippingAddress;
+
         let mappedStatus = 'Pending';
         if (order.status === 'Ready' || order.status === 'Ready for Pickup') mappedStatus = 'Ready';
         if (order.status === 'Served') mappedStatus = 'Served';
@@ -235,10 +248,13 @@ export default function WaiterDashboardScreen({ route, navigation }) {
           status: mappedStatus,
           items: orderItems,
           total: `$${finalTotal.toFixed(2)}`,
+          isDelivery,
         };
       });
 
-      setOrders(mapped);
+      // Waiter only handles dine-in orders
+      const dineInOrders = mapped.filter(o => !o.isDelivery);
+      setOrders(dineInOrders);
     } catch (error) {
       console.error('Fetch Orders Error:', error);
     } finally {
@@ -263,8 +279,13 @@ export default function WaiterDashboardScreen({ route, navigation }) {
       if (!response.ok) throw new Error(data.message || 'Failed to update order status');
 
       if (newStatus === 'Served') {
+        // Move from active queue to served list
+        const servedOrder = orders.find((o) => o.id === id);
+        if (servedOrder) {
+          setServedOrders((prev) => [{ ...servedOrder, status: 'Served', servedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }, ...prev]);
+        }
         setOrders((prev) => prev.filter((order) => order.id !== id));
-        showAlertBanner('✅ Order successfully marked as Served.');
+        showAlertBanner('✅ Order marked as Served and saved.');
       } else {
         setOrders((prev) => prev.map((order) => (order.id === id ? { ...order, status: newStatus } : order)));
         showAlertBanner(`✅ Order status updated to ${newStatus}.`);
@@ -281,7 +302,7 @@ export default function WaiterDashboardScreen({ route, navigation }) {
   });
 
   const readyCount = orders.filter(o => o.status === 'Ready').length;
-  const servedCount = orders.filter(o => o.status === 'Served').length;
+  const servedCount = servedOrders.length;
 
   return (
     <View className="flex-1 bg-[#F8F9FC] items-center">
@@ -360,7 +381,7 @@ export default function WaiterDashboardScreen({ route, navigation }) {
 
           {/* Filter Tabs */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-4 flex-row">
-            {['All', 'Pending', 'Ready', 'Served', 'Completed'].map((tab) => (
+            {['All', 'Pending', 'Ready'].map((tab) => (
               <TouchableOpacity 
                 key={tab}
                 onPress={() => setActiveTab(tab)}
@@ -398,8 +419,8 @@ export default function WaiterDashboardScreen({ route, navigation }) {
                   <Text className="text-[10px] text-gray-400 mt-0.5">Ordered at {order.time}</Text>
                 </View>
                 
-                <View className={`px-3 py-1 rounded-full ${order.status === 'Ready' ? 'bg-[#FEF7F3] border border-[#B8520B]/30' : order.status === 'Served' ? 'bg-blue-50 border border-blue-200' : order.status === 'Completed' ? 'bg-green-50 border border-green-200' : 'bg-gray-100 border border-gray-200'}`}>
-                  <Text className={`text-[10px] font-bold ${order.status === 'Ready' ? 'text-[#B8520B]' : order.status === 'Served' ? 'text-blue-600' : order.status === 'Completed' ? 'text-green-600' : 'text-gray-500'}`}>
+                <View className={`px-3 py-1 rounded-full ${order.status === 'Ready' ? 'bg-[#FEF7F3] border border-[#B8520B]/30' : 'bg-gray-100 border border-gray-200'}`}>
+                  <Text className={`text-[10px] font-bold ${order.status === 'Ready' ? 'text-[#B8520B]' : 'text-gray-500'}`}>
                     {order.status}
                   </Text>
                 </View>
@@ -439,22 +460,6 @@ export default function WaiterDashboardScreen({ route, navigation }) {
                       <Text className="text-xs font-bold text-white uppercase tracking-wider">Mark Served</Text>
                     </TouchableOpacity>
                   )}
-                  {order.status === 'Served' && (
-                    <TouchableOpacity 
-                      activeOpacity={0.8}
-                      onPress={() => updateOrderStatus(order.id, 'Completed')}
-                      className="bg-green-600 px-4 py-2.5 rounded-xl flex-row items-center shadow-md"
-                    >
-                      <Ionicons name="checkmark-done" size={13} color="white" style={{ marginRight: 5 }} />
-                      <Text className="text-xs font-bold text-white uppercase tracking-wider">Complete</Text>
-                    </TouchableOpacity>
-                  )}
-                  {order.status === 'Completed' && (
-                    <View className="bg-gray-100 px-4 py-2.5 rounded-xl flex-row items-center">
-                      <Ionicons name="checkmark-circle" size={13} color="#22C55E" style={{ marginRight: 5 }} />
-                      <Text className="text-xs font-bold text-gray-500">Done</Text>
-                    </View>
-                  )}
                   {order.status === 'Pending' && (
                     <View className="bg-gray-100 px-4 py-2.5 rounded-xl flex-row items-center">
                       <Ionicons name="time-outline" size={13} color="#9E9E9E" style={{ marginRight: 5 }} />
@@ -465,6 +470,54 @@ export default function WaiterDashboardScreen({ route, navigation }) {
               </View>
             </View>
           ))}
+
+          {/* ── SERVED ORDERS SECTION ── */}
+          {servedOrders.length > 0 && (
+            <View className="mt-6 mb-2">
+              <View className="flex-row items-center mb-3">
+                <View className="w-2 h-2 rounded-full bg-emerald-500 mr-2" />
+                <Text className="text-xs font-bold text-gray-400 uppercase tracking-wider">Served Orders ({servedOrders.length})</Text>
+              </View>
+              {servedOrders.map((order) => (
+                <View key={order.id + '_served'} className="bg-emerald-50 rounded-3xl p-4 border border-emerald-200 mb-3 shadow-xs">
+                  <View className="flex-row justify-between items-start mb-2 pb-2 border-b border-emerald-100">
+                    <View className="flex-1 pr-2">
+                      <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">{order.tableNumber}</Text>
+                      <Text className="text-sm font-black text-[#1F130D]">{order.customer}</Text>
+                      <Text className="text-[10px] text-gray-400 mt-0.5">Served at {order.servedAt}</Text>
+                    </View>
+                    <View className="bg-emerald-100 border border-emerald-300 px-3 py-1 rounded-full flex-row items-center">
+                      <Ionicons name="checkmark-circle" size={11} color="#16A34A" style={{ marginRight: 4 }} />
+                      <Text className="text-[10px] font-bold text-emerald-700">Served</Text>
+                    </View>
+                  </View>
+                  <View className="mb-2">
+                    {order.items.map((item, idx) => (
+                      <View key={idx} className="flex-row justify-between items-center py-0.5">
+                        <View className="flex-row items-center">
+                          <View className="bg-emerald-100 px-2 py-0.5 rounded-md mr-2">
+                            <Text className="text-[10px] font-bold text-emerald-700">{item.quantity}x</Text>
+                          </View>
+                          <Text className="text-xs font-medium text-[#1F130D]">{item.name}</Text>
+                        </View>
+                        <Text className="text-xs font-bold text-gray-600">${(item.unitPrice * item.quantity).toFixed(2)}</Text>
+                      </View>
+                    ))}
+                  </View>
+                  <View className="flex-row justify-between items-center pt-2 border-t border-emerald-100">
+                    <View>
+                      <Text className="text-[10px] font-bold text-gray-400 uppercase">Total</Text>
+                      <Text className="text-base font-black text-emerald-700">{order.total}</Text>
+                    </View>
+                    <View className="bg-emerald-600 px-3 py-1.5 rounded-xl flex-row items-center">
+                      <Ionicons name="checkmark-done" size={12} color="white" style={{ marginRight: 4 }} />
+                      <Text className="text-[10px] font-bold text-white">Delivered</Text>
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
 
         </ScrollView>
 

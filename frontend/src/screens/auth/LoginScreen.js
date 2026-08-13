@@ -18,8 +18,8 @@ export default function LoginScreen() {
     console.warn("AuthContext is missing or login function is not available.");
   });
 
-  const [email, setEmail] = useState('manager@restaurant.com');
-  const [password, setPassword] = useState('Manager123!');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   
@@ -222,6 +222,11 @@ export default function LoginScreen() {
                 } else {
                   setIsForgotPassword(false);
                 }
+              } else {
+                // Was previously a no-op here — the back arrow did nothing
+                // when not in the forgot-password flow. Now it actually
+                // navigates back to whichever screen the user came from.
+                navigation.goBack();
               }
             }} 
             className="w-10 h-10 bg-white rounded-2xl items-center justify-center border border-[#EAE3DE] active:scale-95 shadow-xs"
@@ -273,7 +278,7 @@ export default function LoginScreen() {
                 <View className="mb-4">
                   <Text className="text-xs font-bold text-[#1F130D] mb-1.5">Email Address</Text>
                   <TextInput 
-                    placeholder="manager@restaurant.com"
+                    placeholder="you@example.com"
                     placeholderTextColor="#9E9E9E"
                     value={email}
                     onChangeText={(val) => { setEmail(val); setLoginError(''); }}
@@ -361,7 +366,7 @@ export default function LoginScreen() {
                 <View className="mb-4">
                   <Text className="text-xs font-bold text-[#1F130D] mb-1.5">Email Address</Text>
                   <TextInput 
-                    placeholder="manager@restaurant.com"
+                    placeholder="you@example.com"
                     placeholderTextColor="#9E9E9E"
                     value={email}
                     onChangeText={setEmail}

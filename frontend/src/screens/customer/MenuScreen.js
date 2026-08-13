@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useRef, useCallback } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StatusBar, Image, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BACKEND_URL } from '../../api/backend';
@@ -13,69 +13,96 @@ export default function MenuScreen({ navigation }) {
 
   const categories = ['Breakfast', 'Lunch', 'Dinner', 'Drinks', 'Desserts'];
 
-  useEffect(() => {
-    fetchMenuItems();
-  }, [selectedCategory, selectedStyle]);
+  // In-memory cache so switching back to a category/style tab you've
+  // already loaded is instant instead of re-hitting the network every
+  // time. Cleared automatically when the screen unmounts.
+  const cacheRef = useRef({});
+  // Tracks the in-flight request so a fast tab switch cancels the
+  // previous fetch instead of letting a slow, stale response overwrite
+  // a faster, newer one (this was the "loads many times" flicker).
+  const abortRef = useRef(null);
 
-  const fetchMenuItems = async () => {
+  const formatItems = (items) => {
+    return items.map((item, index) => {
+      let imageUrl = item.image || item.imageUrl;
+
+      if (imageUrl) {
+        if (imageUrl.startsWith('data:image')) {
+          // base64 data URI — use as is
+        } else if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+          // full URL — use as is
+        } else {
+          imageUrl = `${BACKEND_URL}${imageUrl.startsWith('/') ? '' : '/'}${imageUrl}`;
+        }
+      } else {
+        imageUrl = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=400&q=80';
+      }
+
+      return {
+        id: item._id || item.id || index + 1,
+        name: item.name || 'Delicious Dish',
+        desc: item.description || item.desc || 'Freshly prepared ingredients',
+        ingredients: item.ingredients || item.ingredientList || '',
+        cookingStyle: item.cookingStyle || item.style || selectedStyle,
+        spicyLevel: item.spicyLevel || item.spice || 'Regular',
+        price: item.price || 15.00,
+        rating: item.rating ? item.rating.toString() : '4.8',
+        image: imageUrl,
+      };
+    });
+  };
+
+  const fetchMenuItems = useCallback(async (category, style) => {
+    const cacheKey = `${category}::${style}`;
+
+    // Serve from cache immediately — no spinner, no network round trip.
+    if (cacheRef.current[cacheKey]) {
+      setMenuItems(cacheRef.current[cacheKey]);
+      setIsLoading(false);
+      return;
+    }
+
+    // Cancel any still-in-flight request for a previous tab.
+    if (abortRef.current) {
+      abortRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
       setIsLoading(true);
-      const response = await fetch(`${BACKEND_URL}/api/menu?category=${selectedCategory}&style=${selectedStyle}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
+      const response = await fetch(
+        `${BACKEND_URL}/api/menu?category=${category}&style=${style}`,
+        {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
         }
-      });
+      );
 
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Failed to fetch menu items.');
 
-      const items = data.items || data || [];
+      const raw = data.items || data || [];
+      const formatted = formatItems(raw);
 
-      // Map items and ensure image URLs are fully qualified with BACKEND_URL if they are relative paths
-      const formattedItems = items.map((item, index) => {
-        let imageUrl = item.image || item.imageUrl;
-        
-        // Handle different image URL formats
-        if (imageUrl) {
-          // If it's a data URI (base64), use it directly
-          if (imageUrl.startsWith('data:image')) {
-            // Use as is
-          }
-          // If it's already a full URL, use it directly
-          else if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
-            // Use as is
-          }
-          // If it's a relative path, prepend BACKEND_URL
-          else {
-            imageUrl = `${BACKEND_URL}${imageUrl.startsWith('/') ? '' : '/'}${imageUrl}`;
-          }
-        } else {
-          // Fallback image if no image is provided
-          imageUrl = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=400&q=80';
-        }
-
-        return {
-          id: item._id || item.id || index + 1,
-          name: item.name || 'Delicious Dish',
-          desc: item.description || item.desc || 'Freshly prepared ingredients',
-          ingredients: item.ingredients || item.ingredientList || '',
-          cookingStyle: item.cookingStyle || item.style || selectedStyle,
-          spicyLevel: item.spicyLevel || item.spice || 'Regular',
-          price: item.price || 15.00,
-          rating: item.rating ? item.rating.toString() : '4.8',
-          image: imageUrl
-        };
-      });
-
-      setMenuItems(formattedItems);
+      cacheRef.current[cacheKey] = formatted;
+      setMenuItems(formatted);
     } catch (error) {
+      if (error.name === 'AbortError') return; // superseded by a newer tab tap, ignore
       console.error('Fetch Menu Error:', error);
       setMenuItems([]);
     } finally {
-      setIsLoading(false);
+      if (!controller.signal.aborted) setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchMenuItems(selectedCategory, selectedStyle);
+    return () => {
+      if (abortRef.current) abortRef.current.abort();
+    };
+  }, [selectedCategory, selectedStyle, fetchMenuItems]);
 
   const handleAddToCart = (item) => {
     navigation.navigate('CartScreen', { 
@@ -181,7 +208,7 @@ export default function MenuScreen({ navigation }) {
             })}
           </ScrollView>
 
-          {/* Food Cards Grid List with Detail, Cart, and Checkout Actions */}
+          {/* Food Cards — 2-Column Square Grid */}
           <View className="mb-10">
             <Text className="text-xs font-bold text-gray-400 mb-2">{selectedCategory} • {selectedStyle} Selection</Text>
             
@@ -195,88 +222,86 @@ export default function MenuScreen({ navigation }) {
                 <Text className="text-xs font-bold text-gray-500 mt-2">No dishes available in this category.</Text>
               </View>
             ) : (
-              menuItems.map((item) => (
-                <View 
-                  key={item.id} 
-                  className="bg-white p-4 rounded-3xl border border-[#EAE3DE] mb-4 shadow-xs"
-                >
-                  <View className="flex-row items-start mb-3">
-                    <Image 
-                      source={{ uri: item.image }} 
-                      className="w-20 h-20 rounded-2xl mr-4 mt-1 bg-gray-100" 
-                      resizeMode="cover"
-                    />
-                    <View className="flex-1">
-                      <View className="flex-row justify-between items-start">
-                        <Text className="font-bold text-sm text-[#1F130D] w-3/4" numberOfLines={1}>{item.name}</Text>
-                        <View className="flex-row items-center bg-[#FEF7F3] px-2 py-0.5 rounded-full border border-[#B8520B]/30">
-                          <Ionicons name="star" size={10} color="#B8520B" />
-                          <Text className="text-[10px] font-bold text-[#B8520B] ml-1">{item.rating}</Text>
+              <View className="flex-row flex-wrap justify-between">
+                {menuItems.map((item) => (
+                  <View 
+                    key={item.id} 
+                    className="w-[48%] bg-white rounded-2xl border border-[#EAE3DE] mb-3 overflow-hidden shadow-xs"
+                  >
+                    <TouchableOpacity
+                      onPress={() => navigation.navigate('FoodDetailScreen', { foodItem: item })}
+                      className="w-full h-28 bg-[#F3F4F6]"
+                    >
+                      <Image 
+                        source={{ uri: item.image }} 
+                        className="w-full h-full" 
+                        resizeMode="cover"
+                      />
+                    </TouchableOpacity>
+
+                    <View className="p-3">
+                      <View className="flex-row justify-between items-start mb-1">
+                        <TouchableOpacity 
+                          onPress={() => navigation.navigate('FoodDetailScreen', { foodItem: item })}
+                          className="flex-1 pr-1"
+                        >
+                          <Text className="font-black text-xs text-[#1F130D]" numberOfLines={1}>
+                            {item.name}
+                          </Text>
+                        </TouchableOpacity>
+                        <View className="flex-row items-center bg-[#FEF7F3] px-1.5 py-0.5 rounded-full border border-[#B8520B]/30">
+                          <Ionicons name="star" size={8} color="#B8520B" />
+                          <Text className="text-[8px] font-black text-[#B8520B] ml-0.5">{item.rating}</Text>
                         </View>
                       </View>
 
-                      {/* Full description uploaded by manager */}
-                      <Text className="text-xs text-gray-600 mt-1.5 leading-relaxed" numberOfLines={3}>
+                      <Text className="text-[10px] text-gray-400 mb-2" numberOfLines={2}>
                         {item.desc}
                       </Text>
 
-                      {/* Additional Manager Upload Details (Ingredients / Spicy level) */}
-                      {(item.ingredients || item.spicyLevel) && (
-                        <View className="mt-2 pt-2 border-t border-gray-100 flex-row flex-wrap gap-2">
-                          {item.ingredients ? (
-                            <View className="bg-gray-50 px-2 py-0.5 rounded-md border border-gray-200">
-                              <Text className="text-[9px] text-gray-500 font-medium">
-                                <Text className="font-bold text-[#1F130D]">Ingredients:</Text> {item.ingredients}
-                              </Text>
-                            </View>
-                          ) : null}
-                          {item.spicyLevel && (
-                            <View className="bg-[#FEF7F3] px-2 py-0.5 rounded-md border border-[#B8520B]/20">
-                              <Text className="text-[9px] text-[#B8520B] font-semibold">
-                                Spice: {item.spicyLevel}
-                              </Text>
-                            </View>
-                          )}
+                      {item.spicyLevel ? (
+                        <View className="self-start bg-[#FEF7F3] px-2 py-0.5 rounded-md border border-[#B8520B]/20 mb-2">
+                          <Text className="text-[9px] text-[#B8520B] font-semibold">Spice: {item.spicyLevel}</Text>
                         </View>
-                      )}
+                      ) : null}
 
-                      <Text className="font-black text-sm text-[#1F130D] mt-2.5">${item.price.toFixed(2)}</Text>
+                      <Text className="font-black text-xs text-[#1F130D] mb-2">${item.price.toFixed(2)}</Text>
+
+                      <View className="flex-row space-x-1.5">
+                        <TouchableOpacity 
+                          onPress={() => navigation.navigate('FoodDetailScreen', { foodItem: item })} 
+                          className="w-7 h-7 bg-gray-100 rounded-xl items-center justify-center"
+                          title="Detail"
+                        >
+                          <Ionicons name="information-circle-outline" size={13} color="#1F130D" />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity 
+                          onPress={() => handleAddToCart(item)} 
+                          className="w-7 h-7 bg-[#FEF7F3] border border-[#B8520B]/40 rounded-xl items-center justify-center"
+                          title="Cart"
+                        >
+                          <Ionicons name="cart-outline" size={13} color="#B8520B" />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity 
+                          onPress={() => handleQuickCheckout(item)} 
+                          className="flex-1 bg-[#B8520B] rounded-xl items-center justify-center flex-row"
+                          title="Checkout"
+                        >
+                          <Ionicons name="flash-outline" size={11} color="white" style={{ marginRight: 3 }} />
+                          <Text className="text-[9px] font-bold text-white">Checkout</Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
                   </View>
-
-                  {/* Bottom Action Buttons Row: Detail, Cart, and Checkout */}
-                  <View className="flex-row space-x-2 pt-2.5 border-t border-gray-100">
-                    <TouchableOpacity 
-                      onPress={() => navigation.navigate('FoodDetailScreen', { foodItem: item })} 
-                      className="flex-1 bg-gray-100 py-2 rounded-xl items-center flex-row justify-center"
-                    >
-                      <Ionicons name="information-circle-outline" size={12} color="#1F130D" style={{ marginRight: 3 }} />
-                      <Text className="text-[10px] font-bold text-[#1F130D]">Detail</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity 
-                      onPress={() => handleAddToCart(item)} 
-                      className="flex-1 bg-[#FEF7F3] border border-[#B8520B]/40 py-2 rounded-xl items-center flex-row justify-center"
-                    >
-                      <Ionicons name="cart-outline" size={12} color="#B8520B" style={{ marginRight: 3 }} />
-                      <Text className="text-[10px] font-bold text-[#B8520B]">Cart</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity 
-                      onPress={() => handleQuickCheckout(item)} 
-                      className="flex-1 bg-[#B8520B] py-2 rounded-xl items-center flex-row justify-center"
-                    >
-                      <Ionicons name="flash-outline" size={12} color="white" style={{ marginRight: 3 }} />
-                      <Text className="text-[10px] font-bold text-white">Checkout</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ))
+                ))}
+              </View>
             )}
           </View>
         </ScrollView>
 
-          {/* Bottom Mobile Navigation Bar */}
+          {/* Bottom Mobile Navigation Bar — Home, Orders, Menu, Cart, Profile */}
           <View className="absolute bottom-0 left-0 right-0 bg-white border-t border-[#EAE3DE] px-6 py-2.5 flex-row justify-between items-center shadow-lg">
             <TouchableOpacity onPress={() => navigation.navigate('CustomerLanding')} className="items-center">
               <Ionicons name="home-outline" size={18} color="#757575" />

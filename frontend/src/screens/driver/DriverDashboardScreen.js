@@ -54,6 +54,12 @@ export default function DriverDashboardScreen({ route, navigation }) {
     });
 
     socket.on('orderUpdated', (updatedOrder) => {
+      // Live alert when kitchen marks a delivery order as Ready
+      const status = updatedOrder?.status || '';
+      const isDelivery = updatedOrder?.orderType === 'delivery' || !!updatedOrder?.deliveryAddress || !!updatedOrder?.shippingAddress || !!updatedOrder?.customer?.address;
+      if (status === 'Ready' && isDelivery) {
+        showAlertBanner('📦 Food is READY — head to kitchen for pickup!');
+      }
       fetchDeliveries();
     });
 
@@ -231,9 +237,15 @@ export default function DriverDashboardScreen({ route, navigation }) {
 
       const rawOrders = data.orders || (Array.isArray(data) ? data : []);
 
-      const deliveryOrders = rawOrders.filter(order => 
-        order.orderType === 'delivery' || order.deliveryAddress || order.shippingAddress || order.customer?.address
-      );
+      const deliveryOrders = rawOrders.filter(order => {
+        const type = order.orderType || order.serviceType || '';
+        const hasDeliveryAddress = !!order.deliveryAddress || !!order.shippingAddress || !!order.customer?.address;
+        const isDeliveryType = type === 'delivery';
+        // Include if explicitly delivery type OR has a delivery address
+        // Also only show orders that are not yet delivered
+        const notDelivered = order.status !== 'Delivered' && order.status !== 'Served';
+        return (isDeliveryType || hasDeliveryAddress) && notDelivered;
+      });
 
       const mapped = deliveryOrders.map((order, index) => {
         const customerName = order.customer?.name || order.customerName || 'Customer';
@@ -260,8 +272,9 @@ export default function DriverDashboardScreen({ route, navigation }) {
         const finalTotal = Number(order.totalAmount || order.total || calculatedTotal || 0);
 
         let mappedStatus = 'Ready for Pickup';
+        if (order.status === 'Ready' || order.status === 'Ready for Pickup') mappedStatus = 'Ready for Pickup';
         if (order.status === 'On the Way' || order.deliveryStatus === 'On the Way') mappedStatus = 'On the Way';
-        if (order.status === 'Served' || order.status === 'Delivered' || order.deliveryStatus === 'Delivered') mappedStatus = 'Delivered';
+        if (order.status === 'Delivered' || order.deliveryStatus === 'Delivered') mappedStatus = 'Delivered';
 
         return {
           id: order.id || order._id || `d${index + 1}`,
@@ -412,8 +425,21 @@ export default function DriverDashboardScreen({ route, navigation }) {
 
           {/* Deliveries Queue Header */}
           <Text className="text-xs font-bold text-gray-400 uppercase mb-3 ml-1 tracking-wider">
-            Active Orders Queue ({filteredDeliveries.length})
+            Active Delivery Queue ({filteredDeliveries.length})
           </Text>
+
+          {/* Ready for Pickup highlight banner */}
+          {readyPickupCount > 0 && (
+            <View className="bg-[#FEF7F3] border border-[#B8520B]/40 rounded-2xl p-3.5 mb-4 flex-row items-center shadow-xs">
+              <View className="w-9 h-9 bg-[#B8520B] rounded-xl items-center justify-center mr-3">
+                <Ionicons name="fast-food" size={18} color="white" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-xs font-black text-[#B8520B]">🍽️ {readyPickupCount} Order{readyPickupCount > 1 ? 's' : ''} Ready at Kitchen!</Text>
+                <Text className="text-[10px] text-[#B8520B]/70 mt-0.5">Head to kitchen to collect and start delivery.</Text>
+              </View>
+            </View>
+          )}
 
           {/* Delivery Cards List */}
           {isLoadingDeliveries ? (

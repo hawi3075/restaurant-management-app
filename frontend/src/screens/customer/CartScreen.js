@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StatusBar, Image, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StatusBar, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthContext } from '../../context/AuthContext';
@@ -7,17 +7,12 @@ import { AuthContext } from '../../context/AuthContext';
 export default function CartScreen({ route, navigation }) {
   const { user } = useContext(AuthContext);
 
-  // Helper: require login before going to checkout
+  // Helper: require login before going to checkout.
+  // Redirects straight to the Login screen instead of showing a
+  // confirm/cancel alert first.
   const requireLogin = (onSuccess) => {
     if (!user) {
-      Alert.alert(
-        'Sign In Required 🔒',
-        'Please sign in to complete your order. Your cart items will be saved.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Sign In', onPress: () => navigation.navigate('Login') },
-        ]
-      );
+      navigation.navigate('Login');
       return;
     }
     onSuccess();
@@ -174,7 +169,7 @@ export default function CartScreen({ route, navigation }) {
                   <Text className="text-base font-black text-[#B8520B]">${total.toFixed(2)}</Text>
                 </View>
 
-                {/* Checkout All Button */}
+                {/* Checkout All Button — redirects straight to Login if signed out */}
                 <TouchableOpacity
                   onPress={() => requireLogin(() => navigation.navigate('CheckoutScreen', { total, cartItems }))}
                   className="bg-[#B8520B] py-3.5 rounded-xl items-center shadow-md active:opacity-95"
@@ -188,7 +183,7 @@ export default function CartScreen({ route, navigation }) {
           )}
         </ScrollView>
 
-        {/* Bottom Navigation */}
+        {/* Bottom Navigation — Home, Orders, Menu, Cart, Profile */}
         <View className="absolute bottom-0 left-0 right-0 bg-white border-t border-[#EAE3DE] px-6 py-2.5 flex-row justify-between items-center shadow-lg">
           <TouchableOpacity onPress={() => navigation.navigate('CustomerLanding')} className="items-center">
             <Ionicons name="home-outline" size={18} color="#757575" />

@@ -3,10 +3,26 @@ const express = require('express');
 const router = express.Router();
 const MenuItem = require('../models/MenuItem');
 
-// Get all menu items
+// Get all menu items (with optional category and style filtering)
 router.get('/', async (req, res) => {
   try {
-    const items = await MenuItem.find();
+    const { category, style } = req.query;
+    let filter = {};
+
+    // Filter by category if provided (case-insensitive)
+    if (category) {
+      filter.category = { $regex: new RegExp(`^${category}$`, 'i') };
+    }
+
+    // Filter by style if provided (case-insensitive)
+    if (style) {
+      filter.$or = [
+        { cookingStyle: { $regex: new RegExp(`^${style}$`, 'i') } },
+        { style: { $regex: new RegExp(`^${style}$`, 'i') } }
+      ];
+    }
+
+    const items = await MenuItem.find(filter);
     res.json(items);
   } catch (error) {
     res.status(500).json({ error: error.message });

@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StatusBar, Image, TextInput, Animated } from 'react-native';
+import React, { useState, useEffect, useContext } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StatusBar, Image, TextInput, Animated, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BACKEND_URL } from '../../api/backend';
+import { AuthContext } from '../../context/AuthContext';
 
 const API_URL = BACKEND_URL;
 
 export default function FoodDetailScreen({ route, navigation }) {
+  const { user } = useContext(AuthContext);
   const foodItem = route?.params?.foodItem || null;
 
   const [selectedSize, setSelectedSize] = useState('Regular');
@@ -55,6 +57,22 @@ export default function FoodDetailScreen({ route, navigation }) {
 
   const handleQuickCheckout = () => {
     if (!foodItem) return;
+
+    // Login gate: Buy Now used to skip straight to CheckoutScreen even
+    // when signed out. Now it redirects to Login first, same pattern as
+    // MenuScreen and CartScreen.
+    if (!user) {
+      Alert.alert(
+        'Sign In Required 🔒',
+        'Please log in first.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Log In', onPress: () => navigation.navigate('Login') },
+        ]
+      );
+      return;
+    }
+
     const itemPrice = foodItem.price * quantity;
     const total = itemPrice + 3.99;
     navigation.navigate('CheckoutScreen', { 
@@ -135,7 +153,6 @@ export default function FoodDetailScreen({ route, navigation }) {
             <View className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-[#F8F9FC]/80" />
             
             {/* Floating Badge on Image */}
-            <div className="absolute bottom-4 left-5 flex-row items-center space-x-2"></div>
             <View className="absolute bottom-5 left-5 flex-row items-center space-x-2">
               <View className="bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-full flex-row items-center shadow-sm border border-white/40">
                 <Ionicons name="star" size={12} color="#D97706" style={{ marginRight: 4 }} />

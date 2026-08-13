@@ -1,5 +1,5 @@
 import './src/global.css';
-import React, { useContext } from 'react';
+import React, { useContext, useEffect } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -37,12 +37,67 @@ import DriverDashboardScreen from './src/screens/driver/DriverDashboardScreen';
 
 const Stack = createNativeStackNavigator();
 
+// Enables deep linking / URL syncing for the web build (this app is
+// deployed on Vercel, so it runs as a website in the mobile browser —
+// not a native app). Without this, navigation.navigate() only changes
+// React Navigation's internal state and never touches the browser's
+// URL history. That meant every screen looked like the browser's only
+// history entry, so the phone's back gesture/button had nothing of
+// the app's own to go back to and exited straight out to whatever was
+// open before the site, from ANY screen. Mapping screens to paths here
+// makes each in-app navigation also push real browser history, so back
+// correctly steps back through the app first.
+const linking = {
+  enabled: true,
+  config: {
+    screens: {
+      // Guest / public
+      CustomerLanding: '',
+      MenuScreen: 'menu',
+      FoodDetailScreen: 'food',
+      CartScreen: 'cart',
+      Login: 'login',
+      Signup: 'signup',
+
+      // Logged-in customer
+      CustomerProfileScreen: 'profile',
+      OrderHistoryScreen: 'orders',
+      CheckoutScreen: 'checkout',
+
+      // Manager
+      ManagerDashboard: 'manager',
+      ManagerProfileScreen: 'manager/profile',
+      OrderManagementScreen: 'manager/orders',
+      UserManagementScreen: 'manager/users',
+      StaffManagementScreen: 'manager/staff',
+      MenuManagementScreen: 'manager/menu',
+      InventoryManagementScreen: 'manager/inventory',
+      SupportMessageScreen: 'manager/support',
+      ReviewManagementScreen: 'manager/reviews',
+
+      // Kitchen
+      KitchenDashboard: 'kitchen',
+
+      // Waiter
+      WaiterDashboard: 'waiter',
+      WaiterLiveOrders: 'waiter/live-orders',
+
+      // Driver
+      DriverDashboard: 'driver',
+    },
+  },
+};
+
 function AppNavigator() {
   const { user, loading } = useContext(AuthContext);
 
-  if (__DEV__) {
-    console.log('AppNavigator user state:', user);
-  }
+  // TEMPORARY DEBUG LOG — always fires (not gated by __DEV__, which is
+  // stripped out of production builds and would otherwise hide this from
+  // us on the live Vercel deployment). Remove this useEffect once the
+  // routing issue is confirmed fixed.
+  useEffect(() => {
+    console.log('[DEBUG] AppNavigator render — loading:', loading, '| user:', user);
+  }, [loading, user]);
 
   if (loading) {
     return (
@@ -62,7 +117,6 @@ function AppNavigator() {
         <Stack.Screen name="CartScreen" component={CartScreen} />
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="Signup" component={SignupScreen} />
-        <Stack.Screen name="CustomerProfileScreen" component={CustomerProfileScreen} />
       </Stack.Navigator>
     );
   }
@@ -116,7 +170,7 @@ function AppNavigator() {
     );
   }
 
-  // LOGGED-IN CUSTOMER STACK (Ensures CustomerLanding is the absolute initial route)
+  // LOGGED-IN CUSTOMER STACK
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="CustomerLanding">
       <Stack.Screen name="CustomerLanding" component={CustomerLandingScreen} />
@@ -133,7 +187,7 @@ function AppNavigator() {
 export default function App() {
   return (
     <AuthProvider>
-      <NavigationContainer linking={{ enabled: false }}>
+      <NavigationContainer linking={linking}>
         <AppNavigator />
       </NavigationContainer>
     </AuthProvider>
