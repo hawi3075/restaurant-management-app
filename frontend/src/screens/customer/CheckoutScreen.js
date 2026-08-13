@@ -7,10 +7,11 @@ import { BACKEND_URL } from '../../api/backend';
 
 export default function CheckoutScreen({ route, navigation }) {
   const initialTotal = route?.params?.total ?? 40.99;
+  const isLoggedIn = route?.params?.isLoggedIn ?? true;
   const scrollViewRef = useRef(null);
 
   const [serviceType, setServiceType] = useState('delivery'); // 'delivery' or 'dine-in'
-  
+
   // Customer Form State
   const [fullName, setFullName] = useState('Hawi Girma');
   const [streetAddress, setStreetAddress] = useState('ASTU Freshman Programs');
@@ -193,6 +194,30 @@ export default function CheckoutScreen({ route, navigation }) {
   const totalAmount = cartItems.length > 0 
     ? cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
     : initialTotal;
+
+  // Increase quantity for a single cart line and persist the updated cart
+  const handleIncreaseQty = (itemId) => {
+    const updated = cartItems.map(item => 
+      item.id === itemId ? { ...item, quantity: item.quantity + 1 } : item
+    );
+    setCartItems(updated);
+    AsyncStorage.setItem('cart', JSON.stringify(updated)).catch(e => 
+      console.error('Failed to persist cart', e)
+    );
+  };
+
+  // Decrease quantity for a single cart line; removes the item once it hits 0
+  const handleDecreaseQty = (itemId) => {
+    const updated = cartItems
+      .map(item => 
+        item.id === itemId ? { ...item, quantity: item.quantity - 1 } : item
+      )
+      .filter(item => item.quantity > 0);
+    setCartItems(updated);
+    AsyncStorage.setItem('cart', JSON.stringify(updated)).catch(e => 
+      console.error('Failed to persist cart', e)
+    );
+  };
 
   useEffect(() => {
     const handleDeepLink = (event) => {
@@ -381,14 +406,14 @@ export default function CheckoutScreen({ route, navigation }) {
           <Text className="text-xs text-gray-500 text-center mb-6">Your payment has been verified and your order has been sent to the kitchen & driver.</Text>
           
           <TouchableOpacity
-            onPress={() => navigation.navigate('OrderHistoryScreen')}
+            onPress={() => navigation.navigate('OrderHistoryScreen', { isLoggedIn })}
             className="w-full bg-[#B8520B] py-3.5 rounded-xl items-center shadow-md active:opacity-95 mb-3"
           >
             <Text className="text-white font-bold text-xs uppercase tracking-wider">View Orders</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => navigation.navigate('Home')}
+            onPress={() => navigation.navigate('CustomerLanding', { isLoggedIn })}
             className="w-full bg-gray-100 py-3.5 rounded-xl items-center active:opacity-95"
           >
             <Text className="text-gray-700 font-bold text-xs uppercase tracking-wider">Back to Home</Text>
@@ -566,15 +591,48 @@ export default function CheckoutScreen({ route, navigation }) {
             )}
           </View>
 
-          {/* Order Amount Summary — single amount line for the specific food being checked out */}
+          {/* Order Amount Summary — one line per cart item with quantity controls */}
           <Text className="text-xs font-bold text-gray-400 uppercase mb-2 ml-1 tracking-wider">Order Amount Summary</Text>
           <View className="bg-white rounded-2xl border border-[#EAE3DE] p-4 mb-5 shadow-xs">
-            <View className="flex-row justify-between items-center py-1">
-              <Text className="text-xs font-bold text-[#1F130D] flex-1 pr-2" numberOfLines={1}>
-                {cartItems.length > 0 ? cartItems.map(i => i.name).join(', ') : 'Order Amount'}
-              </Text>
-              <Text className="text-xs font-bold text-[#B8520B]">Birr {totalAmount.toFixed(2)}</Text>
-            </View>
+            {cartItems.length > 0 ? (
+              cartItems.map((item, index) => (
+                <View 
+                  key={item.id || index} 
+                  className={`flex-row justify-between items-center py-2.5 ${index !== cartItems.length - 1 ? 'border-b border-[#F8F9FC]' : ''}`}
+                >
+                  <View className="flex-1 pr-2">
+                    <Text className="text-xs font-bold text-[#1F130D]" numberOfLines={1}>{item.name}</Text>
+                    <Text className="text-[10px] text-gray-400 mt-0.5">Birr {item.price.toFixed(2)} each</Text>
+                  </View>
+
+                  {/* Quantity Stepper */}
+                  <View className="flex-row items-center bg-[#F8F9FC] border border-[#EAE3DE] rounded-xl mr-3">
+                    <TouchableOpacity 
+                      onPress={() => handleDecreaseQty(item.id)}
+                      className="w-7 h-7 items-center justify-center"
+                    >
+                      <Ionicons name="remove" size={14} color="#B8520B" />
+                    </TouchableOpacity>
+                    <Text className="text-xs font-bold text-[#1F130D] w-6 text-center">{item.quantity}</Text>
+                    <TouchableOpacity 
+                      onPress={() => handleIncreaseQty(item.id)}
+                      className="w-7 h-7 items-center justify-center"
+                    >
+                      <Ionicons name="add" size={14} color="#B8520B" />
+                    </TouchableOpacity>
+                  </View>
+
+                  <Text className="text-xs font-black text-[#B8520B] w-16 text-right">
+                    Birr {(item.price * item.quantity).toFixed(2)}
+                  </Text>
+                </View>
+              ))
+            ) : (
+              <View className="flex-row justify-between items-center py-1">
+                <Text className="text-xs font-bold text-[#1F130D]">Order Amount</Text>
+                <Text className="text-xs font-bold text-[#B8520B]">Birr {totalAmount.toFixed(2)}</Text>
+              </View>
+            )}
 
             <View className="flex-row justify-between items-center pt-3 mt-2">
               <Text className="text-xs text-gray-500">Service / Delivery Fee</Text>
