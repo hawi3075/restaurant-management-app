@@ -82,7 +82,7 @@ export default function BillingScreen() {
           })}
         </View>
 
-        {/* Action Button */}
+        
         <TouchableOpacity className="bg-[#B8520B] py-4 rounded-2xl items-center shadow-md mb-8">
           <Text className="text-white font-black text-sm tracking-wide">Process Payment & Print Receipt</Text>
         </TouchableOpacity>
