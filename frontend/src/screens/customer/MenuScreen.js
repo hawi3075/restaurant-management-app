@@ -13,9 +13,7 @@ export default function MenuScreen({ navigation }) {
 
   const categories = ['Breakfast', 'Lunch', 'Dinner', 'Drinks', 'Desserts','fast food'];
 
-  // In-memory cache so switching back to a category/style tab you've
-  // already loaded is instant instead of re-hitting the network every
-  // time. Cleared automatically when the screen unmounts.
+  
   const cacheRef = useRef({});
   // Tracks the in-flight request so a fast tab switch cancels the
   // previous fetch instead of letting a slow, stale response overwrite
