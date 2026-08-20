@@ -161,7 +161,7 @@ function AppNavigator() {
     );
   }
 
-  // DRIVER
+  
   if (role === 'driver') {
     return (
       <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="DriverDashboard">
