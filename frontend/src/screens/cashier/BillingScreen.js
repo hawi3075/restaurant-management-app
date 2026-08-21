@@ -19,7 +19,7 @@ export default function BillingScreen() {
     <View className="flex-1 bg-[#F8F9FC] pt-12 px-5">
       <StatusBar barStyle="dark-content" backgroundColor="#F8F9FC" />
 
-      {/* Header */}
+    
       <View className="flex-row justify-between items-center mb-6">
         <View>
           <Text className="text-2xl font-black text-[#1F130D]">Billing & Payment</Text>
