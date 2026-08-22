@@ -60,7 +60,7 @@ export default function BillingScreen() {
           </View>
         </View>
 
-        {/* Payment Methods Selection (SRS Module 8) */}
+        
         <Text className="text-lg font-bold text-[#1F130D] mb-3">Select Payment Method</Text>
         <View className="flex-row flex-wrap justify-between mb-8">
           {['Cash', 'Credit Card', 'Mobile Money', 'Bank Transfer'].map((method, idx) => {
