@@ -31,7 +31,7 @@ export default function BillingScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Order Invoice Summary */}
+        
         <View className="bg-white p-5 rounded-2xl border border-[#EAE3DE] mb-6 shadow-xs">
           <Text className="text-base font-bold text-[#1F130D] mb-4">Invoice Breakdown</Text>
           {items.map((item, idx) => (
