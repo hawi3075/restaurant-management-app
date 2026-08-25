@@ -349,7 +349,7 @@ export default function BillingScreen() {
           </View>
         </TouchableOpacity>
 
-        {/* Cancel Button */}
+       
         <TouchableOpacity
           onPress={() => console.log('Payment cancelled')}
           activeOpacity={0.7}
