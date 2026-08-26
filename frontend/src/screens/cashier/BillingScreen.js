@@ -296,7 +296,7 @@ export default function BillingScreen() {
           </View>
         </View>
 
-        {/* Selected Payment Information */}
+        
         <View className="bg-white rounded-2xl border border-[#EAE3DE] p-4 mt-2 mb-5">
           <View className="flex-row items-center">
             <View className="w-10 h-10 rounded-full bg-[#FEF7F3] items-center justify-center">
