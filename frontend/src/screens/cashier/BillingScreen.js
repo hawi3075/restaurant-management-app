@@ -34,7 +34,7 @@ export default function BillingScreen() {
     },
   ];
 
-  // Calculate subtotal
+
   const subtotal = items.reduce(
     (acc, item) => acc + item.price * item.qty,
     0
