@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "frontend",
+    "name": "Maad",
     "slug": "frontend",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -11,9 +11,16 @@
       "resizeMode": "contain",
       "backgroundColor": "#121212"
     },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#E5311C"
+      }
+    },
     "web": {
       "bundler": "metro",
-      "output": "single"
+      "output": "single",
+      "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-web-browser"
