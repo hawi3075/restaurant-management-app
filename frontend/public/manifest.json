@@ -2,8 +2,11 @@
   "name": "Maad",
   "short_name": "Maad",
   "description": "Restaurant order management",
+  "id": "/",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#ffffff",
   "theme_color": "#E5311C",
   "icons": [
